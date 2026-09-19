@@ -2,15 +2,24 @@ import Foundation
 
 // 計算の途中で使う形。公開する形は API.swift(docs/api.md)。
 
-/// 計算の途中の 1 冊。比べる単位(書き手 + 本の種別)の中だけで作り、単位の中の番号(`id`、1 から)で指す。
+/// 計算の途中の 1 冊。比べる単位(書き手 + ジャンル)の中だけで作り、単位の中の番号(`id`、1 から)で指す。
+/// 中身は中核の入口(`CoreBook`)から写す。名前をどう読んだかは知らない。
 struct WorkingBook: Sendable {
     /// 単位の中の番号(入力の順)。組の名前の元にする本を決めるとき(いちばん小さい番号)にも使う。
     var id: Int
     /// 利用側の ID。
     var inputID: String
-    var parsed: NameParts
-    /// 同じ書き手とみなす単位(サークル名の比較用の形。無ければいちばん近いフォルダ名)。
-    var circleKey: String
+    /// 表示のタイトル(巻の同じ本を並べる最後の手がかり)。
+    var title: String
+    /// 比べるタイトル(`CoreBook.compareTitle`)。組を作る・巻を読むのはこちら。
+    var compareTitle: String
+    var relation: String = ""
+    var genre: String = ""
+    /// 版・入手経路の印があったか(説明に書くだけ)。
+    var hasEditionMarks = false
+    var hasSourceMarks = false
+    /// 書き手のキー(比べる形)。
+    var writerKey: String
     var confirmation: Confirmation = .none
     /// 所属する組(CandidateGroup.id)。
     var groupID: Int?
@@ -31,14 +40,14 @@ struct WorkingBook: Sendable {
 /// 規則で作ったシリーズの組(同じ書き手の、タイトルの前半が共通する本の組)。
 struct CandidateGroup: Sendable {
     var id: Int
-    var circleKey: String
+    var writerKey: String
     var memberIDs: [Int]
     /// シリーズ名(共通する前半部分を元の表記で。確定した名前があればそれ)。
     var ruleName: String
     /// 全員が語の切れ目で切れているか(途中で切れた共通部分は、偶然の一致の疑いがある)。
     var cleanBoundary: Bool
     /// この前半部分で始まるタイトルを持つ書き手の数(単位の中で数える。提案には含めない)。
-    var circlesSharingPrefix: Int
+    var writersSharingPrefix: Int
     /// 1 冊でもシリーズにする組(本編のシリーズがある総集編、確定したシリーズ)。
     var allowsSingle: Bool?
     /// どの規則で組になったか。
@@ -46,13 +55,13 @@ struct CandidateGroup: Sendable {
     /// 総集編の組か。
     var isCompilation = false
 
-    init(id: Int, circleKey: String, memberIDs: [Int], ruleName: String, cleanBoundary: Bool, circlesSharingPrefix: Int) {
+    init(id: Int, writerKey: String, memberIDs: [Int], ruleName: String, cleanBoundary: Bool, writersSharingPrefix: Int) {
         self.id = id
-        self.circleKey = circleKey
+        self.writerKey = writerKey
         self.memberIDs = memberIDs
         self.ruleName = ruleName
         self.cleanBoundary = cleanBoundary
-        self.circlesSharingPrefix = circlesSharingPrefix
+        self.writersSharingPrefix = writersSharingPrefix
     }
 }
 

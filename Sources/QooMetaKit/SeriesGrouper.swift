@@ -3,7 +3,7 @@ import Foundation
 /// 番号の無いシリーズの候補を、規則だけで作る。
 ///
 /// 方針(docs/design.md「シリーズの候補」):
-/// - **同じ書き手(サークル)の中だけで比べる。** 別の書き手の偶然の一致を最初から除く。
+/// - **同じ書き手の中だけで比べる。** 別の書き手の偶然の一致を最初から除く。
 /// - 比較用の形(ComparableText)で並べ替え、隣どうしの共通する前半部分でまとめる。
 ///   並べ替えれば前半が共通する本は隣り合うので、全組を比べる必要が無く、鎖のようにつながって
 ///   関係の薄い本まで 1 組になる(union-find で起きる)ことも無い。
@@ -26,11 +26,11 @@ struct SeriesGrouper: Sendable {
     /// 語の途中で切れる共通部分が、ひらがなで終わるなら組にしない。
     var rejectsHiraganaEndings: Bool
 
-    /// ネタ(`@genre`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
-    var splitsByGenre: Bool
+    /// 関連(`@source`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)には関連が無いので、そちらの採点には効かない。
+    var splitsByRelation: Bool
 
-    /// 本の種別(`@mediatype`)が違う本を分けるか(方針 differentGenre)。
-    var splitsByMediaType: Bool
+    /// ジャンル(`@genre`)が違う本を分けるか(方針 differentGenre)。
+    var splitsByGenre: Bool
 
     /// 1 段目(「タイトル + 巻」を頭でまとめる。規則 volumeHead)と 2 段目(共通する前半部分。規則 sharedPrefix)を使うか。
     var usesVolumeHeads: Bool
@@ -63,8 +63,8 @@ struct SeriesGrouper: Sendable {
         minWholeTitle = g.minWholeTitle
         attachesSubtitledBooks = g.attachSubtitled
         rejectsHiraganaEndings = g.rejectHiraganaEndings
+        splitsByRelation = g.splitByRelation
         splitsByGenre = g.splitByGenre
-        splitsByMediaType = g.splitByMediaType
         usesVolumeHeads = g.volumeHeadEnabled
         usesSharedPrefixes = g.sharedPrefixEnabled
         commonEnglishUnlessVolume = g.commonEnglishUnlessVolume
@@ -110,27 +110,27 @@ struct SeriesGrouper: Sendable {
         ch.unicodeScalars.allSatisfy { (0x3041...0x309F).contains($0.value) }
     }
 
-    /// **ネタ(末尾の丸括弧、`@genre`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組をネタごとに分け、ネタの書かれていない本は
+    /// **関連(`@source`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組を関連ごとに分け、関連の書かれていない本は
     /// いちばん大きい組へ入れる。分けた結果 2 冊に満たない組は捨てる。
-    func splitByGenre(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
-        guard splitsByGenre else { return groups }
-        let genreByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.trailing).key)) })
+    func splitByRelation(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
+        guard splitsByRelation else { return groups }
+        let relationByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.relation).key)) })
         var result: [CandidateGroup] = []
         for group in groups {
-            let byGenre = Dictionary(grouping: group.memberIDs.filter { !(genreByID[$0] ?? "").isEmpty }) { genreByID[$0]! }
-            guard byGenre.count >= 2 else { result.append(group); continue }
-            let unlabeled = group.memberIDs.filter { (genreByID[$0] ?? "").isEmpty }
-            let largest = byGenre.max { a, b in a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key }!.key
+            let byRelation = Dictionary(grouping: group.memberIDs.filter { !(relationByID[$0] ?? "").isEmpty }) { relationByID[$0]! }
+            guard byRelation.count >= 2 else { result.append(group); continue }
+            let unlabeled = group.memberIDs.filter { (relationByID[$0] ?? "").isEmpty }
+            let largest = byRelation.max { a, b in a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key }!.key
             if let log {
-                // ネタの違う本どうしは、組になりかけて分けられた。
-                let keyByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, text.comparable($0.parsed.baseTitle).key) })
-                for (x, xs) in byGenre { for (y, ys) in byGenre where x < y { for a in xs { for b in ys {
+                // 関連の違う本どうしは、組になりかけて分けられた。
+                let keyByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, text.comparable($0.compareTitle).key) })
+                for (x, xs) in byRelation { for (y, ys) in byRelation where x < y { for a in xs { for b in ys {
                     log.miss(a, b, length: Self.commonPrefixLength(keyByID[a] ?? [], keyByID[b] ?? []), rule: "splitByRelation")
                 } } } }
                 for id in group.memberIDs { log.apply("splitByRelation", to: id) }
             }
-            for (genre, ids) in byGenre.sorted(by: { $0.key < $1.key }) {
-                let members = (genre == largest ? ids + unlabeled : ids).sorted()
+            for (relation, ids) in byRelation.sorted(by: { $0.key < $1.key }) {
+                let members = (relation == largest ? ids + unlabeled : ids).sorted()
                 guard members.count >= 2 else { continue }
                 var g = group
                 g.memberIDs = members
@@ -160,7 +160,7 @@ struct SeriesGrouper: Sendable {
     /// 版違い・入手経路違いだけでできた組はシリーズにしない(同じ作品。利用者との取り決め)。
     /// 印(EditionMarkers)を除いたタイトルが 2 種類以上ある組だけを残す。1 冊でもよい組(本編のある総集編)は残す。
     func dissolveSameWorkOnly(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
-        let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.baseTitle).key)) })
+        let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.compareTitle).key)) })
         return groups.filter { g in
             let keep = g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
             if !keep, let log {
@@ -172,23 +172,23 @@ struct SeriesGrouper: Sendable {
         }
     }
 
-    /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
-    /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。種別が読めなかった本は書き手だけで比べる。
+    /// 比べる単位。書き手 + ジャンル。**ジャンルが違う本は同じシリーズにしない**
+    /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。ジャンルの空の本は書き手だけで比べる。
     func partitionKey(_ book: WorkingBook) -> String {
-        let mediaType = splitsByMediaType ? String(text.comparable(book.parsed.mediaType ?? "").key) : ""
-        return mediaType.isEmpty ? book.circleKey : "\(book.circleKey)\u{1}\(mediaType)"
+        let genre = splitsByGenre ? String(text.comparable(book.genre).key) : ""
+        return genre.isEmpty ? book.writerKey : "\(book.writerKey)\u{1}\(genre)"
     }
 
     func group(_ books: [WorkingBook]) -> [CandidateGroup] {
-        let byCircle = Dictionary(grouping: books, by: partitionKey)
+        let byWriter = Dictionary(grouping: books, by: partitionKey)
         var groups: [CandidateGroup] = []
-        for circleKey in byCircle.keys.sorted() {
+        for writerKey in byWriter.keys.sorted() {
             // 総集編は本編と分けて扱う(Self.compilation)。
-            let compilations = byCircle[circleKey]!.compactMap { b in compilation(b.parsed.baseTitle).map { (b, $0) } }
+            let compilations = byWriter[writerKey]!.compactMap { b in compilation(b.compareTitle).map { (b, $0) } }
             let compilationIDs = Set(compilations.map(\.0.id))
-            let items = byCircle[circleKey]!
+            let items = byWriter[writerKey]!
                 .filter { !compilationIDs.contains($0.id) }
-                .map { (id: $0.id, text: text.comparable($0.parsed.baseTitle)) }
+                .map { (id: $0.id, text: text.comparable($0.compareTitle)) }
                 .filter { !$0.text.key.isEmpty }
             let groupsBefore = groups.count
 
@@ -197,7 +197,7 @@ struct SeriesGrouper: Sendable {
             // ような別のタイトルが挟まり、組が切れる(NDL の書誌で測った取りこぼしの主因)。
             var byHead: [String: [(id: Int, text: ComparableText, headLength: Int)]] = [:]
             var rest: [(id: Int, text: ComparableText)] = []
-            let precomputedHeads = Dictionary(uniqueKeysWithValues: byCircle[circleKey]!.map { ($0.id, $0.volumeHead) })
+            let precomputedHeads = Dictionary(uniqueKeysWithValues: byWriter[writerKey]!.map { ($0.id, $0.volumeHead) })
             for item in items {
                 // 後ろが巻だけでできていることを求めるので、頭は 1 文字でもよい(「咲 18」)。
                 if usesVolumeHeads,
@@ -258,9 +258,9 @@ struct SeriesGrouper: Sendable {
             for (_, members) in headGroups.sorted(by: { $0.key < $1.key }) {
                 let first = members.min { $0.id < $1.id }!
                 var g = CandidateGroup(
-                    id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0], memberIDs: members.map(\.id).sorted(),
+                    id: 0, writerKey: writerKey.components(separatedBy: "\u{1}")[0], memberIDs: members.map(\.id).sorted(),
                     ruleName: text.trimSeriesName(first.text.originalPrefix(keyLength: first.headLength)),
-                    cleanBoundary: true, circlesSharingPrefix: 0)
+                    cleanBoundary: true, writersSharingPrefix: 0)
                 g.evidence = .volumeHead
                 groups.append(g)
             }
@@ -272,11 +272,11 @@ struct SeriesGrouper: Sendable {
                 let first = run[0].item.text
                 var g = CandidateGroup(
                     id: 0,
-                    circleKey: circleKey.components(separatedBy: "\u{1}")[0],
+                    writerKey: writerKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: run.map(\.item.id),
                     ruleName: text.trimSeriesName(first.originalPrefix(keyLength: prefixLength)),
                     cleanBoundary: run.allSatisfy { Self.isCleanCut($0.item.text, at: prefixLength) },
-                    circlesSharingPrefix: 0
+                    writersSharingPrefix: 0
                 )
                 g.evidence = .sharedPrefix(cleanCut: g.cleanBoundary)
                 groups.append(g)
@@ -300,23 +300,23 @@ struct SeriesGrouper: Sendable {
                 }
                 guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
                 var g = CandidateGroup(
-                    id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0],
+                    id: 0, writerKey: writerKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: members.map(\.0.id).sorted(), ruleName: members.min { $0.0.id < $1.0.id }!.1.name,
-                    cleanBoundary: true, circlesSharingPrefix: 0)
+                    cleanBoundary: true, writersSharingPrefix: 0)
                 g.allowsSingle = hasMain && singleCompilationWithMain
                 g.evidence = .compilation
                 g.isCompilation = true
                 groups.append(g)
             }
         }
-        groups = splitByGenre(groups, books: books)
+        groups = splitByRelation(groups, books: books)
         groups = dissolveSameWorkOnly(groups, books: books)
         // ありふれた言葉の疑い: この前半部分で始まるタイトルを持つ書き手の数。
-        let titleKeysByCircle = Dictionary(grouping: books, by: \.circleKey)
-            .mapValues { $0.map { String(text.comparable($0.parsed.baseTitle).key) } }
+        let titleKeysByWriter = Dictionary(grouping: books, by: \.writerKey)
+            .mapValues { $0.map { String(text.comparable($0.compareTitle).key) } }
         for i in groups.indices {
             let prefix = String(text.comparable(groups[i].ruleName).key)
-            groups[i].circlesSharingPrefix = prefix.isEmpty ? 0 : titleKeysByCircle.values
+            groups[i].writersSharingPrefix = prefix.isEmpty ? 0 : titleKeysByWriter.values
                 .filter { keys in keys.contains { $0.hasPrefix(prefix) } }.count
             groups[i].id = i + 1
         }

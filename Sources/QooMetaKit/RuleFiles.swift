@@ -241,8 +241,8 @@ struct RuleCompiler {
                 minPrefix: shared?["minPrefix"]?.intValue ?? 4,
                 minWholeTitle: shared?["minWholeTitle"]?.intValue ?? 2,
                 attachSubtitled: policies["subtitled"] != "separate",
-                splitByGenre: policies["differentRelation"] != "keep",
-                splitByMediaType: policies["differentGenre"] != "keep",
+                splitByRelation: policies["differentRelation"] != "keep",
+                splitByGenre: policies["differentGenre"] != "keep",
                 volumeHeadEnabled: enabled(grouping?["volumeHead"]),
                 sharedPrefixEnabled: enabled(shared),
                 rejectHiraganaEndings: enabled(conditions?["reject-hiragana-ending"]),
@@ -362,9 +362,9 @@ struct SeriesRules: Sendable {
         /// 方針 `subtitled`。
         var attachSubtitled: Bool
         /// 方針 `differentRelation`(ネタが違う本を分ける)。
-        var splitByGenre: Bool
+        var splitByRelation: Bool
         /// 方針 `differentGenre`(本の種別が違う本を分ける)。
-        var splitByMediaType: Bool
+        var splitByGenre: Bool
         var volumeHeadEnabled: Bool
         var sharedPrefixEnabled: Bool
         var rejectHiraganaEndings: Bool

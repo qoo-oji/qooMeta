@@ -224,7 +224,7 @@ final class VolumeExtractor: Sendable {
         return Double(upper) > lower && Double(upper) - lower <= Double(rules.mergedIssueMaxSpan)
     }
 
-    /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧がネタか巻かの判定に使う。
+    /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧が関連か巻かの判定に使う。
     static func isNumeralOnly(_ s: String) -> Bool {
         let t = s.precomposedNFKC.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return false }
@@ -265,7 +265,7 @@ enum ProposalFinalizer {
                 document.books[i].volumeConfirmed = true
                 continue
             }
-            let title = engine.text.comparable(document.books[i].parsed.baseTitle)
+            let title = engine.text.comparable(document.books[i].compareTitle)
             let nameKey = engine.text.comparable(series).key
             // シリーズ名がタイトルの前半に当たらない(利用者が別の名前に確定した)ときは、巻を読まない。
             guard title.key.starts(with: nameKey) else { continue }
@@ -289,7 +289,7 @@ enum ProposalFinalizer {
     static func placeCompilationsAfterRange(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
         for i in document.books.indices
         where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
-            let title = engine.text.comparable(document.books[i].parsed.baseTitle)
+            let title = engine.text.comparable(document.books[i].compareTitle)
             let name = engine.text.comparable(document.books[i].series).key
             guard title.key.starts(with: name) else { continue }
             let remainder = title.originalRemainder(afterKeyLength: name.count)
@@ -347,7 +347,7 @@ enum ProposalFinalizer {
         for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
             var found: [(index: Int, text: String, number: Int)] = []
             for i in indices where document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
-                let title = engine.text.comparable(document.books[i].parsed.baseTitle)
+                let title = engine.text.comparable(document.books[i].compareTitle)
                 let name = engine.text.comparable(document.books[i].series).key
                 guard title.key.starts(with: name) else { continue }
                 let remainder = title.originalRemainder(afterKeyLength: name.count)
@@ -388,7 +388,7 @@ enum ProposalFinalizer {
             // 「1 冊目ではない」語は、シリーズ名より後ろの部分だけで探す(シリーズ名そのものに「総集編」が
             // 含まれることがある。「X 総集編」「X 総集編 02」…の番号の無い 1 冊は 1 巻)。
             func remainder(_ i: Int) -> String {
-                let title = engine.text.comparable(document.books[i].parsed.baseTitle).key
+                let title = engine.text.comparable(document.books[i].compareTitle).key
                 let name = engine.text.comparable(document.books[i].series).key
                 return title.starts(with: name) ? String(title.dropFirst(name.count)) : String(title)
             }

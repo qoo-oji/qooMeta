@@ -52,7 +52,8 @@ let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionar
             BookInput(id: "\(i)", name: "[\(item.circle)] \(item.title)", folders: [item.circle])
         }
         return builtinEngine.prepare(inputs, limits: .default).books.enumerated().map { i, b in
-            WorkingBook(id: i + 1, inputID: b.input.id, parsed: b.parts, circleKey: b.circleKey)
+            WorkingBook(id: i + 1, inputID: b.core.id, title: b.core.title, compareTitle: b.core.compareTitle,
+                        relation: b.core.relation, genre: b.core.genre, writerKey: b.core.writerKey)
         }
     }
 
@@ -77,7 +78,7 @@ let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionar
         ])
         let groups = SeriesGrouper(engine: builtinEngine).group(b)
         #expect(groups.count == 1)
-        #expect(groups[0].circlesSharingPrefix == 3)
+        #expect(groups[0].writersSharingPrefix == 3)
     }
 }
 

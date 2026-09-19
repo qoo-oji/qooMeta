@@ -2,7 +2,8 @@ import Foundation
 
 // 提案の計算(docs/api.md「まとめて提案する」)。
 //
-// 流れ: 入力を確かめる → 名前を欄に分ける(確定した欄を優先)→ 比べる単位(書き手 + 本の種別)に分ける →
+// 流れ: 入力を確かめる → 名前を欄に分ける(確定した欄を優先)→ 中核の入口(CoreBook)に詰める →
+// 比べる単位(書き手 + ジャンル)に分ける →
 // 単位ごとに組・確定した内容・巻を決める → 決まった順に並べて返す。**提案は単位の中だけで決まる**ので、
 // 単位ごとに別々に計算でき(並列化・ProposalIndex の計算し直し)、同じ入力なら毎回同じ結果になる。
 
@@ -17,7 +18,7 @@ public func proposeSync(_ books: [BookInput], rules: CompiledRules, vocabulary: 
                         options: ProposalOptions = .default) -> ProposalSet {
     let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
     let prepared = engine.prepare(books, limits: options.limits)
-    let results = prepared.units.mapValues { engine.computeUnit($0, explain: options.explanations) }
+    let results = prepared.units.mapValues { engine.computeUnit($0.map(\.core), explain: options.explanations) }
     return engine.assemble(prepared, results)
 }
 
@@ -62,7 +63,7 @@ public func propose(_ books: [BookInput], rules: CompiledRules, vocabulary: Voca
             for chunk in chunks {
                 group.addTask {
                     try Task.checkCancellation()
-                    return chunk.map { ($0, engine.computeUnit(prepared.units[$0]!, explain: options.explanations)) }
+                    return chunk.map { ($0, engine.computeUnit(prepared.units[$0]!.map(\.core), explain: options.explanations)) }
                 }
             }
             for try await part in group {
@@ -84,17 +85,13 @@ enum ProcessorCount {
 
 // MARK: - 下ごしらえ
 
-/// 名前を欄に分けた 1 冊。
+/// 名前を欄に分け、中核の入口に詰めた 1 冊。
 struct PreparedBook: Sendable {
     let input: BookInput
-    /// 入力の中の順番(単位の中の並びと、決まった順の元)。
-    let order: Int
-    let parts: NameParts
+    /// 中核へ渡す形。
+    let core: CoreBook
     /// 公開する形(下ごしらえのときに 1 度だけ作る。ProposalIndex で毎回作り直さないため)。
     let parsed: ParsedName
-    /// 「タイトル + 巻」の頭の長さ(組を作るときにも使う)。
-    let volumeHead: Int?
-    let circleKey: String
     let unitKey: String
 }
 
@@ -167,20 +164,17 @@ extension RuleEngine {
         return nil
     }
 
+    /// 名前を読み、中核の入口に詰める。
     func prepareOne(_ input: BookInput, order: Int) -> PreparedBook {
         let parts = parse(input)
+        // 書き手はサークル。無ければいちばん近いフォルダ名(今の前段の読み方。フォルダ名を読むのは段階 6 でやめる)。
         let owner = parts.circle.isEmpty ? (input.folders.first.map(TextRules.normalizeDisplay) ?? "") : parts.circle
-        let circleKey = text.key(owner)
-        let head = volumeHead(parts)
-        return PreparedBook(input: input, order: order, parts: parts, parsed: publicName(parts, volumeHead: head),
-                            volumeHead: head, circleKey: circleKey, unitKey: unitKey(circleKey: circleKey, mediaType: parts.mediaType))
-    }
-
-    /// 比べる単位。書き手 + 本の種別(**本の種別が違う本は同じシリーズにしない**。方針 differentGenre)。
-    /// 種別が読めなかった本は書き手だけで比べる。
-    func unitKey(circleKey: String, mediaType: String?) -> String {
-        let mediaType = rules.series.grouping.splitByMediaType ? text.key(mediaType ?? "") : ""
-        return mediaType.isEmpty ? circleKey : "\(circleKey)\u{1}\(mediaType)"
+        let head = volumeHead(compareTitle: parts.baseTitle)
+        let core = CoreBook(id: input.id, order: order, title: parts.title, compareTitle: parts.baseTitle,
+                            writerKey: text.key(owner), genre: parts.mediaType ?? "", relation: parts.trailing,
+                            hasEditionMarks: parts.editions != nil, hasSourceMarks: parts.sources != nil,
+                            confirmation: input.confirmation, volumeHead: head)
+        return PreparedBook(input: input, core: core, parsed: publicName(parts, volumeHead: head), unitKey: unitKey(core))
     }
 
     /// 名前を欄に分け、確定した欄で置き換え、版・入手経路の印と総集編の範囲を見る。
@@ -207,25 +201,18 @@ extension RuleEngine {
             parts.mediaType = TextRules.normalizeDisplay(genre)
             parts.leading = parts.mediaType ?? ""
         }
-        let split = markers.split(parts.title)
-        // 印は、比べるタイトルから除かないとき(方針 separateBooks)も見分けて付ける。
-        if split.base != parts.title { parts.workTitle = split.base }
-        parts.editions = split.editions.isEmpty ? nil : split.editions
-        parts.sources = split.sources.isEmpty ? nil : split.sources
-        if let reordered = compilation.normalizedTitle(parts.baseTitle) { parts.workTitle = reordered }
+        let compared = compareTitle(parts.title)
+        if compared.text != parts.title { parts.workTitle = compared.text }
+        parts.editions = compared.editions.isEmpty ? nil : compared.editions
+        parts.sources = compared.sources.isEmpty ? nil : compared.sources
         return parts
-    }
-
-    /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比べる形で)。
-    func volumeHead(_ parts: NameParts) -> Int? {
-        SeriesGrouper(engine: self).volumeHeadLength(text.comparable(parts.baseTitle), minLength: 1)
     }
 
     func publicName(_ parts: NameParts, volumeHead head: Int?? = nil) -> ParsedName {
         func value(_ s: String?) -> String? { (s ?? "").isEmpty ? nil : s }
         // 1 冊だけで読める巻: タイトルが「頭 + 巻だけ」の形なら、その巻(シリーズ名は推定しない)。
         let title = text.comparable(parts.baseTitle)
-        let standalone = (head ?? volumeHead(parts)).flatMap { head in
+        let standalone = (head ?? volumeHead(compareTitle: parts.baseTitle)).flatMap { head in
             volumes.extract(fromRemainder: title.originalRemainder(afterKeyLength: head))
         }.map { Volume(text: $0.text, sortKey: $0.number) }
         return ParsedName(
@@ -237,12 +224,14 @@ extension RuleEngine {
 
     // MARK: - 単位ごとの計算
 
-    /// 1 つの単位の本(入力の順)から、組・確定した内容・巻を決める。
-    func computeUnit(_ members: [PreparedBook], explain: Bool = false) -> UnitResult {
+    /// 1 つの単位の本(中核の入口の形)から、組・確定した内容・巻を決める。
+    func computeUnit(_ members: [CoreBook], explain: Bool = false) -> UnitResult {
         let sorted = members.sorted { $0.order < $1.order }
         var doc = WorkingDocument(books: sorted.enumerated().map { i, book in
-            WorkingBook(id: i + 1, inputID: book.input.id, parsed: book.parts, circleKey: book.circleKey,
-                        confirmation: book.input.confirmation, volumeHead: .some(book.volumeHead))
+            WorkingBook(id: i + 1, inputID: book.id, title: book.title, compareTitle: book.compareTitle,
+                        relation: book.relation, genre: book.genre, hasEditionMarks: book.hasEditionMarks,
+                        hasSourceMarks: book.hasSourceMarks, writerKey: book.writerKey,
+                        confirmation: book.confirmation, volumeHead: .some(book.volumeHead))
         }, groups: [])
         var grouper = SeriesGrouper(engine: self)
         let log = explain ? ExplanationLog() : nil
@@ -264,8 +253,8 @@ extension RuleEngine {
                 }
             }
             for book in doc.books {
-                if book.parsed.editions != nil { log.apply("edition", to: book.id) }
-                if book.parsed.sources != nil { log.apply("source", to: book.id) }
+                if book.hasEditionMarks { log.apply("edition", to: book.id) }
+                if book.hasSourceMarks { log.apply("source", to: book.id) }
             }
         }
         let explanations = log?.explanations(inputIDs: Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, $0.inputID) }))
@@ -284,7 +273,7 @@ extension RuleEngine {
                 case let (x?, y?) where x != y: return x < y
                 case (_?, nil): return true
                 case (nil, _?): return false
-                default: return (a.parsed.title, a.inputID) < (b.parsed.title, b.inputID)
+                default: return (a.title, a.inputID) < (b.title, b.inputID)
                 }
             }
             series.append(UnitSeries(key: key, name: group.ruleName, kind: kind(of: group), memberIDs: ordered.map(\.inputID),
@@ -297,7 +286,7 @@ extension RuleEngine {
                 fromMagazineIssue: rules.series.volume.magazinesWhole && (book.volumeNumber ?? 0) >= 190_000)
             books[book.inputID] = UnitResult.Book(
                 seriesKey: book.groupID.flatMap { seriesKeyByGroup[$0] }, volume: volume,
-                isCompilation: compilation.keywordRange(in: book.parsed.baseTitle) != nil,
+                isCompilation: compilation.keywordRange(in: book.compareTitle) != nil,
                 explanation: explanations?[book.inputID])
         }
         return UnitResult(books: books, series: series)
@@ -334,7 +323,7 @@ extension RuleEngine {
             }
         }
         guard !confirmedName.isEmpty || !excluded.isEmpty else { return }
-        let titleKey = Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, text.key($0.parsed.baseTitle)) })
+        let titleKey = Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, text.key($0.compareTitle)) })
 
         var result: [CandidateGroup] = []
         // 確定した名前(比べる形)→ その名前の本。
@@ -373,8 +362,8 @@ extension RuleEngine {
         }
         for key in named.keys.sorted() {
             let entry = named[key]!
-            var g = CandidateGroup(id: 0, circleKey: doc.books.first?.circleKey ?? "", memberIDs: entry.members.sorted(),
-                                   ruleName: entry.display, cleanBoundary: true, circlesSharingPrefix: 0)
+            var g = CandidateGroup(id: 0, writerKey: doc.books.first?.writerKey ?? "", memberIDs: entry.members.sorted(),
+                                   ruleName: entry.display, cleanBoundary: true, writersSharingPrefix: 0)
             g.allowsSingle = true
             g.evidence = .confirmed
             result.append(g)

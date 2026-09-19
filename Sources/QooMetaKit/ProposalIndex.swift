@@ -1,6 +1,6 @@
 import Foundation
 
-/// 本の追加・変更・削除のたびに、影響のある単位(書き手 + 本の種別)だけを計算し直す。
+/// 本の追加・変更・削除のたびに、影響のある単位(書き手 + ジャンル)だけを計算し直す。
 ///
 /// **`apply` の結果は、同じ本の一覧(入れた順)を `proposeSync` に渡した結果と常に同じ**(テストで確かめる)。提案は単位の
 /// 中だけで決まるので、変わった本の、前と後の単位だけを計算し直せばよい。
@@ -44,7 +44,7 @@ public actor ProposalIndex {
     @discardableResult
     public func update(rules: CompiledRules, vocabulary: Vocabulary) throws(CancellationError) -> ProposalDelta {
         let newEngine = RuleEngine(rules: rules, vocabulary: vocabulary)
-        let inputs = state.books.values.sorted { $0.order < $1.order }.map(\.input)
+        let inputs = state.books.values.sorted { $0.core.order < $1.core.order }.map(\.input)
         // 扱わなかった入力の理由は上限だけで決まり、規則には依らないので、そのまま持ち越す。
         var fresh = State()
         fresh.rejected = state.rejected
@@ -64,7 +64,7 @@ public actor ProposalIndex {
 
     public func snapshot() -> ProposalSet {
         if let cachedSnapshot { return cachedSnapshot }
-        let books = state.books.values.sorted { $0.order < $1.order }
+        let books = state.books.values.sorted { $0.core.order < $1.core.order }
         let prepared = Prepared(books: books, units: [:], rejected: state.rejected.values.sorted { $0.id < $1.id })
         let set = engine.assemble(prepared, state.unitResults)
         cachedSnapshot = set
@@ -84,7 +84,7 @@ public actor ProposalIndex {
             case .remove(let removed): id = removed
             }
             touched.insert(id)
-            let order = s.books[id]?.order
+            let order = s.books[id]?.core.order
             if let old = s.books.removeValue(forKey: id) {
                 affected.insert(old.unitKey)
                 s.unitMembers[old.unitKey]?.remove(id)
@@ -115,7 +115,7 @@ public actor ProposalIndex {
                 s.unitResults[key] = nil
                 s.unitMembers[key] = nil
             } else {
-                s.unitResults[key] = engine.computeUnit(members, explain: options.explanations)
+                s.unitResults[key] = engine.computeUnit(members.map(\.core), explain: options.explanations)
             }
         }
         if Task.isCancelled { throw CancellationError() }
