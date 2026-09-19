@@ -1,38 +1,47 @@
-# 規則ファイルの形式の設計(第 2 版の案)
+# 規則ファイルの形式の設計(第 2 版)
 
-2026-09-19。今の 2 つの規則 JSON(docs/rules.md、以下「第 1 版」)は最初のサンプルにすぎない。これから利用者の
-フィードバックを受けて**中身を育て**、その過程で**形式そのものも広げていく**。そのための土台をここで決める。
+2026-09-19(同日のレビューを反映)。今の 2 つの規則 JSON(docs/rules.md、以下「第 1 版」)は最初のサンプルにすぎない。
+これから利用者のフィードバックを受けて**中身を育て**、その過程で**形式そのものも広げていく**。そのための土台をここで決める。
 
-## 何が起きるか(想定する変化)
+## 想定する変化
 
-| 変化 | 例 | 今の第 1 版で起きること |
+| 変化 | 例 | 第 1 版で起きること |
 |---|---|---|
-| 語を足す・外す | 区切り語に `arc` を足す、既定の `旧版` を外したい | 足すのは JSON の編集で済むが、**利用者が既定の語を外す手段が無い** |
-| 規則の値を変える | `minPrefix` を 3 に | 済む |
-| 新しい種類の規則が要る | 「同じ作者で発行年が 10 年以上離れていたら分ける」 | **決まった形の構造体**なので、キーを足すにはコードと形式の両方を変える。古いアプリは新しいキーを読めずに止まる |
-| 今コードに埋め込んである読み方を変えたい | ローマ数字の上限、雑誌の号の形 | JSON に出ていないので変えられない |
-| 命名の違う蔵書に対応する | 商業の単行本、雑誌、別の同人誌の命名 | フォーマットは 1 組(同人誌向け)しか持てない |
-| 利用者が自分の上書きを持つ | 蔵書固有の区切り語 | 同梱の既定値を書き換えるしかない(次の版で消える) |
-| 規則を変えて何かが壊れないか確かめる | フィードバックで 1 語足すたびに | 手元の蔵書と公開データで測るしかない。**規則と一緒に持ち運べる確認手段が無い** |
+| 語を足す・外す | 区切り語に `arc` を足す、既定の `旧版` を外したい | 利用者が既定の語を外す手段が無い |
+| 規則の値を変える・止める | `minPrefix` を 3 に、英単語の例外を止める | 同梱の既定値を書き換えるしかない(次の版で消える) |
+| 新しい種類の規則が要る | 「発行年が 10 年以上離れていたら分ける」 | 決まった形の構造体なので、古いアプリは新しいキーを読めずに止まる |
+| 命名の違う蔵書に対応する | 商業の単行本、雑誌 | フォーマットは 1 組しか持てない |
+| 規則を変えて何かが壊れないか確かめる | 1 語足すたびに | 規則と一緒に持ち運べる確認手段が無い |
 
-## 設計の方針
+## 方針
 
-1. **包み(エンベロープ)と版を分ける。** ファイルの種類と形式の版(`schemaVersion`)は中身と別に持つ。中身の改訂(`revision`)は
-   形式の版と独立に進める。
-2. **規則は「型付きの規則の並び」にする。** 決まったキーの構造体ではなく、`type` を持つ規則の配列にする。新しい種類の規則は、
-   **新しい `type` を足すだけ**で、形式の版は上がらない。新しい種類には必要な版(`since`)を書き、古いアプリはその規則だけを飛ばして動く(下の「間違いと、新しい版の規則の見分け」)。
-3. **規則ごとに ID を持たせる。** 上書き・無効化・テスト・フィードバックの対象を ID で指せるようにする。
-4. **既定値と利用者の変更を分けて持つ。** 同梱の既定値は書き換えない。利用者が変えた内容は**別の JSON として保存**し、
-   以降はそれを既定値に重ねて使う。「初期化」はその JSON を消すだけで、既定値に戻る(利用者の判断、下の「既定値と利用者の変更」)。
-5. **語の一覧は名前を付けて一か所に置く。** 規則からは名前で参照する(`"@list:editionWords"`)。同じ一覧を複数の規則で使える。
-6. **コードに埋め込んだ読み方も、規則として外に出す。** 巻の読み方(数字・第N・ローマ数字・雑誌の号 …)は、並び順が優先順位の
-   「読み手」の配列にする。
-7. **例を規則と一緒に持ち運ぶ。** 「この名前ならこう読む」という例のファイル(これも JSON)を規則と並べて同梱し、
-   `qoometa rules test` で確かめる。**実在しない本の名前だけで書くので公開してよい**(利用者の判断)。フィードバックは、
-   架空の名前に置き換えた例として受け取り、例に足してから規則を直す。
-8. **処理に関係しない説明は入れない。** 理由や由来の文は書かない(利用者の方針)。説明は docs/rules.md に書く。
+1. **包みと版を中身から分ける。** 版の番号の役割は下の表のとおり。
+2. **処理の段階は固定し、段階の中の規則に ID を付ける。** 利用者が変えられるのは、規則のオン・オフ、パラメータ、語の一覧。
+   並べ替えられるのは巻の読み手だけ(下の「段階と規則」)。
+3. **既定値と利用者の変更を分けて持つ。** 同梱の既定値は書き換えない。利用者の変更は**別の JSON(差分)**として保存し、
+   以降は既定値に重ねて使う。「初期化」は差分を消すこと(利用者の判断)。
+4. **語の一覧は名前を付けて `lists` に置き、規則からは `"@list:名前"` で参照する。** 文字の並び(記号の集合)も配列にして `lists` に置く
+   (全角空白やタブを目で確かめられ、足す・外すができるように)。
+5. **規則ファイルは、ほかのファイルやパスを指さない。** 受け取った規則ファイルが、利用側のファイルを読ませる経路にならないようにする。
+   辞書のような外の資源は**名前**で指し、実体は利用側が API で渡す(api.md「辞書」)。
+6. **例のファイルを規則と一緒に持ち運ぶ。** 実在しない本の名前だけで書き、公開・同梱する(利用者の判断)。
+7. **処理に関係しない説明は入れない**(理由・由来の文は書かない。説明は docs/rules.md)。
+8. 規則の中の正規表現は **ICU の正規表現**(NSRegularExpression)とする。どのアプリでも同じ規則ファイルが同じ意味になるように。
 
-## 包み(両方のファイルに共通)
+## 版の番号
+
+| 番号 | どこに書くか | いつ上がるか | 何に使うか |
+|---|---|---|---|
+| `schemaVersion` | 規則ファイル | 形式に**互換のない変更**をしたとき(キーの改名・削除・意味の変更) | 読み込み時に古い版を新しい版へ移す(マイグレーション) |
+| `engineLevel` | qooMeta 本体が持つ整数。規則の `since` と比べる | 規則の種類(`type`)・パラメータ・一覧を**足した**とき | 古いアプリが、新しい規則を「書き間違い」ではなく「新しい版の規則」と見分ける |
+| `revision` | 規則ファイル(作者が書く印。日付など) | 中身を改訂したとき | 不具合の報告に添える。キャッシュの判定には使わない(本体が内容のハッシュを別に計算する) |
+| パッケージの版(SemVer) | Git のタグ | Swift の API を変えたとき | 利用側の依存の指定 |
+
+- `schemaVersion` は今 2。`engineLevel` は第 2 版の最初の実装を 1 とする。
+- 規則・パラメータ・一覧を足したら `engineLevel` を 1 上げ、足したものに `"since": その番号` を書く。
+- 第 1 版(`version: 1`、公開から間もなく利用者がいない)からのマイグレーションは、仕組みだけ用意して後回しにする。
+
+## 包み
 
 ```json
 {
@@ -40,85 +49,86 @@
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
   "revision": "2026.09.19",
-  "extends": ["builtin"],
-  "...": "中身"
+  "base": "builtin"
 }
 ```
 
 | キー | 意味 |
 |---|---|
-| `$schema` | エディタで補完と検証をするための JSON Schema の場所(任意。読み込みには使わない) |
-| `kind` | ファイルの種類(`qoometa.filename-formats` / `qoometa.series-rules` / `qoometa.examples`) |
-| `schemaVersion` | 形式の版。**互換のない変更のときだけ上げる** |
-| `revision` | 中身の改訂の印(日付など)。書き出しや不具合の報告に添える |
-| `extends` | 重ねる元。`builtin`(同梱の既定値)、または別の規則ファイルのパス。省略すると単独のファイルとして読む |
+| `$schema` | エディタの補完・検証用(任意。読み込みには使わない) |
+| `kind` | `qoometa.filename-formats` / `qoometa.series-rules` / `qoometa.examples` / `qoometa.rules-bundle` |
+| `schemaVersion` | 形式の版 |
+| `revision` | 中身の改訂の印(任意) |
+| `base` | 差分のファイルにだけ書く。値は `"builtin"` のみ(同梱の既定値に重ねる)。**パスや URL は書けない** |
 
-### 版の上げ方
+`qoometa.rules-bundle` は、アプリ間で規則を持ち運ぶための 1 ファイル(フォーマットの差分とシリーズの規則の差分をまとめたもの)。
 
-- 新しいキー・新しい `type`・新しい語の一覧を**足すだけなら版は上げない**(足したものに `since` を書き、古いアプリはそれだけを飛ばす)。
-- キーの名前や意味を変える・消すときだけ `schemaVersion` を上げ、**古い版を新しい版へ移す処理**(マイグレーション)を必ず書く。
-  第 1 版のファイルは、読み込むときに第 2 版へ移して使う(同梱の既定値も、利用者の上書きも)。
-- 読み込みの流れ: JSON を型なしで読む → 版を見て順に移す → 重ね合わせる → 検証する → 型付きの規則に組み立てる。
+## 読み込みと誤りの扱い
 
-### 間違いと、新しい版の規則の見分け(利用者の判断)
+読み込みの流れ: JSON を型なしで読む → `schemaVersion` を見て移す → 既定値に差分を重ねる → 検証する → 組み立てる。
+**誤りは最初の 1 件で止めず、すべて集めて返す**(規則の編集画面で使うため)。
 
 | 状況 | 例 | 扱い |
 |---|---|---|
-| JSON として壊れている | 括弧の閉じ忘れ、`,` の抜け | エラー。何行目の何文字目かを示す |
-| 書き間違い | `"minPrefx"`、`"type": "rejectPrefx"` | **エラー**。場所と、近い綴りの候補を示す(「`minPrefix` ですか?」)。読み飛ばすと、効いているつもりで効いていない状態になるため |
-| 新しい版の規則を古いアプリで読んだ | 新しい qooMeta で足した種類の規則を、更新前の qooMeta や古い qooViewer で読んだ | その規則だけを飛ばし、残りで動かす。「この規則には新しい版が必要」と知らせる |
+| JSON として壊れている | 括弧の閉じ忘れ | エラー(行・列) |
+| 書き間違い | `"minPrefx"`、`"type": "rejectPrefx"`、存在しない一覧への参照 | **エラー**(位置と、近い綴りの候補)。読み飛ばすと「効いているつもりで効いていない」になる |
+| 新しい版の規則(`since` > 本体の `engineLevel`) | 新しい qooMeta で作った差分を古い qooViewer で読んだ | その規則(パラメータ・一覧)を飛ばして警告。ただし `"required": true` の規則なら、**そのファイル全体を適用せず**警告(既定値だけで動く) |
+| 廃止された ID・別名への参照 | 既定値から消した規則を、利用者の差分が無効にしている | 無視して警告(エラーにしない)。アプリの更新で利用者のファイルが読めなくなるのを防ぐ |
+| すでに無い語の `$remove`、すでにある語の `$add` | | 何もしない(警告も出さない) |
+| 上限を超える | 巨大なファイル、語数、危険な正規表現 | エラー |
 
-見分けるために、規則(と項目)に**必要な版**を書けるようにする: `"since": 3`。必要な版が今の版より新しければ「新しい版の規則」、
-そうでなく知らない項目・種類があれば「書き間違い」とする。同梱の既定値には、足した規則ごとに `since` を書く。
+### ID の約束
 
-## 既定値と利用者の変更(利用者の判断)
+- 規則の ID は**再利用しない**。消した ID は既定値の `retiredIDs` に残す。改名したら `aliases`(旧 → 新)に書き、旧 ID への参照は新 ID として扱う。
+- `"required": true` は、飛ばすと結果が黙って悪くなる規則(組にしない例外など)に付ける。既定値の規則には原則として付け、
+  純粋な追加(新しい巻の読み手など)には付けない。
+
+```json
+"retiredIDs": ["reject-old-rule"],
+"aliases": { "reject-english": "reject-common-english" }
+```
+
+## 既定値と利用者の変更(差分)
 
 - **既定値**: このリポジトリの規則。アプリに同梱し、アプリの更新で新しくなる。書き換えない。
-- **利用者の変更**: GUI アプリなどで利用者が規則を変えると、その内容を**別の JSON** として保存し、以降はそれを使う。
-- **初期化**: 利用者の変更の JSON を消す(退避してから消す)。既定値だけの状態に戻る。
-- 利用者の変更は**変えたところだけ**を持つ(下の「重ね合わせ」)。既定値を丸ごと写さないので、アプリの更新で既定値が
-  良くなったとき、利用者が触っていない部分にはその改善が届く。利用者が変えた部分は利用者の値が勝つ。
-- 置き場所はアプリごとに分ける(CLI・GUI アプリ・qooViewer)。**形式は共通**にし、各アプリに規則の書き出しと
-  読み込みを付けて、育てた規則を持ち運べるようにする(利用者の判断)。
-
-## 重ね合わせ(上書き)
-
-利用者の変更のファイルは、変えたいところだけを書く。
+- **利用者の変更**: 利用者が規則を変えると、**変えたところだけ**を別の JSON として保存し、以降はそれを使う。
+  既定値を丸ごと写さないので、アプリの更新で既定値が良くなったとき、利用者が触っていない部分にはその改善が届く。
+- **初期化**: 差分の JSON を退避してから消す。既定値だけの状態に戻る。
+- 置き場所はアプリごとに分ける(CLI・GUI アプリ・qooViewer)。形式は共通で、`qoometa.rules-bundle` の書き出し・読み込みで持ち運ぶ。
+- 重ねるのは「既定値 → 利用者の変更」の 2 層だけ。
 
 ```json
 {
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "extends": ["builtin"],
+  "base": "builtin",
   "lists": {
     "labelIntroducers": { "$add": ["arc"] },
-    "editionWords": { "$remove": ["旧版", "新版"] }
+    "editionWords": { "$remove": ["旧版", "新版"] },
+    "variantKanji": { "$set": { "﨑": "崎" }, "$unset": ["嶋"] }
   },
   "grouping": {
-    "rules": [
-      { "id": "reject-common-english", "enabled": false },
-      { "id": "min-prefix", "minPrefix": 3 }
-    ]
+    "sharedPrefix": { "minPrefix": 3, "conditions": { "reject-common-english": { "enabled": false } } }
+  },
+  "volume": {
+    "readers": { "roman": { "enabled": false }, "$order": ["ordinal", "number"] }
   }
 }
 ```
 
-| 書き方 | 意味 |
-|---|---|
-| 値(数・文字列・真偽) | 置き換える |
-| 配列そのもの | 置き換える |
-| `{ "$add": [...], "$remove": [...] }` | 語の一覧に足す・外す |
-| `{ "$replace": ... }` | 明示的に置き換える(`$add` などと区別したいとき) |
-| ID の付いた規則の配列 | **同じ ID は中身を重ね、無い ID は末尾に足す**。`"enabled": false` で無効にする。`{ "$remove": "ID" }` で消す。並び順を変えたいときは `"after": "ID"` / `"before": "ID"` |
+| 書き方 | 対象 | 意味 |
+|---|---|---|
+| 値(数・文字列・真偽) | パラメータ | 置き換える |
+| `{ "$add": [...], "$remove": [...] }` | 配列の一覧 | 足す・外す |
+| `{ "$set": {...}, "$unset": [...] }` | 対応表(異体字・括弧の対) | 足す(置き換える)・外す |
+| `{ "$replace": ... }` | 一覧・対応表 | 丸ごと置き換える |
+| `"規則の ID": { "enabled": false, パラメータ… }` | 規則 | 止める・パラメータを変える |
+| `"$order": ["ID", …]` | **巻の読み手だけ** | 挙げた ID を、この順で先頭に寄せる(挙げなかった読み手は既定の順で後ろに続く) |
 
-重ねる順(後のものが勝つ):
+## 段階と規則(`qoometa.series-rules`)
 
-1. 同梱の既定値(`builtin`)
-2. 利用者の変更(アプリごとの保存領域)
-
-`qoometa rules show` で、重ねた結果の規則を表示できるようにする(どのファイルのどの値が効いているかも)。
-
-## シリーズの規則(`qoometa.series-rules`)
+処理の段階は固定で、JSON の構造がそのまま段階を表す。**段階の順や、段階をまたぐ規則の移動はできない。**
+例外(組にしない条件)は、それが働く規則の `conditions` にぶら下げる(実際の処理でも、その規則の判定の内側で働くため)。
 
 ```json
 {
@@ -127,130 +137,120 @@
   "revision": "2026.09.19",
 
   "lists": {
-    "labelIntroducers": ["side", "part", "episode", "…", "第", "その", "其ノ"],
-    "editionWords": ["フルカラー版", "カラー版", "…"],
-    "sourceWords": ["初回限定版", "限定版", "…"],
+    "ignoredInComparison": [" ", "　", "\t", "~", "〜", "-", "・", "!", "?", "…"],
+    "boundaryCharacters": ["~", "〜", "-", "・", "!", "?", "(", ")", "_", "…"],
+    "trimTrailing": ["~", "〜", "-", "・", ":", "、", "。", "「", "【", "(", "_"],
+    "keepFollowing": ["!", "?", "！", "？"],
+    "brackets": { "】": "【", "」": "「", ")": "(" },
+    "variantKanji": { "凜": "凛", "髙": "高" },
+    "labelIntroducers": ["side", "part", "episode", "第", "その", "其ノ"],
+    "editionWords": ["フルカラー版", "カラー版", "完全版"],
+    "sourceWords": ["初回限定版", "限定版", "特装版", "通常版", "電子版"],
     "compilationWords": ["総集編", "総集篇"],
-    "volumePrefixes": ["vol", "volume", "ver", "…", "第", "その"],
-    "volumeCounters": ["月号", "月", "巻", "話", "号", "…"],
-    "notFirstMarkers": ["総集編", "番外編", "外伝", "…"],
-    "notFirstPrefixes": ["ex", "extra", "sp", "…"]
+    "volumePrefixes": ["vol", "volume", "ver", "no", "#", "第", "その", "其ノ"],
+    "volumeCounters": ["月号", "月", "巻", "話", "号", "章", "弾", "つめ"],
+    "kanjiCounters": ["巻", "話", "号", "章"],
+    "positionFirst": ["上", "上巻", "前編"],
+    "positionMiddle": ["中", "中巻", "中編"],
+    "positionLast": ["下", "下巻", "後編"],
+    "notFirstMarkers": ["総集編", "番外編", "外伝"],
+    "notFirstPrefixes": ["ex", "extra", "sp"]
   },
 
   "compare": {
-    "rules": [
-      { "id": "nfkc", "type": "unicodeNormalize", "form": "NFKC", "lowercase": true },
-      { "id": "drop-decorations", "type": "dropCharacters", "characters": " 　~〜～-‐―・!?.。、…" },
-      { "id": "variant-kanji", "type": "mapCharacters", "map": { "凜": "凛", "髙": "高" } }
-    ]
+    "ignored": "@list:ignoredInComparison",
+    "variants": "@list:variantKanji"
   },
 
   "partition": { "by": ["circle", "genre"] },
 
   "markers": {
-    "rules": [
-      { "id": "edition", "type": "titleMarker", "role": "edition", "words": "@list:editionWords",
-        "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
-      { "id": "source", "type": "titleMarker", "role": "source", "words": "@list:sourceWords",
-        "patterns": ["[DＤ][LＬ]版"] }
-    ]
+    "edition": { "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
+    "source":  { "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] }
   },
 
   "grouping": {
-    "rules": [
-      { "id": "compilation", "type": "separateCompilation", "words": "@list:compilationWords",
-        "singleWhenMainExists": true },
-      { "id": "volume-head", "type": "volumeHead", "attachSubtitled": true },
-      { "id": "shared-prefix", "type": "sharedPrefix", "minPrefix": 4, "minWholeTitle": 2 },
-      { "id": "split-by-relation", "type": "splitByField", "field": "relation", "unlabeled": "joinLargest" },
-      { "id": "reject-hiragana-ending", "type": "rejectPrefix", "when": "midWord", "endsWith": "hiragana" },
-      { "id": "reject-single-word", "type": "rejectPrefix", "when": "midWord", "singleScript": true },
-      { "id": "reject-common-english", "type": "rejectDictionaryTitles",
-        "dictionary": "/usr/share/dict/words", "unlessVolume": true },
-      { "id": "reject-same-work", "type": "rejectSameWorkOnly" }
-    ]
+    "compilation":  { "enabled": true, "words": "@list:compilationWords", "singleWhenMainExists": true },
+    "volumeHead":   { "enabled": true, "attachSubtitled": true },
+    "sharedPrefix": {
+      "enabled": true, "minPrefix": 4, "minWholeTitle": 2, "boundaries": "@list:boundaryCharacters",
+      "conditions": {
+        "reject-hiragana-ending": { "enabled": true },
+        "reject-single-script":   { "enabled": true },
+        "reject-common-english":  { "enabled": true, "dictionary": "english", "unlessVolume": true }
+      }
+    },
+    "splitByRelation": { "enabled": true, "unlabeled": "joinLargest" },
+    "rejectSameWork":  { "enabled": true }
   },
 
   "naming": {
-    "rules": [
-      { "id": "close-brackets", "type": "includeClosingBrackets",
-        "pairs": { "】": "【", "」": "「", ")": "(" } },
-      { "id": "keep-exclamation", "type": "includeFollowing", "characters": "!?！？" },
-      { "id": "trim-trailing", "type": "trimTrailing", "characters": "~〜-・:、。「【(_" },
-      { "id": "drop-label-word", "type": "dropLastWord", "words": "@list:labelIntroducers" }
-    ]
+    "includeClosingBrackets": { "enabled": true, "pairs": "@list:brackets" },
+    "includeFollowing":       { "enabled": true, "characters": "@list:keepFollowing" },
+    "trimTrailing":           { "enabled": true, "characters": "@list:trimTrailing" },
+    "dropLastWord":           { "enabled": true, "words": "@list:labelIntroducers" }
   },
 
   "volume": {
     "readers": [
-      { "id": "magazine-issue", "type": "issueNumber", "mergedSpan": 3 },
-      { "id": "ordinal", "type": "ordinal", "prefix": "第", "anyCounter": true, "subParts": true },
-      { "id": "number", "type": "number", "prefixes": "@list:volumePrefixes",
-        "counters": "@list:volumeCounters", "mergedSpan": 3 },
-      { "id": "kanji", "type": "kanjiNumber", "extended": true },
-      { "id": "greek", "type": "greekLetter" },
-      { "id": "roman", "type": "romanNumeral", "max": 39, "uppercaseOnly": true },
-      { "id": "position", "type": "positionWord",
-        "first": ["上", "上巻", "前編"], "middle": ["中", "中巻", "中編"], "last": ["下", "下巻", "後編"] }
+      { "id": "ordinal",  "type": "ordinal" },
+      { "id": "number",   "type": "number", "prefixes": "@list:volumePrefixes", "counters": "@list:volumeCounters", "mergedSpan": 3 },
+      { "id": "kanji",    "type": "kanjiNumber", "counters": "@list:kanjiCounters" },
+      { "id": "greek",    "type": "greekLetter" },
+      { "id": "roman",    "type": "romanNumeral" },
+      { "id": "position", "type": "positionWord", "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" }
     ],
-    "inference": [
-      { "id": "shared-leading-kanji", "type": "sharedLeadingKanji", "minBooks": 2 },
-      { "id": "first-volume", "type": "inferFirstVolume",
-        "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
-    ]
-  }
+    "inference": {
+      "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },
+      "firstVolume": { "enabled": true, "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
+    }
+  },
+
+  "retiredIDs": [],
+  "aliases": {}
 }
 ```
 
-- `rules` / `readers` / `inference` は**並び順が適用の順**。読み手は上から試し、最初に読めたものを採る。
-- 各 `type` の意味と引数は、コードの側の「規則の登録簿」に 1 か所で定義し、docs/rules.md と JSON Schema を同じ定義から作る
-  (説明と実装がずれないようにする)。
-- 新しい振る舞いが要るときは、コードに新しい `type` を 1 つ足し、JSON で有効にする。既存の規則には触れない。
+- 段階(`compare` → `partition` → `markers` → `grouping` → `naming` → `volume`)と、`grouping`・`naming`・`inference` の中の規則の順は固定。
+  キーの名前が規則の ID を兼ねる。
+- **`volume.readers` だけは並び順が優先順位**(上から試し、最初に読めたものを採る)。差分の `$order` で並べ替えられ、新しい読み手を足せる。
+- 最初の実装では、処理に埋め込んである読み方(`ordinal`・`roman`・`greek` など)は**オン・オフだけ**を外に出す。細かいパラメータは、
+  必要になったときに `since` を付けて足す。
+- 新しい振る舞いが要るときは、コードに規則を足して `engineLevel` を上げ、既定値に `since` 付きで足す。
+- `"dictionary": "english"` は辞書の**名前**。実体は利用側が渡す。渡されていなければ、その条件は働かない(警告)。
 
 ## ファイル名のフォーマット(`qoometa.filename-formats`)
-
-命名の違う蔵書に対応できるよう、フォーマットを**プロファイル**に分ける。
 
 ```json
 {
   "kind": "qoometa.filename-formats",
   "schemaVersion": 2,
-  "revision": "2026.09.19",
-
   "reservedWords": {
     "@genre":    { "engine": "@mediatype", "field": "genre" },
     "@event":    { "engine": "@event",     "field": "event" },
     "@circle":   { "engine": "@studio",    "field": "circle" },
-    "@author":   { "engine": "@author",    "field": "authors", "split": "、,，&＆/／" },
+    "@author":   { "engine": "@author",    "field": "authors", "split": ["、", ",", "，", "&", "＆", "/", "／"] },
     "@title":    { "engine": "@title",     "field": "title" },
     "@relation": { "engine": "@genre",     "field": "relation" },
     "@keywordA": { "engine": "@keyword",   "field": "keyword" }
   },
-
   "profiles": [
     {
       "id": "doujinshi",
       "delimiters": [["[", "]"], ["(", ")"]],
       "protectedTokens": ["\\((19[0-9]{2})\\)", "\\((20[0-9]{2})\\)", "\\((結|終|完|完結|完全版)\\)"],
-      "formats": [
-        "(@genre) [@circle (@author)] @title (@relation) [@keywordA]",
-        "…",
-        "[@circle] @title"
-      ]
+      "formats": ["(@genre) [@circle (@author)] @title (@relation) [@keywordA]", "[@circle] @title"]
     }
   ],
-
-  "fallback": [
-    { "id": "simple-brackets", "type": "simpleBrackets" },
-    { "id": "whole-name", "type": "wholeNameAsTitle" }
-  ]
+  "fallback": { "simpleBrackets": { "enabled": true }, "wholeNameAsTitle": { "enabled": true } }
 }
 ```
 
-- プロファイルは上から試し、最初にどれかのフォーマットが一致したプロファイルを採る。今は同人誌向けの 1 つだけ。
-  商業の単行本・雑誌などは、プロファイルを足して広げる。
-- 将来、プロファイルに適用の条件(`"when": { "folder": "…" }` のような)を足す余地を残す(足しても版は上げない)。
-- 予約語の細かい設定(作者の区切り文字など)は、予約語の側に持たせる。
+- プロファイルは上から試し、最初にどれかのフォーマットが一致したプロファイルを採る。今は同人誌向けの 1 つ。
+  商業の単行本・雑誌向けのプロファイルは、規則の中身の課題として足していく(roadmap.md)。
+- 差分では、プロファイルを ID で指して `formats` に `$add` / `$remove` / `$replace` を書く。`formats` は順序が意味を持つので、
+  `$add` は `{ "$add": [...], "at": "start" | "end" }`(既定は `start`。利用者の形を先に試す)。
+- プロファイルに適用の条件を付ける拡張(フォルダごとなど)は後回し。
 
 ## 例のファイル(`qoometa.examples`)
 
@@ -258,56 +258,54 @@
 {
   "kind": "qoometa.examples",
   "schemaVersion": 2,
+  "vocabulary": { "genres": ["種別A", "種別B"] },
   "examples": [
     {
       "id": "compilation-numbered-later",
-      "files": [
-        "[架空工房] 月の庭 1",
-        "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 総集編",
-        "[架空工房] 月の庭 総集編2"
-      ],
+      "files": ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 総集編2"],
       "expect": [
         { "series": "月の庭", "volume": "1" },
         { "series": "月の庭", "volume": "2" },
         { "series": "月の庭 総集編", "volume": "1", "inferred": true },
         { "series": "月の庭 総集編", "volume": "2" }
       ],
-      "covers": ["compilation", "first-volume"]
+      "covers": ["compilation", "firstVolume"]
+    },
+    {
+      "id": "same-first-word-is-not-a-series",
+      "files": ["(種別A) [架空工房] NEON 夜の街 (作品A)", "(種別A) [架空工房] NEON 朝の港 (作品B)"],
+      "expect": [{ "series": null }, { "series": null, "relation": "作品B", "genre": "種別A" }],
+      "covers": ["splitByRelation"]
     }
   ]
 }
 ```
 
-- `files` はファイル名(拡張子なし)。`expect` は同じ順の期待値で、書いた項目だけを確かめる。
-- `covers` は、この例が確かめる規則の ID。規則を無効にしたときに壊れる例が分かる。
-- **例には架空の名前だけを書く**(公開されるため。コミット時の検査がかかる)。フィードバックで受け取った実例は、
-  形を保ったまま架空の名前に置き換えてから足す。
-- `qoometa rules test` が例を全部確かめる。CI とテストでも同じものを走らせる。
-- 今の単体テスト(合成した名前のもの)の多くは、この例のファイルへ移せる。
+- `files` は拡張子を除いたファイル名。フォルダが要る例は `{ "name": "…", "folders": ["…"] }` の形でも書ける。
+- `expect` は同じ順の期待値で、**書いた項目だけ**を確かめる。確かめられる項目: `series`・`volume`・`volumeSort`・`inferred`・
+  `circle`・`authors`・`title`・`relation`・`genre`・`event`・`editions`・`sources`。
+- **`"series": null` は「シリーズに入ってはいけない」**。フィードバックの多くはこの形。
+- `vocabulary` はファイル全体の既定で、例ごとに上書きできる(本の種別に依る規則を確かめるため)。
+- `covers` は、この例が確かめる規則の ID。規則を止めたときに壊れる例が分かる。
+- **例には架空の名前だけを書く。** フィードバックの実例は、api.md「フィードバック」の置き換えの規則に従って架空の名前にしてから足す。
+  他人からの寄稿にも同じ約束を求める(CONTRIBUTING に書く)。
 
-## JSON Schema
+## 最初の実装に入れるもの・後回しにするもの
 
-`schema/` に、3 種類のファイルの JSON Schema を置く。エディタ(VS Code など)での補完と検証、CI での検査に使う。
-Schema は規則の登録簿から作り、手で書かない。
-
-## 第 1 版からの移し方
-
-1. 読み込み側に「型なしで読む → 版を移す → 重ねる → 検証 → 組み立て」の流れを作る。第 1 版はこの流れの最初で第 2 版に移す。
-2. 規則の登録簿を作り、今のコードの判断(組の作り方・例外・名前の整え方・巻の読み方)を、ID の付いた規則として 1 つずつ移す。
-   コードに埋め込んである読み方(ローマ数字・雑誌の号 …)もここで規則にする。
-3. 同梱の既定値を第 2 版で書き直す。
-4. 各段で、両方の蔵書と公開データの結果が 1 冊も変わらないことを確かめる(第 1 版を JSON に移したときと同じ手順)。
-5. 今の単体テストを、例のファイルへ移せるものは移す。
-6. docs/rules.md を第 2 版の説明に書き直す(登録簿から作る部分と、手で書く部分に分ける)。
+| 入れる | 後回し |
+|---|---|
+| 包みと `schemaVersion`・`engineLevel`・`since`・`required` | 第 1 版からのマイグレーション(仕組みだけ) |
+| 固定の段階と、ID の付いた規則のオン・オフ・パラメータ | 埋め込みの読み方の細かいパラメータ |
+| `lists` と `$add`/`$remove`/`$set`/`$unset`/`$replace`、読み手の `$order` | プロファイルの適用の条件 |
+| 誤りをすべて集める厳密な検証(近い綴りの候補、`retiredIDs`・`aliases`) | JSON Schema を登録簿から自動で作ること(最初は手で書く) |
+| 例のファイルと `rules test` | `rules-bundle` 以外の持ち運びの形 |
+| 規則の上限と正規表現の安全性の検査 | |
 
 ## 決まったこと(2026-09-19)
 
-- 置き場所はアプリごとに分け、形式は共通にして書き出し・読み込みで持ち運べるようにする。
-- 書き間違いはエラー、新しい版の規則は飛ばして知らせる(`since` で見分ける)。
-- このリポジトリの規則は既定値。利用者の変更は別の JSON に保存して以降それを使い、初期化で既定値に戻す。
+- 置き場所はアプリごとに分け、形式は共通にして `rules-bundle` で持ち運べるようにする。
+- 書き間違いはエラー、新しい版の規則は飛ばして知らせる(`since` と `engineLevel` で見分ける。`required` なら適用しない)。
+- このリポジトリの規則は既定値。利用者の変更は別の JSON(差分)に保存して以降それを使い、初期化で既定値に戻す。
 - 例のファイルは、実在しない本の名前だけで書いて公開する。
-
-## 残っていること
-
-- 利用者の変更のファイルの名前と、各アプリでの置き場所の細部(実装のときに決める)。
+- 段階は固定。並べ替えられるのは巻の読み手だけ。
+- 規則ファイルはパスを指さない。辞書は名前で指し、利用側が渡す。
