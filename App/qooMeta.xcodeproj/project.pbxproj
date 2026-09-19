@@ -1,0 +1,361 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */ = {isa = PBXBuildFile; productRef = F548B9A73E497C1459503F3C /* QooMetaRules */; };
+		5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */; };
+		93B52A0640283F3E27829F56 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B18F5A13C7BB642774DDFB1 /* DetailView.swift */; };
+		947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 74CE0620A1873D2F829A351F /* QooMetaKit */; };
+		A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934559B81EEEF1E3B3E9DA44 /* Workspace.swift */; };
+		A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */; };
+		FF17B661D9ED57B280285700 /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4760B3275FF3971B539296 /* DemoData.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0874B8EB5ABA307C2EF67551 /* qooMeta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qooMeta.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
+		3B18F5A13C7BB642774DDFB1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
+		6F4760B3275FF3971B539296 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
+		934559B81EEEF1E3B3E9DA44 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
+		D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QooMetaApp.swift; sourceTree = "<group>"; };
+		F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BD491103165565414ED44FE8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */,
+				3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		11008E52CC14F8F9A77B5642 = {
+			isa = PBXGroup;
+			children = (
+				2D390CDB87DDD2FBAADD7F99 /* Packages */,
+				52F3FA6AB49D772CA6D91CD2 /* qooMeta */,
+				723E0A79567D771511618FC6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2D390CDB87DDD2FBAADD7F99 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				1311E009BFF802530697F398 /* qooMeta */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		52F3FA6AB49D772CA6D91CD2 /* qooMeta */ = {
+			isa = PBXGroup;
+			children = (
+				6F4760B3275FF3971B539296 /* DemoData.swift */,
+				3B18F5A13C7BB642774DDFB1 /* DetailView.swift */,
+				D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */,
+				934559B81EEEF1E3B3E9DA44 /* Workspace.swift */,
+				F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */,
+			);
+			path = qooMeta;
+			sourceTree = "<group>";
+		};
+		723E0A79567D771511618FC6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0874B8EB5ABA307C2EF67551 /* qooMeta.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1724CD2231426661D927C2A9 /* qooMeta */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40844859A4FF4F5DE0BC8B86 /* Build configuration list for PBXNativeTarget "qooMeta" */;
+			buildPhases = (
+				C4D82FA4F4925D47F269C2B7 /* Sources */,
+				BD491103165565414ED44FE8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = qooMeta;
+			packageProductDependencies = (
+				74CE0620A1873D2F829A351F /* QooMetaKit */,
+				F548B9A73E497C1459503F3C /* QooMetaRules */,
+			);
+			productName = qooMeta;
+			productReference = 0874B8EB5ABA307C2EF67551 /* qooMeta.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F001763799CA5DC7C4286195 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1724CD2231426661D927C2A9 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 03BFB821CDA95AC317BF6CD3 /* Build configuration list for PBXProject "qooMeta" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 11008E52CC14F8F9A77B5642;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3DECFEAADD9AD3767AF43206 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 723E0A79567D771511618FC6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1724CD2231426661D927C2A9 /* qooMeta */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C4D82FA4F4925D47F269C2B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FF17B661D9ED57B280285700 /* DemoData.swift in Sources */,
+				93B52A0640283F3E27829F56 /* DetailView.swift in Sources */,
+				A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */,
+				A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */,
+				5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		25BECF5BC556AFBD008BF2AC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = qooMeta;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qooProject.qooMeta;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		26B1CFD10665AA9DBA8DF282 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3B2D17C8E002911DD7405C9B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = qooMeta;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qooProject.qooMeta;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		9C970D52B297349D0A90BD4F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		03BFB821CDA95AC317BF6CD3 /* Build configuration list for PBXProject "qooMeta" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26B1CFD10665AA9DBA8DF282 /* Debug */,
+				9C970D52B297349D0A90BD4F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		40844859A4FF4F5DE0BC8B86 /* Build configuration list for PBXNativeTarget "qooMeta" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25BECF5BC556AFBD008BF2AC /* Debug */,
+				3B2D17C8E002911DD7405C9B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3DECFEAADD9AD3767AF43206 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		74CE0620A1873D2F829A351F /* QooMetaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QooMetaKit;
+		};
+		F548B9A73E497C1459503F3C /* QooMetaRules */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QooMetaRules;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = F001763799CA5DC7C4286195 /* Project object */;
+}

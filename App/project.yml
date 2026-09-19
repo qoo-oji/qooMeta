@@ -1,0 +1,42 @@
+# qooMeta のアプリ(macOS)。xcodegen で qooMeta.xcodeproj を作る(`cd App && xcodegen`)。
+# 計算は Swift Package の QooMetaKit・QooMetaRules を読み込んで使う(アプリは画面だけを持つ)。
+name: qooMeta
+options:
+  bundleIdPrefix: com.qooProject
+  deploymentTarget:
+    macOS: "15.0"
+packages:
+  QooMetaPackage:
+    path: ..
+targets:
+  qooMeta:
+    type: application
+    platform: macOS
+    sources: [qooMeta]
+    dependencies:
+      - package: QooMetaPackage
+        product: QooMetaKit
+      - package: QooMetaPackage
+        product: QooMetaRules
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qooProject.qooMeta
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: qooMeta
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: YES
+schemes:
+  qooMeta:
+    build:
+      targets:
+        qooMeta: all
+    run:
+      config: Debug
+      # 段階 5(画面の骨組み)は架空のデータだけで確かめる。実際の蔵書を画面に出さない。
+      commandLineArguments:
+        "-demo": true
