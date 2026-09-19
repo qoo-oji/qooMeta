@@ -31,10 +31,27 @@ public struct ComparableText: Sendable, Equatable {
     }
 
     /// 比較用の先頭 `length` 文字に当たる元の文字列。
+    ///
+    /// 閉じ括弧は比較用の形では飛ばすので、そのままだと「【X】…」の共通部分が「【X」で切れる(利用者の指摘)。
+    /// 開いたままの括弧があれば、直後に続く対応する閉じ括弧までを含める。
     public func originalPrefix(keyLength length: Int) -> String {
         guard length > 0 else { return "" }
         let end = originalEnd[min(length, originalEnd.count) - 1]
-        return String(original.prefix(end))
+        let chars = Array(original)
+        var prefix = Array(chars[..<end])
+        var i = end
+        while i < chars.count, let open = TextRules.closingToOpening[chars[i]],
+              prefix.filter({ $0 == open }).count > prefix.filter({ $0 == chars[i] }).count {
+            prefix.append(chars[i])
+            i += 1
+        }
+        // 直後の「!」「?」も名前の一部として含める(利用者の指摘)。
+        // 比較用の形では飛ばしているので、含めないと名前が「！」の手前で切れる。
+        while i < chars.count, "!?！？".contains(chars[i]) {
+            prefix.append(chars[i])
+            i += 1
+        }
+        return String(prefix)
     }
 
     /// 比較用の先頭 `length` 文字より後ろの元の文字列。
@@ -66,6 +83,11 @@ public enum TextRules {
         ignoredInComparison.contains(ch)
     }
 
+    /// 閉じ括弧 → 開き括弧。
+    static let closingToOpening: [Character: Character] = [
+        "】": "【", "」": "「", "』": "『", "》": "《", "〉": "〈", ")": "(", "）": "（", "]": "[", "］": "［", ">": "<",
+    ]
+
     /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。
     static let trailingTrim: CharacterSet = {
         var set = CharacterSet.whitespaces
@@ -92,8 +114,21 @@ public enum TextRules {
     static func trimSeriesName(_ s: String) -> String {
         var scalars = Substring(s.trimmingCharacters(in: .whitespaces)).unicodeScalars
         while let last = scalars.last, trailingTrim.contains(last) { scalars.removeLast() }
-        return String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespaces)
+        let trimmed = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespaces)
+        // 末尾の 1 語が、後ろに付く名前を導く語(「side」「part」など)なら外す。「X side A」「X side B」の
+        // 共通部分は「X side」だが、シリーズ名は「X」(利用者の指摘)。
+        let words = trimmed.split(separator: " ", omittingEmptySubsequences: true)
+        if words.count >= 2, let last = words.last, labelIntroducers.contains(String(last).precomposedNFKC.lowercased()) {
+            return trimSeriesName(words.dropLast().joined(separator: " "))
+        }
+        return trimmed
     }
+
+    /// 後ろに付く名前を導く語(英語の区切り語)。シリーズ名の末尾に残ったときだけ外す。
+    static let labelIntroducers: Set<String> = [
+        "side", "part", "episode", "ep", "chapter", "act", "phase", "stage", "season", "route", "file", "case",
+        "vol", "vol.", "volume", "ver", "ver.", "version", "no", "no.", "#", "第", "その",
+    ]
 }
 
 extension String {

@@ -6,6 +6,8 @@ import Foundation
 /// 推測と事実の区別が付かなくなる。読めるのは次の形だけ:
 /// - 数字(`2` `Vol.3` `ver2` `#4` `第5話` `その6` `Part 7`)。数字の直後が語なら読まない(「2人の…」は巻ではない)
 /// - 漢数字(`第三話` `その二`)
+/// - 「第」+ 数字 + 任意の漢字 1 字の単位(`第1幕` `第三部` `第2夜`)
+/// - ローマ数字(`I` `II` `Ⅳ`。大文字だけ)
 /// - 位置の語(`上` `中` `下` `前編` `中編` `後編`)。数値にはしない(Stackroom の Volume は空のまま)。
 public enum VolumeExtractor {
     public struct Volume: Equatable, Sendable {
@@ -21,9 +23,9 @@ public enum VolumeExtractor {
     private static let position = try! NSRegularExpression(
         pattern: #"^(前編|中編|後編|上巻|中巻|下巻|上|中|下)(?:$|\s)"#)
 
-    /// 巻の前に付く区切り。シリーズ名の末尾から落とす記号(TextRules.trailingTrim)に加えて「!」「?」も落とす
+    /// 巻の前に付く区切り。シリーズ名の末尾から落とす記号(TextRules.trailingTrim)に加えて「!」「?」と閉じ括弧も落とす
     /// (「X! ver2」)。シリーズ名の側では「!」を落とさない(「ご懐妊!!」のような名前がある)。
-    static let leadingSeparators = TextRules.trailingTrim.union(.whitespaces).union(CharacterSet(charactersIn: "!?！？"))
+    static let leadingSeparators = TextRules.trailingTrim.union(.whitespaces).union(CharacterSet(charactersIn: "!?！？】」』》〉)）]］>"))
 
     public static func extract(fromRemainder remainder: String) -> Volume? {
         let s = remainder.precomposedNFKC
@@ -31,6 +33,12 @@ public enum VolumeExtractor {
         guard !s.isEmpty else { return nil }
         let ns = s as NSString
         let range = NSRange(location: 0, length: ns.length)
+        // 「第」が付いていれば、数字の後ろの単位は何でもよい(「第1幕」「第三部」「第2夜」)。
+        if let m = ordinal.firstMatch(in: s, range: range) {
+            let text = ns.substring(with: m.range(at: 1))
+            let number = Double(text) ?? kanjiNumber(text).map(Double.init)
+            if let number { return Volume(text: text, number: number) }
+        }
         if let m = numeric.firstMatch(in: s, range: range) {
             let text = ns.substring(with: m.range(at: 1))
             return Volume(text: text, number: Double(text))
@@ -40,10 +48,36 @@ public enum VolumeExtractor {
             let text = ns.substring(with: r)
             return Volume(text: text, number: kanjiNumber(text).map(Double.init))
         }
+        if let m = roman.firstMatch(in: s, range: range) {
+            let text = ns.substring(with: m.range(at: 1))
+            if let n = romanNumber(text) { return Volume(text: text, number: Double(n)) }
+        }
         if let m = position.firstMatch(in: s, range: range) {
             return Volume(text: ns.substring(with: m.range(at: 1)), number: nil)
         }
         return nil
+    }
+
+    /// 「第」+ 数字 + 任意の漢字 1 字の単位。
+    private static let ordinal = try! NSRegularExpression(
+        pattern: #"^第\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)\s*(?:\p{Han}|$|\s|[~\-・!?.)])"#)
+    private static let wholeOrdinal = try! NSRegularExpression(
+        pattern: #"^第\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)\s*\p{Han}?$"#)
+
+    /// ローマ数字の巻(「X II」)。大文字だけ(NFKC で「Ⅱ」も「II」になる)。1〜39。
+    private static let roman = try! NSRegularExpression(
+        pattern: #"^(?:vol\.?\s*)?(X{0,3}(?:IX|IV|V?I{0,3}))(?:$|\s|[~\-・!?.)])"#)
+
+    static func romanNumber(_ s: String) -> Int? {
+        guard !s.isEmpty else { return nil }
+        let values: [Character: Int] = ["I": 1, "V": 5, "X": 10]
+        var total = 0, previous = 0
+        for ch in s.reversed() {
+            guard let v = values[ch] else { return nil }
+            total += v < previous ? -v : v
+            previous = max(previous, v)
+        }
+        return total > 0 ? total : nil
     }
 
     /// 残りの部分が**巻だけ**でできているか(「21」「第3巻」「Vol.5」「上」。「#4 おまけ」は違う)。
@@ -51,7 +85,14 @@ public enum VolumeExtractor {
         let s = remainder.precomposedNFKC.trimmingCharacters(in: leadingSeparators)
         guard !s.isEmpty else { return false }
         let ns = s as NSString
-        return wholeVolume.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) != nil
+        let range = NSRange(location: 0, length: ns.length)
+        if wholeVolume.firstMatch(in: s, range: range) != nil { return true }
+        if wholeOrdinal.firstMatch(in: s, range: range) != nil { return true }
+        // ローマ数字だけ(「II」)。
+        if let m = roman.firstMatch(in: s, range: range), m.range.length == ns.length || m.range(at: 1).length == ns.length {
+            return romanNumber(ns.substring(with: m.range(at: 1))) != nil
+        }
+        return false
     }
 
     private static let wholeVolume = try! NSRegularExpression(
@@ -114,7 +155,35 @@ public enum ProposalFinalizer {
                 document.books[i].volumeNumber = volume.number
             }
         }
+        readLeadingKanjiNumerals(&document)
         inferFirstVolumes(&document)
+    }
+
+    /// 漢数字で始まるだけの巻(「X 二〇」「X 三〇」のように、漢数字の直後に単位が無い形)を読む。
+    ///
+    /// 漢数字の直後に「巻」「話」などが無い形は、1 冊だけ見ると「X 三人の夜」「X 十字架」のような普通の言葉と
+    /// 区別できない。**同じシリーズの中で、巻の読めない本が 2 冊以上、互いに違う漢数字で始まっているときだけ**読む
+    /// (利用者の指摘。番号を言葉遊びに埋め込んだ同人誌のシリーズ)。
+    static func readLeadingKanjiNumerals(_ document: inout ProposalDocument) {
+        let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
+        for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
+            var found: [(index: Int, text: String, number: Int)] = []
+            for i in indices where document.books[i].volumeText.isEmpty {
+                let title = ComparableText(document.books[i].parsed.title)
+                let name = ComparableText(document.books[i].series).key
+                guard title.key.starts(with: name) else { continue }
+                let remainder = title.originalRemainder(afterKeyLength: name.count)
+                    .trimmingCharacters(in: VolumeExtractor.leadingSeparators)
+                let digits = String(remainder.prefix { "一二三四五六七八九十".contains($0) })
+                guard !digits.isEmpty, let n = VolumeExtractor.kanjiNumber(digits) else { continue }
+                found.append((i, digits, n))
+            }
+            guard found.count >= 2, Set(found.map(\.number)).count == found.count else { continue }
+            for f in found {
+                document.books[f.index].volumeText = f.text
+                document.books[f.index].volumeNumber = Double(f.number)
+            }
+        }
     }
 
     /// 番号の無い 1 冊を 1 巻とみなす。同人誌では 1 冊目に番号を付けず、2 冊目から「2」を付けることが多い(利用者の指摘)。
@@ -160,7 +229,12 @@ public enum ProposalFinalizer {
                 return t.count > 1 && t.hasPrefix("0") && t.allSatisfy(\.isNumber) ? t.count : nil
             }
             let width = padded.max() ?? 1
-            document.books[i].volumeText = String(repeating: "0", count: max(0, width - 1)) + "1"
+            // ほかの巻がローマ数字(「II」「III」)なら「I」にする。
+            let usesRoman = indices.contains { j in
+                let t = document.books[j].volumeText
+                return !t.isEmpty && t.allSatisfy { "IVX".contains($0) }
+            }
+            document.books[i].volumeText = usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1"
             document.books[i].volumeNumber = 1
             document.books[i].volumeInferred = true
         }

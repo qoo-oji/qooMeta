@@ -26,6 +26,9 @@ public struct SeriesGrouper: Sendable {
     /// 語の途中で切れる共通部分が、ひらがなで終わるなら組にしない。
     public var rejectsHiraganaEndings: Bool
 
+    /// ネタ(`@genre`)が違う本を分けるか。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
+    public var splitsByGenre = true
+
     public init(minPrefix: Int = 4, minWholeTitle: Int = 2, attachesSubtitledBooks: Bool = true,
                 rejectsHiraganaEndings: Bool = true) {
         self.minPrefix = minPrefix
@@ -34,8 +37,60 @@ public struct SeriesGrouper: Sendable {
         self.rejectsHiraganaEndings = rejectsHiraganaEndings
     }
 
+    /// 語の切れ目で切れる共通部分でも、2 冊とも一般的な英単語だけのタイトルなら組にしない(EnglishWords)。
+    public var rejectsCommonEnglishTitles = true
+
+    /// 比較用の先頭 `length` 文字より後ろが巻で始まるか。
+    static func hasVolume(_ text: ComparableText, after length: Int) -> Bool {
+        VolumeExtractor.extract(fromRemainder: text.originalRemainder(afterKeyLength: length)) != nil
+    }
+
+    /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
+    public var rejectsSingleWordPrefixes = true
+
+    enum Script { case hiragana, katakana, han, latin, digit, other }
+
+    static func script(_ ch: Character) -> Script {
+        guard let v = ch.unicodeScalars.first?.value else { return .other }
+        switch v {
+        case 0x3041...0x309F: return .hiragana
+        case 0x30A0...0x30FF, 0x31F0...0x31FF, 0xFF66...0xFF9F: return .katakana
+        case 0x4E00...0x9FFF, 0x3400...0x4DBF, 0xF900...0xFAFF, 0x3005: return .han
+        case 0x30...0x39: return .digit
+        default: return ch.isLetter ? .latin : .other
+        }
+    }
+
+    static func isSingleScriptRun(_ chars: [Character]) -> Bool {
+        guard let first = chars.first else { return true }
+        let s = script(first)
+        return chars.allSatisfy { script($0) == s }
+    }
+
     static func isHiragana(_ ch: Character) -> Bool {
         ch.unicodeScalars.allSatisfy { (0x3041...0x309F).contains($0.value) }
+    }
+
+    /// **ネタ(末尾の丸括弧、`@genre`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組をネタごとに分け、ネタの書かれていない本は
+    /// いちばん大きい組へ入れる。分けた結果 2 冊に満たない組は捨てる。
+    func splitByGenre(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
+        guard splitsByGenre else { return groups }
+        let genreByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(ComparableText($0.parsed.trailing).key)) })
+        var result: [SeriesGroup] = []
+        for group in groups {
+            let byGenre = Dictionary(grouping: group.memberIDs.filter { !(genreByID[$0] ?? "").isEmpty }) { genreByID[$0]! }
+            guard byGenre.count >= 2 else { result.append(group); continue }
+            let unlabeled = group.memberIDs.filter { (genreByID[$0] ?? "").isEmpty }
+            let largest = byGenre.max { a, b in a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key }!.key
+            for (genre, ids) in byGenre.sorted(by: { $0.key < $1.key }) {
+                let members = (genre == largest ? ids + unlabeled : ids).sorted()
+                guard members.count >= 2 else { continue }
+                var g = group
+                g.memberIDs = members
+                result.append(g)
+            }
+        }
+        return result
     }
 
     /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
@@ -129,6 +184,7 @@ public struct SeriesGrouper: Sendable {
                 ))
             }
         }
+        groups = splitByGenre(groups, books: books)
         // ありふれた言葉の疑い: この前半部分で始まるタイトルを持つ書き手の数。
         let titleKeysByCircle = Dictionary(grouping: books, by: \.circleKey)
             .mapValues { $0.map { String(ComparableText($0.parsed.title).key) } }
@@ -160,11 +216,20 @@ public struct SeriesGrouper: Sendable {
             // 切れているなら、1 文字の共通部分でも同じ組にする(「咲 18」「亜人 3」「風光る 〇〇編」)。
             // 固定の n 文字にしていた頃は、NDL の書誌で取りこぼしのほとんどが 3 文字以下のタイトルだった
             // (docs/design.md「公開データでの検討」)。
+            // ただし、2 冊とも一般的な英単語だけでできたタイトルなら採らない。
+            // ありふれた英語が重なっただけで手がかりにならない(利用者の指摘)。後ろに巻があれば組にする。
             let cleanOnBothSides = l >= 1 && Self.isCleanCut(last.item.text, at: l) && Self.isCleanCut(item.text, at: l)
+                && !(rejectsCommonEnglishTitles
+                     && EnglishWords.isCommonEnglishOnly(last.item.text.original)
+                     && EnglishWords.isCommonEnglishOnly(item.text.original)
+                     && !Self.hasVolume(last.item.text, after: l) && !Self.hasVolume(item.text, after: l))
             // 語の途中で切れる一致が、ひらがな(「の」「と」などの助詞)で終わるなら採らない。
             // 言い回しが重なっただけの別作品(利用者の指摘)。
+            // 共通部分が文字種の 1 続き(カタカナだけ・漢字だけ…)なら、それは 1 語でしかない。語の途中で切れる一致としては
+            // 採らない(キャラクター名のような 1 語で始まる別作品。利用者の指摘)。
             let midWordAccepted = l >= minPrefix
                 && !(rejectsHiraganaEndings && !cleanOnBothSides && Self.isHiragana(item.text.key[l - 1]))
+                && !(rejectsSingleWordPrefixes && !cleanOnBothSides && Self.isSingleScriptRun(Array(item.text.key.prefix(l))))
             if run.count == 1 {
                 accepts = midWordAccepted || cleanOnBothSides || (l >= minWholeTitle && l == shorter)
             } else if l == runPrefix {

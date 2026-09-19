@@ -190,7 +190,7 @@ func run() async throws {
         ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"))
         let out = try checkedOutputURL(try args.require("out"), args)
         try SeriesListExporter.csv(doc).write(to: out, atomically: true, encoding: .utf8)
-        let series = Set(doc.books.filter { !$0.series.isEmpty }.map { "\($0.circleKey)\u{1}\($0.series)" })
+        let series = Set(doc.books.filter { !$0.series.isEmpty }.compactMap(\.groupID))
         print("シリーズの一覧を書きました: \(series.count) シリーズ / \(doc.books.filter { !$0.series.isEmpty }.count) 冊")
 
     case "evaluate":
@@ -210,13 +210,14 @@ func run() async throws {
             for (a, b) in s.missedPairs { print("[\(a.author)] \(a.title)〔\(a.series)〕 / \(b.title)〔\(b.series)〕") }
             return
         }
-        for hira in [true, false] {
-          for n in [4, 6] {
+        for single in [true, false] {
+          for n in [4] {
             for (label, naming) in namings.prefix(1) {
-                let s = Evaluator.score(labeled, grouper: SeriesGrouper(minPrefix: n, rejectsHiraganaEndings: hira),
-                                        nameFor: naming)
-                print(String(format: "ひらがな終わりを%@ n=%d %@: 適合率 %.3f 再現率 %.3f(正解の組 %d、候補の組 %d)名前一致 %d/%d",
-                             hira ? "除く" : "許す", n, label, s.precision, s.recall, s.truePairs, s.predictedPairs,
+                var grouper = SeriesGrouper(minPrefix: n)
+                grouper.rejectsCommonEnglishTitles = single
+                let s = Evaluator.score(labeled, grouper: grouper, nameFor: naming)
+                print(String(format: "一般英語だけのタイトルを%@ n=%d %@: 適合率 %.3f 再現率 %.3f(正解の組 %d、候補の組 %d)名前一致 %d/%d",
+                             single ? "除く" : "許す", n, label, s.precision, s.recall, s.truePairs, s.predictedPairs,
                              s.nameMatches, s.namedBooks))
             }
           }

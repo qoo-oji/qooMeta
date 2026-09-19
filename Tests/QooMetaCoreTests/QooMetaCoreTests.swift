@@ -105,6 +105,24 @@ import Testing
         #expect(groups.first?.memberIDs.count == 2)
     }
 
+    @Test func singleWordPrefixIsNotASeries() {
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "マーメイド戦士の夜"), ("架空工房", "マーメイド服の少女")])).isEmpty)
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "スピカVS教師"), ("架空工房", "スピカが見た夢")])).isEmpty)
+        // 文字種が切り替わる長い共通部分は、これまでどおり組になる。
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "星降る夜の喫茶店冬の章"), ("架空工房", "星降る夜の喫茶店春の章")])).count == 1)
+    }
+
+    @Test func commonEnglishTitlesAreNotASeries() {
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "Moon Piece"), ("架空工房", "Moon Works")])).isEmpty)
+        // 一般語でない語(作り語)や日本語を含めば組になる。
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "Zorblax Piece"), ("架空工房", "Zorblax Works")])).count == 1)
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "Moon 夜の街"), ("架空工房", "Moon 朝の港")])).count == 1)
+        // 巻があれば組になる(「Moon 2」「Moon 3」)。
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "Moon 2"), ("架空工房", "Moon 3")])).count == 1)
+        #expect(SeriesGrouper().group(Self.books([("架空工房", "Moon 1 -Rise-"), ("架空工房", "Moon 2 -Set-")])).count == 1)
+
+    }
+
     @Test func phraseEndingInParticleIsNotASeries() {
         let b = Self.books([("架空工房", "森の奥のお姉さんと過ごす夏"), ("架空工房", "森の奥の花嫁 DL版")])
         #expect(SeriesGrouper().group(b).isEmpty)
@@ -131,7 +149,7 @@ import Testing
     @Test(arguments: [
         (" 2", "2", 2.0), ("Vol.3", "3", 3.0), ("第5話", "5", 5.0), ("その二", "二", 2.0),
         ("#4 おまけ", "4", 4.0), ("第十二巻", "十二", 12.0), (" ver2", "2", 2.0), (" Ver.3", "3", 3.0),
-        (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
+        ("第1幕", "1", 1.0), ("第三部 完結", "三", 3.0), (" II", "II", 2.0), (" Ⅳ", "IV", 4.0), (" IX 完結編", "IX", 9.0), (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
     ])
     func numbers(remainder: String, text: String, number: Double) {
         let v = VolumeExtractor.extract(fromRemainder: remainder)
@@ -233,6 +251,66 @@ import Testing
         ProposalFinalizer.finalize(&doc)
         #expect(doc.books.map(\.series) == ["月の庭", "月の庭", ""])
         #expect(doc.books.map(\.volumeNumber) == [1, 2, nil])
+    }
+
+    @Test func differentGenresAreNotTheSameSeries() {
+        func books(_ items: [(String, String)]) -> [BookProposal] {
+            BookScanner.proposals(from: items.enumerated().map {
+                BookFile(path: "/nowhere/\($0.offset)", relativePath: "\($0.offset)",
+                         baseName: "[架空工房] \($0.element.0) (\($0.element.1))", fileExtension: "cbz")
+            })
+        }
+        #expect(SeriesGrouper().group(books([("NEON 夜の街", "作品A"), ("NEON 朝の港", "作品B")])).isEmpty)
+        // 同じネタなら組になる。ネタの無い本は大きい方の組へ入る。
+        let b = BookScanner.proposals(from: [
+            "[架空工房] 月の庭 2 (作品A)", "[架空工房] 月の庭 3 (作品A)", "[架空工房] 月の庭 番外", "[架空工房] 月の庭 4 (作品B)",
+        ].enumerated().map { BookFile(path: "/nowhere/\($0.offset)", relativePath: "\($0.offset)", baseName: $0.element,
+                                      fileExtension: "cbz") })
+        let groups = SeriesGrouper().group(b)
+        #expect(groups.map(\.memberIDs) == [[1, 2, 3]])
+    }
+
+    @Test func leadingKanjiNumeralsReadOnlyWhenSeveralSiblingsUseThem() {
+        let books = Self.finalized(["月の庭", "月の庭 三つ星", "月の庭 二つ灯"])
+        #expect(books.map(\.volumeNumber) == [1, 3, 2])
+        #expect(books.map(\.volumeText) == ["1", "三", "二"])
+        // 1 冊だけなら漢数字としては読まない(「三人の夜」のような普通の言葉かもしれない)。
+        // (番号の無い 1 冊として 1 巻の推定は働く)
+        let single = Self.finalized(["月の庭 2", "月の庭 三人の夜"])
+        #expect(single.map(\.volumeText) == ["2", "1"])
+    }
+
+    @Test func ordinalWithAnyCounter() {
+        let books = Self.finalized(["月の庭 第1幕", "月の庭 第2幕", "月の庭 第3幕"])
+        #expect(books.map(\.series) == ["月の庭", "月の庭", "月の庭"])
+        #expect(books.map(\.volumeNumber) == [1, 2, 3])
+    }
+
+    @Test func labelIntroducerIsNotPartOfTheName() {
+        let books = Self.finalized(["月の庭 side NIGHT", "月の庭 side MOON"])
+        #expect(books.map(\.series) == ["月の庭", "月の庭"])
+    }
+
+    @Test func romanNumeralVolumes() {
+        let books = Self.finalized(["月の庭 I", "月の庭 II", "月の庭 Ⅲ"])
+        #expect(books.map(\.series) == ["月の庭", "月の庭", "月の庭"])
+        #expect(books.map(\.volumeNumber) == [1, 2, 3])
+        let inferred = Self.finalized(["月の庭", "月の庭 II", "月の庭 III"])
+        #expect(inferred.map(\.volumeText) == ["I", "II", "III"])
+    }
+
+    @Test func closingBracketOfTheSeriesNameIsKept() {
+        let books = Self.finalized(["【架空の夏】月の庭の話", "【架空の夏】雨の日の話"])
+        #expect(books.map(\.series) == ["【架空の夏】", "【架空の夏】"])
+        let numbered = Self.finalized(["【架空の夏】 2", "【架空の夏】 3"])
+        #expect(numbered.map(\.series) == ["【架空の夏】", "【架空の夏】"])
+        #expect(numbered.map(\.volumeNumber) == [2, 3])
+    }
+
+    @Test func exclamationAfterTheNameIsKept() {
+        let books = Self.finalized(["月がきれいでしかたない！", "月がきれいでしかたない！2 真夏の夜"])
+        #expect(books.map(\.series) == ["月がきれいでしかたない！", "月がきれいでしかたない！"])
+        #expect(books.map(\.volumeNumber) == [1, 2])
     }
 
     @Test func leadingBracketIsKept() {
