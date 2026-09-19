@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "reservedWords": {
+    "@genre": {
+      "engine": "@mediatype",
+      "field": "genre"
+    },
+    "@event": {
+      "engine": "@event",
+      "field": "event"
+    },
+    "@circle": {
+      "engine": "@studio",
+      "field": "circle"
+    },
+    "@author": {
+      "engine": "@author",
+      "field": "authors"
+    },
+    "@title": {
+      "engine": "@title",
+      "field": "title"
+    },
+    "@relation": {
+      "engine": "@genre",
+      "field": "relation"
+    },
+    "@keywordA": {
+      "engine": "@keyword",
+      "field": "keyword"
+    }
+  },
+  "delimiters": [
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ]
+  ],
+  "authorSeparators": "、,，&＆/／",
+  "formats": [
+    "(@genre) [@circle (@author)] @title (@relation) [@keywordA]",
+    "(@genre) [@circle (@author)] @title (@relation)",
+    "(@genre) [@circle (@author)] @title [@keywordA]",
+    "(@genre) [@circle (@author)] @title",
+    "(@genre) [@circle] @title (@relation) [@keywordA]",
+    "(@genre) [@circle] @title (@relation)",
+    "(@genre) [@circle] @title [@keywordA]",
+    "(@genre) [@circle] @title",
+    "(@event) [@circle (@author)] @title (@relation) [@keywordA]",
+    "(@event) [@circle (@author)] @title (@relation)",
+    "(@event) [@circle (@author)] @title [@keywordA]",
+    "(@event) [@circle (@author)] @title",
+    "(@event) [@circle] @title (@relation) [@keywordA]",
+    "(@event) [@circle] @title (@relation)",
+    "(@event) [@circle] @title [@keywordA]",
+    "(@event) [@circle] @title",
+    "[@circle] @title (@relation) [@keywordA]",
+    "[@circle] @title (@relation)",
+    "[@circle] @title [@keywordA]",
+    "[@circle] @title"
+  ],
+  "protectedTokens": [
+    "\\((19[0-9]{2})\\)",
+    "\\((20[0-9]{2})\\)",
+    "\\((結|終|完|完結|完全版)\\)"
+  ]
+}

@@ -10,9 +10,9 @@ let package = Package(
     ],
     targets: [
         // qooLibrary のファイル名フォーマット処理を写したもの(MIT、同じ作者。Sources/QooFormat/README.md)。
-        .target(name: "QooFormat"),
+        .target(name: "QooFormat", exclude: ["README.md"]),
         // 名前の解析・シリーズ候補・書き出し。FoundationModels に依存しない(テストはここを見る)。
-        .target(name: "QooMetaCore", dependencies: ["QooFormat"]),
+        .target(name: "QooMetaCore", dependencies: ["QooFormat"], resources: [.copy("Resources")]),
         // Apple Intelligence(端末内モデル)による判定。
         .target(name: "QooMetaAI", dependencies: ["QooMetaCore"]),
         .executableTarget(name: "qoometa", dependencies: ["QooMetaCore", "QooMetaAI"]),

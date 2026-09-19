@@ -3,96 +3,104 @@ import QooFormat
 
 /// qooLibrary のファイル名フォーマット処理(`Sources/QooFormat` に写したもの)で、ファイル名を部分に分ける。
 ///
-/// qooLibrary の同人誌のプリセットのフォーマット群を上から順に照合し、最初に一致したものを採る。
-/// 先頭の丸括弧が**本の種別(`@mediatype`、旧 `@booktype`)なのかイベント名(`@event`)なのかは、
-/// 本の種別の語彙との照合で決まる**(qooLibrary の 04 章 §4.8)。本の種別が違う本は、同じシリーズに
-/// しない(SeriesGrouper.partitionKey)。
+/// フォーマットは `filename-formats.json`(RuleFiles)に、**Stackroom 式の予約語**で書く:
+/// `(@genre) [@circle (@author)] @title (@relation) [@keywordA]`。上から順に照合し、最初に一致したものを採る。
+/// 照合の処理(qooLibrary 由来)の予約語へは、JSON の `reservedWords` の対応表で置き換えてからコンパイルする。
 ///
-/// **本の種別の語彙はコードに書かない。** 語彙は蔵書のフォルダ名と同じ語であることが多く、リポジトリに
-/// 置けない(CLAUDE.md)。利用者の設定(リポジトリの外の config.json の `mediaTypes`)から渡す。
+/// 先頭の丸括弧が本の種別(`@genre`。照合の処理では `@mediatype`)なのかイベント名(`@event`)なのかは、
+/// **本の種別の語彙との照合で決まる**(qooLibrary の 04 章 §4.8)。本の種別が違う本は、同じシリーズにしない
+/// (SeriesGrouper.partitionKey)。
+///
+/// **本の種別の語彙はリポジトリに置かない。** 語彙は蔵書のフォルダ名と同じ語であることが多い(CLAUDE.md)。
+/// 利用者の設定(リポジトリの外の config.json の `mediaTypes`)から渡す。
 ///
 /// どのフォーマットにも一致しない名前は nil を返し、呼び出し側が qooMeta 自身の NameParser へ戻す。
 public struct QooLibraryNameParser: Sendable {
     let settings: LibrarySettingsSnapshot
     let parser = FilenameParser()
-
-    /// qooLibrary の同人誌のプリセット(`builtin.doujinshi`、library-types.json)のファイル名フォーマット。
-    /// 予約語と括弧だけでできているので、そのまま写してある。
-    public static let doujinshiFormats = [
-        "(@mediatype) [@studio (@author)] @title (@genre) [@keyword]",
-        "(@mediatype) [@studio (@author)] @title (@genre)",
-        "(@mediatype) [@studio (@author)] @title [@keyword]",
-        "(@mediatype) [@studio (@author)] @title",
-        "(@mediatype) [@studio] @title (@genre) [@keyword]",
-        "(@mediatype) [@studio] @title (@genre)",
-        "(@mediatype) [@studio] @title [@keyword]",
-        "(@mediatype) [@studio] @title",
-        "(@event) [@studio (@author)] @title (@genre) [@keyword]",
-        "(@event) [@studio (@author)] @title (@genre)",
-        "(@event) [@studio (@author)] @title [@keyword]",
-        "(@event) [@studio (@author)] @title",
-        "(@event) [@studio] @title (@genre) [@keyword]",
-        "(@event) [@studio] @title (@genre)",
-        "(@event) [@studio] @title [@keyword]",
-        "(@event) [@studio] @title",
-        "[@studio] @title (@genre) [@keyword]",
-        "[@studio] @title (@genre)",
-        "[@studio] @title [@keyword]",
-        "[@studio] @title",
-    ]
-
-    /// 同じプリセットの予約語 → フィールド番号。
-    static let doujinshiBindings: [SemanticKeyword: Int] = [
-        .author: 1, .studio: 2, .genre: 3, .event: 4, .keyword: 5, .mediaType: 7,
-    ]
-
-    /// qooLibrary の既定の保護文字列(AppDefaults.Library.protectedTokenPatterns)。
-    /// 「(2019)」のような年や「(完結)」を、末尾の丸括弧(`@genre`)と取り違えないため。
-    static let protectedTokenPatterns = [
-        #"\((19[0-9]{2})\)"#,
-        #"\((20[0-9]{2})\)"#,
-        #"\((結|終|完|完結|完全版)\)"#,
-    ]
+    /// qooMeta の欄 → 照合の処理のフィールド。
+    let fieldRefs: [String: FieldRef]
+    let authorSeparators: Set<Character>
 
     /// - Parameter mediaTypes: 本の種別の語彙(利用者の設定から)。空なら先頭の丸括弧はすべてイベントとして読む。
-    public init(mediaTypes: [String], formats: [String] = doujinshiFormats) throws {
-        let context = FormatCompilationContext(mediaTypeVocabulary: mediaTypes, semanticBindings: Self.doujinshiBindings)
-        let compiled = try formats.enumerated().map { try FormatCompiler.compile($0.element, context: context, priority: $0.offset) }
+    public init(mediaTypes: [String], rules: FilenameFormatRules = RuleFiles.filenameFormats) throws {
+        // Stackroom 式の予約語 → 照合の処理の予約語(1 回の走査で置き換える。順に置き換えると
+        // 「@relation → @genre → @mediatype」のように連鎖してしまう)。
+        let engineWord = rules.reservedWords.mapValues(\.engine)
+        let token = try NSRegularExpression(pattern: "@[A-Za-z]+[0-9]*")
+        func translate(_ format: String) -> String {
+            let ns = format as NSString
+            var out = "", last = 0
+            for m in token.matches(in: format, range: NSRange(location: 0, length: ns.length)) {
+                out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+                let word = ns.substring(with: m.range)
+                out += engineWord[word] ?? word
+                last = m.range.location + m.range.length
+            }
+            return out + ns.substring(from: last)
+        }
+        // 意味のある予約語(サークル・作者・ネタ …)に、フィールドの番号を振る(番号そのものに意味は無い)。
+        var bindings: [SemanticKeyword: Int] = [:]
+        var refs: [String: FieldRef] = [:]
+        for (i, word) in rules.reservedWords.keys.sorted().enumerated() {
+            let entry = rules.reservedWords[word]!
+            if let keyword = SemanticKeyword(rawValue: entry.engine) {
+                bindings[keyword] = i + 1
+                refs[entry.field] = keyword.fieldRef
+            } else if entry.engine == "@title" {
+                refs[entry.field] = .title
+            }
+        }
+        let delimiters = DelimiterSet(pairs: rules.delimiters.compactMap { pair in
+            guard pair.count == 2, let open = pair[0].first, let close = pair[1].first else { return nil }
+            return PairDelimiter(open: open, close: close)
+        })
+        let context = FormatCompilationContext(delimiters: delimiters, mediaTypeVocabulary: mediaTypes,
+                                               semanticBindings: bindings)
+        let compiled = try rules.formats.enumerated().map {
+            try FormatCompiler.compile(translate($0.element), context: context, priority: $0.offset)
+        }
         settings = LibrarySettingsSnapshot(
             mediaTypeVocabulary: mediaTypes,
-            protectedTokens: ProtectedTokenCompiler.compileAll(Self.protectedTokenPatterns.map { ProtectedToken(pattern: $0) }),
+            delimiters: delimiters,
+            protectedTokens: ProtectedTokenCompiler.compileAll(rules.protectedTokens.map { ProtectedToken(pattern: $0) }),
             filenameFormats: compiled,
-            semanticBindings: Self.doujinshiBindings)
+            semanticBindings: bindings)
+        fieldRefs = refs
+        authorSeparators = Set(rules.authorSeparators)
     }
 
     public func parse(baseName: String) -> ParsedName? {
         guard let result = parser.parse(TextRules.normalizeDisplay(baseName), settings: settings) else { return nil }
-        func value(_ ref: FieldRef) -> String { TextRules.normalizeDisplay(result.fields[ref]?.text ?? "") }
-        let title = value(.title)
+        func value(_ field: String) -> String {
+            guard let ref = fieldRefs[field] else { return "" }
+            return TextRules.normalizeDisplay(result.fields[ref]?.text ?? "")
+        }
+        let title = value("title")
         guard !title.isEmpty else { return nil }
-        let authors = value(.author)
-            .split(whereSeparator: { "、,，&＆/／".contains($0) })
+        let authors = value("authors")
+            .split(whereSeparator: { authorSeparators.contains($0) })
             .map { TextRules.normalizeDisplay(String($0)) }
             .filter { !$0.isEmpty }
-        let mediaType = value(.mediaType)
-        let event = value(.event)
-        let studio = value(.studio)
-        // 末尾の丸括弧が数字だけ(「X (12)」)なら、ネタではなく巻としてタイトルへ戻す(StackNest に倣った)。
-        var genre = value(.genre)
+        let genre = value("genre")
+        let event = value("event")
+        let circle = value("circle")
+        // 末尾の丸括弧が数字だけ(「X (12)」)なら、ネタ(関連)ではなく巻としてタイトルへ戻す(StackNest に倣った)。
+        var relation = value("relation")
         var fullTitle = title
-        if VolumeExtractor.isNumeralOnly(genre) {
-            fullTitle = "\(title) (\(genre))"
-            genre = ""
+        if VolumeExtractor.isNumeralOnly(relation) {
+            fullTitle = "\(title) (\(relation))"
+            relation = ""
         }
         return ParsedName(
-            leading: mediaType.isEmpty ? event : mediaType,
-            circle: studio.isEmpty ? (authors.first ?? "") : studio,
+            leading: genre.isEmpty ? event : genre,
+            circle: circle.isEmpty ? (authors.first ?? "") : circle,
             authors: authors,
             title: fullTitle,
-            trailing: genre,
+            trailing: relation,
             matchedPattern: true,
-            mediaType: mediaType,
+            mediaType: genre,
             event: event,
-            keyword: value(.keyword))
+            keyword: value("keyword"))
     }
 }

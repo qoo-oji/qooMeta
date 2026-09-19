@@ -47,7 +47,7 @@ public struct ComparableText: Sendable, Equatable {
         }
         // 直後の「!」「?」も名前の一部として含める(利用者の指摘)。
         // 比較用の形では飛ばしているので、含めないと名前が「！」の手前で切れる。
-        while i < chars.count, "!?！？".contains(chars[i]) {
+        while i < chars.count, TextRules.keepFollowing.contains(chars[i]) {
             prefix.append(chars[i])
             i += 1
         }
@@ -63,42 +63,45 @@ public struct ComparableText: Sendable, Equatable {
 }
 
 public enum TextRules {
-    /// 比較のときに無視する文字(空白と、タイトルの飾りによく使われる記号)。
-    static let ignoredInComparison: Set<Character> = [
-        " ", "\u{3000}", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",",
-        "「", "」", "『", "』", "【", "】", "<", ">", "〈", "〉", "《", "》", "♪", "☆", "★", "♡", "♥", "…", ":", "：",
-        "'", "\"", "“", "”", "’", "_",
-    ]
+    /// 比較のときに無視する文字(空白と、タイトルの飾りによく使われる記号)。series-rules.json の compare.ignoredCharacters。
+    static let ignoredInComparison = Set(RuleFiles.seriesRules.compare.ignoredCharacters)
 
     /// 比較のときに同じ字とみなす異体字(左 → 右)。NFKC では揃わない。表記ゆれでシリーズが割れた実例
-    /// (1 巻だけ「凜」、2 巻以降が「凛」)から足した。書き出す名前の表記は変えない(比較用の形にだけ使う)。
-    static let variantFolding: [Character: Character] = [
-        "凜": "凛", "髙": "高", "﨑": "崎", "嵜": "崎", "邊": "辺", "邉": "辺", "澤": "沢", "濱": "浜", "嶋": "島",
-        "櫻": "桜", "瀨": "瀬", "國": "国", "廣": "広", "眞": "真", "齋": "斎", "齊": "斉", "德": "徳", "惠": "恵",
-        "晝": "昼", "戀": "恋", "藝": "芸", "體": "体", "與": "与", "舘": "館", "槇": "槙", "冨": "富", "桒": "桑",
-    ]
+    /// (1 巻だけ異体字)から始めた。書き出す名前の表記は変えない(比較用の形にだけ使う)。series-rules.json の compare.variantKanji。
+    static let variantFolding: [Character: Character] = Dictionary(uniqueKeysWithValues:
+        RuleFiles.seriesRules.compare.variantKanji.compactMap { k, v in
+            guard let a = k.first, let b = v.first, k.count == 1, v.count == 1 else { return nil }
+            return (a, b)
+        })
 
     /// 長音記号「ー」は語の一部なので、ダッシュ類と違って落とさない。
     static func isIgnoredInComparison(_ ch: Character) -> Bool {
         ignoredInComparison.contains(ch)
     }
 
-    /// 閉じ括弧 → 開き括弧。
-    static let closingToOpening: [Character: Character] = [
-        "】": "【", "」": "「", "』": "『", "》": "《", "〉": "〈", ")": "(", "）": "（", "]": "[", "］": "［", ">": "<",
-    ]
+    /// 閉じ括弧 → 開き括弧。series-rules.json の naming.brackets。
+    static let closingToOpening: [Character: Character] = Dictionary(uniqueKeysWithValues:
+        RuleFiles.seriesRules.naming.brackets.compactMap { k, v in
+            guard let a = k.first, let b = v.first, k.count == 1, v.count == 1 else { return nil }
+            return (a, b)
+        })
 
-    /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。
+    /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。series-rules.json の naming.trimTrailing。
     static let trailingTrim: CharacterSet = {
         var set = CharacterSet.whitespaces
-        set.insert(charactersIn: "~〜～-‐―・･:：、,。.「『【<〈《(（_")
+        set.insert(charactersIn: RuleFiles.seriesRules.naming.trimTrailing)
         return set
     }()
 
-    /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。
+    /// 共通部分の直後にあれば名前に含める文字(「!」「?」)。series-rules.json の naming.keepFollowing。
+    static let keepFollowing = Set(RuleFiles.seriesRules.naming.keepFollowing)
+
+    static let boundaryCharacters = Set(RuleFiles.seriesRules.grouping.boundaryCharacters)
+
+    /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。series-rules.json の grouping.boundaryCharacters。
     static func isBoundary(_ ch: Character) -> Bool {
         if ch.isWhitespace || ch.isNumber { return true }
-        return "~〜～-‐―・･!?！？.。、,:：「」『』【】<>〈〉《》()（）♪☆★♡♥…#＃_".contains(ch)
+        return boundaryCharacters.contains(ch)
     }
 
     /// 表示用の整え方。**元の表記(全角・半角)は変えない**(書き出す値は利用者のファイル名の表記に従う)。
@@ -124,11 +127,8 @@ public enum TextRules {
         return trimmed
     }
 
-    /// 後ろに付く名前を導く語(英語の区切り語)。シリーズ名の末尾に残ったときだけ外す。
-    static let labelIntroducers: Set<String> = [
-        "side", "part", "episode", "ep", "chapter", "act", "phase", "stage", "season", "route", "file", "case",
-        "vol", "vol.", "volume", "ver", "ver.", "version", "no", "no.", "#", "第", "その", "其ノ", "其の", "ソノ",
-    ]
+    /// 後ろに付く名前を導く語。シリーズ名の末尾に残ったときだけ外す。series-rules.json の naming.labelIntroducers。
+    static let labelIntroducers = Set(RuleFiles.seriesRules.naming.labelIntroducers.map { $0.lowercased() })
 }
 
 extension String {

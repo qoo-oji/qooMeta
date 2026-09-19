@@ -18,13 +18,19 @@ public enum VolumeExtractor {
         public var number: Double?
     }
 
+    /// 巻の読み方の語の一覧は series-rules.json の volume(prefixes / counters / kanjiCounters / positionWords)。
+    static let rules = RuleFiles.seriesRules.volume
+    static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟"
+
     private static let numeric = try! NSRegularExpression(
-        pattern: #"^(?:vol(?:ume)?\.?|ver(?:sion)?\.?|no\.?|#|第|その|其ノ|其の|ソノ|part|ep\.?)?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:月号|月|巻|話|号|章|弾|つめ|つ目|冊目|作目|$|\s|[~\-・!?.)])"#,
+        pattern: #"^(?:"# + rules.prefixPattern + #")?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:"# + rules.alternation(rules.counters)
+            + #"|$|\s|[~\-・!?.)])"#,
         options: [.caseInsensitive])
     private static let kanji = try! NSRegularExpression(
-        pattern: #"^(?:(?:第|その|其ノ|其の|ソノ)([〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟]+)|([〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟]+)(?:巻|話|号|章))"#)
+        pattern: #"^(?:(?:"# + rules.kanjiPrefixPattern + #")(["# + kanjiDigits + #"]+)|(["# + kanjiDigits + #"]+)(?:"#
+            + rules.alternation(rules.kanjiCounters) + #"))"#)
     private static let position = try! NSRegularExpression(
-        pattern: #"^((?:前編|中編|後編|上巻|中巻|下巻|上|中|下)(?:\s*\d{1,2})?)(?:$|\s)"#)
+        pattern: #"^((?:"# + rules.positionPattern + #")(?:\s*\d{1,2})?)(?:$|\s)"#)
 
     /// 巻の前に付く区切り。シリーズ名の末尾から落とす記号(TextRules.trailingTrim)に加えて「!」「?」と閉じ括弧も落とす
     /// (「X! ver2」)。シリーズ名の側では「!」を落とさない(「ご懐妊!!」のような名前がある)。
@@ -134,7 +140,8 @@ public enum VolumeExtractor {
     }
 
     private static let wholeVolume = try! NSRegularExpression(
-        pattern: #"^(?:(?:vol(?:ume)?\.?|ver(?:sion)?\.?|no\.?|#|第|その|其ノ|其の|ソノ|part|ep\.?)\s*)?(?:\d+(?:\.\d+)?(?:[-‐~〜]\d+)?|[〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟]+|[α-ω])\s*(?:月号|月|巻|話|号|章|集|弾|つめ|つ目|冊目|作目)?$|^(?:前編|中編|後編|上巻|中巻|下巻|上|中|下)(?:\s*\d{1,2})?$"#,
+        pattern: #"^(?:(?:"# + rules.prefixPattern + #")\s*)?(?:\d+(?:\.\d+)?(?:[-‐~〜]\d+)?|["# + kanjiDigits + #"]+|[α-ω])\s*(?:"#
+            + rules.alternation(rules.counters + rules.wholeOnlyCounters) + #")?$|^(?:"# + rules.positionPattern + #")(?:\s*\d{1,2})?$"#,
         options: [.caseInsensitive])
 
     /// 漢数字を数にする。大字(壱弐参…)・百・千・〇にも対応する(StackNest の NumeralNormalizer(MIT)の表に倣った)。
@@ -162,7 +169,7 @@ public enum VolumeExtractor {
     /// 「36-37」が合併号(続く号をまとめたもの)として読めるか。後ろが前より大きく、差が小さいときだけ。
     static func isMergedIssue(_ lower: Double?, _ upper: Int?) -> Bool {
         guard let lower, let upper else { return false }
-        return Double(upper) > lower && Double(upper) - lower <= 3
+        return Double(upper) > lower && Double(upper) - lower <= Double(rules.mergedIssueMaxSpan)
     }
 
     /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧がネタか巻かの判定に使う。
@@ -235,12 +242,11 @@ public enum ProposalFinalizer {
                 return (word, Int(t.drop { !$0.isNumber }))
             }
             func kind(_ t: String) -> Int? {
-                switch split(t).word {
-                case "上", "上巻", "前編": return 0
-                case "中", "中巻", "中編": return 1
-                case "下", "下巻", "後編": return 2
-                default: return nil
-                }
+                let word = split(t).word, positions = VolumeExtractor.rules.positionWords
+                if positions.first.contains(word) { return 0 }
+                if positions.middle.contains(word) { return 1 }
+                if positions.last.contains(word) { return 2 }
+                return nil
             }
             let kinds = indices.compactMap { i -> (Int, Int)? in
                 guard document.books[i].volumeNumber == nil, let k = kind(document.books[i].volumeText) else { return nil }
@@ -290,9 +296,9 @@ public enum ProposalFinalizer {
     /// ただし、その 1 冊のタイトルに総集編・番外編のような「1 冊目ではない」ことを示す語があるときは推定しない。
     /// 推定した巻には `volumeInferred` を付け、一覧・見直し表で区別できるようにする。
     /// シリーズ名の直後に付くと「1 冊目ではない」ことを示す英字(「Xex」「X SP」)。途中に含まれるだけでは見ない。
-    static let notFirstVolumePrefixes = ["ex", "extra", "sp", "special", "after", "omake"]
+    static let notFirstVolumePrefixes = VolumeExtractor.rules.notFirstPrefixes
 
-    static let notFirstVolumeMarkers = ["総集編", "総集篇", "番外編", "外伝", "特別編", "おまけ", "再録", "anthology", "アンソロジー"]
+    static let notFirstVolumeMarkers = VolumeExtractor.rules.notFirstMarkers
 
     static func inferFirstVolumes(_ document: inout ProposalDocument) {
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }

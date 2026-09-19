@@ -17,10 +17,8 @@ public enum EditionMarkers {
         public var sources: [String]
     }
 
-    static let editionWords = [
-        "フルカラー版", "カラー版", "モノクロ版", "完全版", "新装版", "愛蔵版", "無修正版", "修正版", "改訂版", "旧版", "新版",
-    ]
-    static let sourceWords = ["初回限定版", "限定版", "特装版", "通常版", "電子版", "デジタル版", "スキャン版"]
+    /// 印の一覧は series-rules.json の editions。
+    static let rules = RuleFiles.seriesRules.editions
 
     /// 印の正規表現。前後の括弧ごと取り除く。長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
     /// 「DL版」は全角の「ＤＬ版」も受け付ける。「〇〇語版」(英語版・中国語版 …)は版。
@@ -28,8 +26,8 @@ public enum EditionMarkers {
         func alternation(_ words: [String]) -> String {
             words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
         }
-        let edition = alternation(editionWords) + #"|[\p{Han}\p{Katakana}ー]{1,6}語版"#
-        let source = alternation(sourceWords) + "|[DＤ][LＬ]版"
+        let edition = ([alternation(rules.edition)] + rules.editionPatterns).joined(separator: "|")
+        let source = ([alternation(rules.source)] + rules.sourcePatterns).joined(separator: "|")
         return try! NSRegularExpression(
             pattern: #"\s*[\[［【(（]?\s*(?:(?<edition>"# + edition + #")|(?<source>"# + source + #"))\s*[\]］】)）]?"#)
     }()
@@ -56,8 +54,9 @@ public enum EditionMarkers {
 
 /// 総集編の語と、収録範囲の並べ替え。
 public enum Compilation {
-    /// 「総集編」(「総集篇」とも書く)。
-    static let keyword = try! NSRegularExpression(pattern: "総集[編篇]")
+    /// 「総集編」(「総集篇」とも書く)。series-rules.json の compilation.keywords。
+    static let keyword = try! NSRegularExpression(pattern: RuleFiles.seriesRules.compilation.keywords
+        .sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|"))
 
     static func keywordRange(in title: String) -> Range<String.Index>? {
         let ns = title as NSString

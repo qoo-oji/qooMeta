@@ -1,0 +1,202 @@
+{
+  "version": 1,
+  "compare": {
+    "ignoredCharacters": " 　\t~〜～-‐―・･!?.。、,「」『』【】<>〈〉《》♪☆★♡♥…:：'\"“”’_",
+    "variantKanji": {
+      "凜": "凛",
+      "髙": "高",
+      "﨑": "崎",
+      "嵜": "崎",
+      "邊": "辺",
+      "邉": "辺",
+      "澤": "沢",
+      "濱": "浜",
+      "嶋": "島",
+      "櫻": "桜",
+      "瀨": "瀬",
+      "國": "国",
+      "廣": "広",
+      "眞": "真",
+      "齋": "斎",
+      "齊": "斉",
+      "德": "徳",
+      "惠": "恵",
+      "晝": "昼",
+      "戀": "恋",
+      "藝": "芸",
+      "體": "体",
+      "與": "与",
+      "舘": "館",
+      "槇": "槙",
+      "冨": "富",
+      "桒": "桑"
+    }
+  },
+  "grouping": {
+    "minPrefix": 4,
+    "minWholeTitle": 2,
+    "attachSubtitled": true,
+    "splitByGenre": true,
+    "rejectHiraganaEndings": true,
+    "rejectSingleWordPrefixes": true,
+    "rejectCommonEnglishTitles": true,
+    "englishDictionary": "/usr/share/dict/words",
+    "boundaryCharacters": "~〜～-‐―・･!?！？.。、,:：「」『』【】<>〈〉《》()（）♪☆★♡♥…#＃_"
+  },
+  "naming": {
+    "trimTrailing": "~〜～-‐―・･:：、,。.「『【<〈《(（_",
+    "keepFollowing": "!?！？",
+    "brackets": {
+      "】": "【",
+      "」": "「",
+      "』": "『",
+      "》": "《",
+      "〉": "〈",
+      ")": "(",
+      "）": "（",
+      "]": "[",
+      "］": "［",
+      ">": "<"
+    },
+    "labelIntroducers": [
+      "side",
+      "part",
+      "episode",
+      "ep",
+      "chapter",
+      "act",
+      "phase",
+      "stage",
+      "season",
+      "route",
+      "file",
+      "case",
+      "vol",
+      "vol.",
+      "volume",
+      "ver",
+      "ver.",
+      "version",
+      "no",
+      "no.",
+      "#",
+      "第",
+      "その",
+      "其ノ",
+      "其の",
+      "ソノ"
+    ]
+  },
+  "editions": {
+    "edition": [
+      "フルカラー版",
+      "カラー版",
+      "モノクロ版",
+      "完全版",
+      "新装版",
+      "愛蔵版",
+      "無修正版",
+      "修正版",
+      "改訂版",
+      "旧版",
+      "新版"
+    ],
+    "editionPatterns": [
+      "[\\p{Han}\\p{Katakana}ー]{1,6}語版"
+    ],
+    "source": [
+      "初回限定版",
+      "限定版",
+      "特装版",
+      "通常版",
+      "電子版",
+      "デジタル版",
+      "スキャン版"
+    ],
+    "sourcePatterns": [
+      "[DＤ][LＬ]版"
+    ]
+  },
+  "compilation": {
+    "keywords": [
+      "総集編",
+      "総集篇"
+    ]
+  },
+  "volume": {
+    "prefixes": [
+      "vol",
+      "volume",
+      "ver",
+      "version",
+      "no",
+      "#",
+      "第",
+      "その",
+      "其ノ",
+      "其の",
+      "ソノ",
+      "part",
+      "ep"
+    ],
+    "counters": [
+      "月号",
+      "月",
+      "巻",
+      "話",
+      "号",
+      "章",
+      "弾",
+      "つめ",
+      "つ目",
+      "冊目",
+      "作目"
+    ],
+    "wholeOnlyCounters": [
+      "集"
+    ],
+    "kanjiCounters": [
+      "巻",
+      "話",
+      "号",
+      "章"
+    ],
+    "positionWords": {
+      "first": [
+        "上",
+        "上巻",
+        "前編"
+      ],
+      "middle": [
+        "中",
+        "中巻",
+        "中編"
+      ],
+      "last": [
+        "下",
+        "下巻",
+        "後編"
+      ]
+    },
+    "mergedIssueMaxSpan": 3,
+    "notFirstMarkers": [
+      "総集編",
+      "総集篇",
+      "番外編",
+      "外伝",
+      "特別編",
+      "おまけ",
+      "再録",
+      "anthology",
+      "アンソロジー"
+    ],
+    "notFirstPrefixes": [
+      "ex",
+      "extra",
+      "sp",
+      "special",
+      "after",
+      "omake"
+    ]
+  }
+}

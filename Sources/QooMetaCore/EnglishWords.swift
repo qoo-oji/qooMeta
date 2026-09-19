@@ -7,7 +7,7 @@ import Foundation
 /// みなさない(組を作る側に倒す。これまでと同じ動き)。
 public enum EnglishWords {
     static let words: Set<String> = {
-        guard let text = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8) else { return [] }
+        guard let text = try? String(contentsOfFile: RuleFiles.seriesRules.grouping.englishDictionary, encoding: .utf8) else { return [] }
         return Set(text.split(separator: "\n").map { $0.lowercased() })
     }()
 

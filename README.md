@@ -81,7 +81,8 @@ scripts/ci/check-private-terms.sh --require-terms                   # 手で検�
 
 ## ドキュメント
 
-- [docs/design.md](docs/design.md) — 設計、規則の一覧、測定結果、未決事項
+- [docs/rules.md](docs/rules.md) — 規則ファイル(`filename-formats.json` と `series-rules.json`)の説明書
+- [docs/design.md](docs/design.md) — 設計、規則の一覧、未決事項
 - [Sources/QooFormat/README.md](Sources/QooFormat/README.md) — qooLibrary から写したコードの出どころ
 
 ## ライセンス

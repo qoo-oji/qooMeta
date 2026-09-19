@@ -27,10 +27,13 @@ public struct SeriesGrouper: Sendable {
     public var rejectsHiraganaEndings: Bool
 
     /// ネタ(`@genre`)が違う本を分けるか。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
-    public var splitsByGenre = true
+    public var splitsByGenre = RuleFiles.seriesRules.grouping.splitByGenre
 
-    public init(minPrefix: Int = 4, minWholeTitle: Int = 2, attachesSubtitledBooks: Bool = true,
-                rejectsHiraganaEndings: Bool = true) {
+    /// 既定値は series-rules.json の grouping。
+    public init(minPrefix: Int = RuleFiles.seriesRules.grouping.minPrefix,
+                minWholeTitle: Int = RuleFiles.seriesRules.grouping.minWholeTitle,
+                attachesSubtitledBooks: Bool = RuleFiles.seriesRules.grouping.attachSubtitled,
+                rejectsHiraganaEndings: Bool = RuleFiles.seriesRules.grouping.rejectHiraganaEndings) {
         self.minPrefix = minPrefix
         self.minWholeTitle = minWholeTitle
         self.attachesSubtitledBooks = attachesSubtitledBooks
@@ -38,7 +41,7 @@ public struct SeriesGrouper: Sendable {
     }
 
     /// 語の切れ目で切れる共通部分でも、2 冊とも一般的な英単語だけのタイトルなら組にしない(EnglishWords)。
-    public var rejectsCommonEnglishTitles = true
+    public var rejectsCommonEnglishTitles = RuleFiles.seriesRules.grouping.rejectCommonEnglishTitles
 
     /// その位置で切ると、元の表記で数字の途中になるか(「2022-01」の「-」は比較用の形では消えるので、元の表記で見る)。
     static func splitsANumber(_ text: ComparableText, at length: Int) -> Bool {
@@ -54,7 +57,7 @@ public struct SeriesGrouper: Sendable {
     }
 
     /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
-    public var rejectsSingleWordPrefixes = true
+    public var rejectsSingleWordPrefixes = RuleFiles.seriesRules.grouping.rejectSingleWordPrefixes
 
     enum Script { case hiragana, katakana, han, latin, digit, other }
 

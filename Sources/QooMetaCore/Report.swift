@@ -100,7 +100,8 @@ public enum SeriesListExporter {
         let bySeries = Dictionary(grouping: books) { "\($0.groupID ?? -1)" }
         let keys = bySeries.keys.sorted { a, b in
             let x = bySeries[a]![0], y = bySeries[b]![0]
-            return (x.parsed.circle, x.series) < (y.parsed.circle, y.series)
+            // 同じサークル・同じシリーズ名の組(本の種別やネタで分けたもの)は組の番号で並べる(毎回同じ順にするため)。
+            return (x.parsed.circle, x.series, x.groupID ?? 0) < (y.parsed.circle, y.series, y.groupID ?? 0)
         }
         var lines = ["シリーズ,サークル,作者,冊数,巻,巻の推定,タイトル,ネタ,版,入手元,ファイル"]
         for key in keys {
