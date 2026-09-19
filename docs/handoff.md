@@ -5,7 +5,7 @@
 ## いまの状況
 
 - コンセプトを土台から見直し、利用者と合意した。**シリーズと巻を導く中核は移し、ほかは作り直す。**
-- 段階 1(基準を取る)は済み(2026-09-19。基準値は下の「確かめ方と基準値」)。次は [roadmap.md](roadmap.md) の段階 2(中核を入口の後ろへ切り出す)。roadmap.md の未決は、2026-09-19 にすべて決まった。
+- 段階 1〜3 は済み(2026-09-19。基準値は下の「確かめ方と基準値」)。次は [roadmap.md](roadmap.md) の段階 4(ファイル名フォーマット)。roadmap.md の未決は、2026-09-19 にすべて決まった。
 - 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
   コミットやブランチの状態はここに書かない(`git log` を見る)。
 
@@ -63,6 +63,16 @@
 
 `Sources/QooMetaKit/` の次の部分。ロジックと規則の中身は変えない。中核が読むのは、比べるタイトル・書き手のキー・ジャンル・関連・
 確定した内容(roadmap.md の「中核の入口」)。まず今のコードの中で入口の型の後ろへ切り出し、指紋が変わらないことを確かめてから、前段を替える。
+
+**入口は切り出した(段階 2)。** 入口の型は `CoreInput.swift` の `CoreBook`(ID・順番・表示のタイトル・比べるタイトル・書き手のキー・
+ジャンル・関連・印の有無・確定した内容・巻の頭の長さ)。中核(`computeUnit` から先。`WorkingBook`・`SeriesGrouper`・
+`ProposalFinalizer`)は `CoreBook` だけを読み、`NameParts` を知らない。前段は `Propose.swift` の `prepareOne` で、名前を読んで
+`CoreBook` に詰める(書き手 = サークル、無ければフォルダ名。段階 6 で差し替えるのはここ)。比べるタイトルを作る処理は
+`RuleEngine.compareTitle(_:)`(前段が何であってもタイトルの値にかける)。前後で指紋・公開データの値・例・テストは同じ。
+- 中核の語は直した: 書き手(`writerKey`。旧 `circleKey`)、ジャンル(方針 differentGenre。旧 `mediaType` `splitByMediaType`)、
+  関連(方針 differentRelation。旧 `splitByGenre`)。
+- 残した語: `Vocabulary`(`genres` は今の前段の語の一覧、`dictionaries` は中核の辞書)と `NameParts`・`ParsedName` の `mediaType`
+  `circle` `event`。どれも段階 6 で前段と一緒に消えるか形が変わるので、そのときに直す。
 
 - `VolumeExtractor.swift`(巻の読み取り)、`SeriesGrouper.swift`(シリーズの組み立て)、`TextForms.swift`(文字の正規化)
 - `EditionMarkers.swift` の、タイトルから印を除く処理(比べるタイトルを作っている。`Propose.swift` の `parse` の後半)。
