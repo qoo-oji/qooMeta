@@ -25,6 +25,8 @@ let usage = """
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
   qoometa evaluate --corpus <正解付き.jsonl>
       正解付きのデータ(author / title / series)で候補づくりを採点する
+  qoometa rules test [<例.json> …] [--only <例の ID>] [--verbose]
+      例のファイル(架空の名前)を今の規則で処理し、期待値と比べる。ファイルを省くと同梱の例
 """
 
 struct Arguments {
@@ -38,7 +40,7 @@ struct Arguments {
             let a = raw[i]
             if a.hasPrefix("--") {
                 let name = String(a.dropFirst(2))
-                if ["rules-only", "allow-in-repo"].contains(name) {
+                if ["rules-only", "allow-in-repo", "verbose"].contains(name) {
                     flags.insert(name)
                 } else if i + 1 < raw.count {
                     options[name] = raw[i + 1]
@@ -232,9 +234,49 @@ func run() async throws {
           }
         }
 
+    case "rules":
+        guard args.positional.first == "test" else { throw CLIError("rules のあとに test を指定してください") }
+        try testExamples(paths: Array(args.positional.dropFirst()), only: args.options["only"],
+                         verbose: args.flags.contains("verbose"))
+
     default:
         print(usage)
     }
+}
+
+/// 例のファイルを走らせる。例は架空の名前だけなので、食い違いは名前ごと表示する。
+/// 1 つでも通らなければ(読めない例のファイルを含む)終了コード 1。
+func testExamples(paths: [String], only: String?, verbose: Bool) throws {
+    var files: [(label: String, file: ExampleFile)] = []
+    var broken = 0
+    if paths.isEmpty {
+        files.append(("同梱の例", try ExampleFile.bundled()))
+    }
+    for path in paths {
+        switch ExampleFile.load(try Data(contentsOf: URL(fileURLWithPath: path))) {
+        case .success(let file): files.append((path, file))
+        case .failure(let issues):
+            print("\(path): 読めない")
+            issues.issues.forEach { print("  \($0)") }
+            broken += 1
+        }
+    }
+    var passed = 0, failed = 0
+    for (label, var file) in files {
+        if let only { file.examples = file.examples.filter { $0.id == only } }
+        for outcome in try ExampleRunner.run(file) {
+            if outcome.passed {
+                passed += 1
+                if verbose { print("ok    \(outcome.id)") }
+            } else {
+                failed += 1
+                print("FAIL  \(outcome.id)(\(label))")
+                outcome.mismatches.forEach { print("      \($0)") }
+            }
+        }
+    }
+    print("例: \(passed + failed) 件(通った \(passed)、通らなかった \(failed))" + (broken > 0 ? "、読めないファイル \(broken)" : ""))
+    if failed > 0 || broken > 0 { exit(1) }
 }
 
 do {

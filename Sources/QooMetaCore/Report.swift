@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// 集計だけの報告(名前を含まない)。CLI が標準出力へ出すのはこれだけ。
@@ -38,8 +39,34 @@ public enum StatsReport {
         }
         lines += [
             "最終: シリーズ付き \(withSeries.count) 冊(\(ratio(withSeries.count, books.count)))、巻あり \(withVolume.count) 冊(数値 \(numericVolume.count)、うち 1 巻と推定 \(books.filter { $0.volumeInferred == true }.count))",
+            "結果の指紋: \(ResultFingerprint.of(doc))",
         ]
         return lines
+    }
+}
+
+/// 結果の指紋。規則や処理を「結果を変えないつもりで」移し替えるとき、前後で本と組の中身が 1 冊も変わっていないことを、
+/// 名前を出さずに確かめる(docs/roadmap.md「進め方の約束」)。出力するのはハッシュだけ。
+///
+/// 含めるもの: 本ごとの名前の解析結果・シリーズ・巻と、同じ組に入った本の集まり。組の番号や作った日時のような、
+/// 中身が同じでも変わりうる値は含めない。
+public enum ResultFingerprint {
+    public static func of(_ doc: ProposalDocument) -> String {
+        let books = doc.books.sorted { $0.file.relativePath < $1.file.relativePath }
+        let pathByID = Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, $0.file.relativePath) })
+        var lines = books.map { b in
+            let p = b.parsed
+            return [b.file.relativePath, p.circle, p.authors.joined(separator: "\u{1}"), p.title, p.trailing,
+                    p.mediaType ?? "", p.event ?? "", p.keyword ?? "", (p.editions ?? []).joined(separator: "\u{1}"),
+                    (p.sources ?? []).joined(separator: "\u{1}"), b.series, b.volumeText,
+                    b.volumeNumber.map { String($0) } ?? "", b.volumeInferred == true ? "推定" : ""]
+                .joined(separator: "\u{2}")
+        }
+        // 組は、入った本のパスの集まりで表す(組の番号には依らない)。
+        let members = Dictionary(grouping: doc.books.filter { $0.groupID != nil }, by: { $0.groupID! })
+        lines += members.values.map { "組\u{2}" + $0.compactMap { pathByID[$0.id] }.sorted().joined(separator: "\u{1}") }.sorted()
+        let digest = SHA256.hash(data: Data(lines.joined(separator: "\n").utf8))
+        return digest.prefix(12).map { String(format: "%02x", $0) }.joined()
     }
 }
 

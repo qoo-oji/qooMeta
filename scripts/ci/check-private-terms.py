@@ -148,9 +148,12 @@ def is_text(data: bytes) -> bool:
     return b"\0" not in data[:8192]
 
 
-def tracked_sources() -> list[tuple[str, str]]:
+def tracked_sources(untracked: bool = False) -> list[tuple[str, str]]:
     sources = []
-    for path in git("ls-files", "-z").split("\0"):
+    # --untracked: まだ追跡していない(無視もされていない)ファイルも見る。コミットの前に、新しく作ったファイルを
+    # ステージせずに確かめるため。
+    listing = git("ls-files", "-z", *(["--cached", "--others", "--exclude-standard"] if untracked else []))
+    for path in listing.split("\0"):
         if not path or path in SELF or path.lower().endswith(SKIP_SUFFIXES):
             continue
         try:
@@ -161,7 +164,7 @@ def tracked_sources() -> list[tuple[str, str]]:
         if is_text(data):
             sources.append((path, data.decode("utf-8", errors="replace")))
     # 追跡ファイルの**名前**も見る(フィクスチャに蔵書の名前を付けてしまう事故)。
-    sources.append(("<追跡ファイルの名前一覧>", git("ls-files")))
+    sources.append(("<追跡ファイルの名前一覧>", listing.replace("\0", "\n")))
     return sources
 
 
@@ -188,6 +191,7 @@ def main() -> int:
     parser.add_argument("--terms", default=os.environ.get("QOO_PRIVATE_TERMS", DEFAULT_TERMS))
     parser.add_argument("--allow", default=os.environ.get("QOO_PRIVATE_TERMS_ALLOW", DEFAULT_ALLOW))
     parser.add_argument("--require-terms", action="store_true", help="手元の一覧が無ければ失敗させる(hook 用)")
+    parser.add_argument("--untracked", action="store_true", help="追跡していない(無視もされていない)ファイルも見る")
     parser.add_argument("--reveal", action="store_true", help="一致した語そのものを出す(手元で見直すときだけ)")
     args = parser.parse_args()
 
@@ -200,7 +204,7 @@ def main() -> int:
     if args.commits:
         sources.append((f"<コミットメッセージ {args.commits}>", git("log", "--format=%H%n%B", *shlex.split(args.commits))))
     if not (args.staged or args.message or args.commits):
-        sources += tracked_sources()
+        sources += tracked_sources(untracked=args.untracked)
         sources.append(("<全コミットメッセージ>", git("log", "--all", "--format=%H%n%B")))
         sources.append(("<ブランチ・タグの名前>", git("for-each-ref", "--format=%(refname)")))
 

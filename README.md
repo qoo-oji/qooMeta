@@ -29,7 +29,11 @@
 ```bash
 swift build -c release
 swift test
+swift run qoometa rules test     # 例のファイル(Sources/QooMetaCore/Resources/examples.json)
+scripts/ci/check-all.sh          # リポジトリの約束事(CI でも走る)
 ```
+
+規則を変えるときは、先に確かめたい形を例のファイルに足します(CONTRIBUTING.md)。
 
 ## 使い方
 
@@ -47,6 +51,7 @@ $Q export --in "$OUT/proposals.json" --format stackroom --out "$OUT/Library.xml"
 $Q export --in "$OUT/proposals.json" --format qooviewer --out "$OUT/qooviewer.json"
 $Q judge --in "$OUT/proposals.json"                            # 任意: 端末内モデルでシリーズの組を判定
 $Q evaluate --corpus <正解付き.jsonl>                           # 公開データで規則を採点
+$Q rules test [<例.json> …]                                    # 例のファイル(架空の名前)で規則を確かめる
 ```
 
 ### 設定

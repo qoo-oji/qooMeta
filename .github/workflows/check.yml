@@ -1,0 +1,27 @@
+# ビルド・テスト・例のファイル・リポジトリの約束事の検査(docs/roadmap.md 段階 0 の 2)。
+#
+# 禁止語の一覧は手元にしか無いので、ここで見るのは一般的な形(個人のパスなど)だけ。
+# 蔵書の名前の検査は、手元の git hook(scripts/git-hooks/)が受け持つ。
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # FoundationModels(QooMetaAI)のために macOS 26 の SDK が要る。
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 全コミットのメッセージも検査する
+      - name: 約束事の検査
+        run: scripts/ci/check-all.sh
+      - name: ビルド
+        run: swift build
+      - name: テスト
+        run: swift test
+      - name: 例のファイル
+        run: swift run qoometa rules test --verbose

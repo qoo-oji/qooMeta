@@ -41,3 +41,5 @@ out/
 # 規則の既定値(公開する。蔵書の名前は含まない。禁止語の検査を通してから入れる)
 !Sources/QooMetaCore/Resources/filename-formats.json
 !Sources/QooMetaCore/Resources/series-rules.json
+# 例のファイル(公開する。架空の名前だけで書く)
+!Sources/QooMetaCore/Resources/examples.json

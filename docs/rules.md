@@ -23,8 +23,11 @@ qooMeta の規則は、次の 2 つの JSON に書かれています。どちら
 - 語の一覧は、長い語から先に照合するよう自動で並べ替えます。書く順は気にしなくてかまいません
   (`formats` だけは書いた順が優先順位です)。
 - 変えたあとは、次で結果を確かめてください。
-  - `swift test` — 合成した名前での単体テスト
-  - `qoometa scan …` → `qoometa stats …` — 手元の蔵書での集計(名前は出ません)
+  - `qoometa rules test` — 例のファイル(`Sources/QooMetaCore/Resources/examples.json`、架空の名前)。
+    規則を変える前に、確かめたい形をここへ足す(CONTRIBUTING.md)
+  - `swift test` — 合成した名前での単体テスト(例のファイルも走る)
+  - `qoometa scan …` → `qoometa stats …` — 手元の蔵書での集計(名前は出ません)。最後の行の「結果の指紋」は、
+    本ごとの解析結果・シリーズ・巻と組の中身から作ったハッシュで、変更の前後で同じなら結果は 1 冊も変わっていません
   - `qoometa evaluate --corpus …` — 公開データでの採点(README「公開データでの検討」)
 
 ---
