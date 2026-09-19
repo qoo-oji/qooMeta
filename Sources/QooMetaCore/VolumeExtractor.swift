@@ -197,7 +197,7 @@ public enum ProposalFinalizer {
                 excluded = Set(verdict.excludedIDs)
             }
             let kept = group.memberIDs.filter { !excluded.contains($0) }
-            guard kept.count >= 2, !name.isEmpty else { continue }
+            guard kept.count >= (group.allowsSingle == true ? 1 : 2), !name.isEmpty else { continue }
             for id in kept { seriesByBook[id] = name; groupByBook[id] = group.id }
         }
         for i in document.books.indices {
@@ -208,7 +208,7 @@ public enum ProposalFinalizer {
             document.books[i].volumeNumber = nil
             document.books[i].volumeInferred = nil
             guard !series.isEmpty else { continue }
-            let title = ComparableText(document.books[i].parsed.title)
+            let title = ComparableText(document.books[i].parsed.baseTitle)
             let nameKey = ComparableText(series).key
             // シリーズ名がタイトルの前半に当たらない(モデルが言い換えた)ときは、巻を読まない。
             guard title.key.starts(with: nameKey) else { continue }
@@ -266,7 +266,7 @@ public enum ProposalFinalizer {
         for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
             var found: [(index: Int, text: String, number: Int)] = []
             for i in indices where document.books[i].volumeText.isEmpty {
-                let title = ComparableText(document.books[i].parsed.title)
+                let title = ComparableText(document.books[i].parsed.baseTitle)
                 let name = ComparableText(document.books[i].series).key
                 guard title.key.starts(with: name) else { continue }
                 let remainder = title.originalRemainder(afterKeyLength: name.count)
@@ -292,7 +292,7 @@ public enum ProposalFinalizer {
     /// シリーズ名の直後に付くと「1 冊目ではない」ことを示す英字(「Xex」「X SP」)。途中に含まれるだけでは見ない。
     static let notFirstVolumePrefixes = ["ex", "extra", "sp", "special", "after", "omake"]
 
-    static let notFirstVolumeMarkers = ["総集編", "番外編", "外伝", "特別編", "おまけ", "再録", "anthology", "アンソロジー"]
+    static let notFirstVolumeMarkers = ["総集編", "総集篇", "番外編", "外伝", "特別編", "おまけ", "再録", "anthology", "アンソロジー"]
 
     static func inferFirstVolumes(_ document: inout ProposalDocument) {
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
@@ -305,7 +305,7 @@ public enum ProposalFinalizer {
             // 「1 冊目ではない」語は、シリーズ名より後ろの部分だけで探す(シリーズ名そのものに「総集編」が
             // 含まれることがある。「X 総集編」「X 総集編 02」…の番号の無い 1 冊は 1 巻)。
             func remainder(_ i: Int) -> String {
-                let title = ComparableText(document.books[i].parsed.title).key
+                let title = ComparableText(document.books[i].parsed.baseTitle).key
                 let name = ComparableText(document.books[i].series).key
                 return title.starts(with: name) ? String(title.dropFirst(name.count)) : String(title)
             }

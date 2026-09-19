@@ -23,6 +23,14 @@ public struct ParsedName: Sendable, Equatable, Codable {
     public var event: String?
     /// 末尾の角括弧(`@keyword`)。
     public var keyword: String?
+    /// 版の印(フルカラー版・完全版 …)と入手経路の印(DL版・特装版 …)。EditionMarkers。
+    public var editions: [String]?
+    public var sources: [String]?
+    /// 版・入手経路の印を除いたタイトル。シリーズを組む・巻を読むときはこちらを使う(表示・書き出しは title)。
+    public var workTitle: String?
+
+    /// 比べるためのタイトル(印を除いたもの。無ければ title)。
+    public var baseTitle: String { workTitle ?? title }
 
     public init(leading: String = "", circle: String = "", authors: [String] = [], title: String,
                 trailing: String = "", matchedPattern: Bool, mediaType: String? = nil, event: String? = nil,

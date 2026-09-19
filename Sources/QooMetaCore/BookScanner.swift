@@ -48,7 +48,14 @@ public enum BookScanner {
     /// - Parameter qooLibrary: 渡すと qooLibrary のフォーマット処理で先に読み、一致しなければ NameParser へ戻す。
     public static func proposals(from files: [BookFile], qooLibrary: QooLibraryNameParser? = nil) -> [BookProposal] {
         files.enumerated().map { index, file in
-            let parsed = qooLibrary?.parse(baseName: file.baseName) ?? NameParser.parse(baseName: file.baseName)
+            var parsed = qooLibrary?.parse(baseName: file.baseName) ?? NameParser.parse(baseName: file.baseName)
+            let split = EditionMarkers.split(parsed.title)
+            if split.base != parsed.title {
+                parsed.workTitle = split.base
+                parsed.editions = split.editions.isEmpty ? nil : split.editions
+                parsed.sources = split.sources.isEmpty ? nil : split.sources
+            }
+            if let reordered = Compilation.normalizedTitle(parsed.baseTitle) { parsed.workTitle = reordered }
             let owner = parsed.circle.isEmpty ? file.folderName : parsed.circle
             let key = String(ComparableText(owner).key)
             return BookProposal(id: index + 1, file: file, parsed: parsed, circleKey: key)

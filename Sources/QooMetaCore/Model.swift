@@ -95,6 +95,8 @@ public struct SeriesGroup: Codable, Sendable, Equatable {
     /// この前半部分で始まるタイトルを持つ書き手の数(多いほど、ありふれた言葉の疑い)。
     public var circlesSharingPrefix: Int
     public var aiVerdict: AIVerdict?
+    /// 1 冊でもシリーズにする組(本編のシリーズがある総集編。SeriesGrouper)。
+    public var allowsSingle: Bool?
     /// 判定できなかった理由(安全装置による拒否など)。
     public var aiError: String?
 

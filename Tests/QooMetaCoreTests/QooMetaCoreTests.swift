@@ -428,6 +428,64 @@ import Testing
     }
 }
 
+@Suite struct EditionAndCompilationTests {
+    static let finalized = FirstVolumeInferenceTests.finalized
+
+    @Test func editionMarkersAreSplit() {
+        let a = EditionMarkers.split("月の庭【フルカラー版】")
+        #expect(a.base == "月の庭")
+        #expect(a.editions == ["フルカラー版"])
+        let b = EditionMarkers.split("月の庭 3 DL版")
+        #expect(b.base == "月の庭 3")
+        #expect(b.sources == ["DL版"])
+        let c = EditionMarkers.split("月の庭 (英語版) [特装版]")
+        #expect(c.base == "月の庭")
+        #expect(c.editions == ["英語版"])
+        #expect(c.sources == ["特装版"])
+    }
+
+    @Test func sameWorkInDifferentEditionsIsNotASeries() {
+        #expect(Self.finalized(["月の庭", "月の庭【フルカラー版】"]).allSatisfy { $0.series.isEmpty })
+        #expect(Self.finalized(["月の庭 DL版", "月の庭 通常版"]).allSatisfy { $0.series.isEmpty })
+    }
+
+    @Test func editionInsideASeriesKeepsTheVolume() {
+        let books = Self.finalized(["月の庭 2", "月の庭 3", "月の庭 3【フルカラー版】"])
+        #expect(books.allSatisfy { $0.series == "月の庭" })
+        #expect(books.map(\.volumeNumber) == [2, 3, 3])
+        #expect(books[2].parsed.editions == ["フルカラー版"])
+    }
+
+    @Test func compilationsFormTheirOwnSeries() {
+        // 番号の無い最初の総集編 + 後から出た「総集編2」は、本編とは別の「X 総集編」。
+        let books = Self.finalized(["月の庭 1", "月の庭 2", "月の庭 総集編", "月の庭 総集編2"])
+        #expect(books.map(\.series) == ["月の庭", "月の庭", "月の庭 総集編", "月の庭 総集編"])
+        #expect(books.map(\.volumeNumber) == [1, 2, 1, 2])
+    }
+
+    @Test func singleCompilationJoinsOnlyWhenAMainSeriesExists() {
+        let withMain = Self.finalized(["月の庭 1", "月の庭 2", "月の庭 総集編"])
+        #expect(withMain[2].series == "月の庭 総集編")
+        // 本編がシリーズでない(1 冊だけ)なら、総集編もシリーズにしない(フルカラー総集編のような再編集)。
+        let withoutMain = Self.finalized(["月の庭", "月の庭 フルカラー総集編"])
+        #expect(withoutMain.allSatisfy { $0.series.isEmpty })
+    }
+
+    @Test func rangeBeforeCompilationIsItsVolume() {
+        #expect(Compilation.normalizedTitle("月の庭1~4総集編") == "月の庭 総集編 1~4")
+        #expect(Compilation.normalizedTitle("月の庭 9~11+α総集篇") == "月の庭 総集篇 9~11+α")
+        let books = Self.finalized(["月の庭 1", "月の庭 2", "月の庭1~4総集編", "月の庭9~11+α総集編"])
+        #expect(books.map(\.series) == ["月の庭", "月の庭", "月の庭 総集編", "月の庭 総集編"])
+        #expect(books.map(\.volumeNumber) == [1, 2, 1, 9])
+    }
+
+    @Test func compilationOnlySeries() {
+        let books = Self.finalized(["架空録 総集編 02", "架空録 総集編 03", "架空録 総集編"])
+        #expect(books.allSatisfy { $0.series == "架空録 総集編" })
+        #expect(books.map(\.volumeText) == ["02", "03", "01"])
+    }
+}
+
 @Suite struct ExporterTests {
     static func document() -> ProposalDocument {
         var files = [

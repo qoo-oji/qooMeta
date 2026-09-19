@@ -101,6 +101,32 @@ public struct SeriesGrouper: Sendable {
         return result
     }
 
+    /// 総集編なら、その名前(「X 総集編」「X フルカラー総集編」)と、本編のシリーズ名の候補(「X」)。
+    /// タイトルの先頭が「総集編」の本(本編の名前が無い)は対象にしない。
+    /// 収録範囲が総集編の前に書かれている形(「X1~4総集編」)は、BookScanner が「X 総集編 1~4」に並べ替えてある
+    /// (Compilation.normalizedTitle)。
+    static func compilation(_ title: String) -> (name: String, mains: [String])? {
+        guard let r = Compilation.keywordRange(in: title), r.lowerBound > title.startIndex else { return nil }
+        let head = String(title[..<r.lowerBound])
+        let main = TextRules.trimSeriesName(head)
+        guard !main.isEmpty else { return nil }
+        var mains = [main]
+        // 「X フルカラー総集編」の「フルカラー」のような、総集編の直前の語を除いた名前も本編の候補にする。
+        if !head.hasSuffix(" "), let space = main.lastIndex(where: \.isWhitespace) {
+            mains.append(TextRules.trimSeriesName(String(main[..<space])))
+        }
+        return (TextRules.trimSeriesName(head + String(title[r])), mains)
+    }
+
+    /// 版違い・入手経路違いだけでできた組はシリーズにしない(同じ作品。利用者との取り決め)。
+    /// 印(EditionMarkers)を除いたタイトルが 2 種類以上ある組だけを残す。1 冊でもよい組(本編のある総集編)は残す。
+    func dissolveSameWorkOnly(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
+        let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(ComparableText($0.parsed.baseTitle).key)) })
+        return groups.filter { g in
+            g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
+        }
+    }
+
     /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
     /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。種別が読めなかった本は書き手だけで比べる。
     func partitionKey(_ book: BookProposal) -> String {
@@ -112,9 +138,14 @@ public struct SeriesGrouper: Sendable {
         let byCircle = Dictionary(grouping: books, by: partitionKey)
         var groups: [SeriesGroup] = []
         for circleKey in byCircle.keys.sorted() {
+            // 総集編は本編と分けて扱う(Self.compilation)。
+            let compilations = byCircle[circleKey]!.compactMap { b in Self.compilation(b.parsed.baseTitle).map { (b, $0) } }
+            let compilationIDs = Set(compilations.map(\.0.id))
             let items = byCircle[circleKey]!
-                .map { (id: $0.id, text: ComparableText($0.parsed.title)) }
+                .filter { !compilationIDs.contains($0.id) }
+                .map { (id: $0.id, text: ComparableText($0.parsed.baseTitle)) }
                 .filter { !$0.text.key.isEmpty }
+            let groupsBefore = groups.count
 
             // 1 段目: 「タイトル + 巻」の形の本を、巻を除いた頭の部分でまとめる。
             // 並べ替えた隣どうしで比べるだけだと、「三国志 21」と「三国志 第1巻」の間に「三国志演義」の
@@ -191,11 +222,28 @@ public struct SeriesGrouper: Sendable {
                     circlesSharingPrefix: 0
                 ))
             }
+
+            // 総集編: 「X 総集編」ごとにまとめる。2 冊以上か、本編のシリーズ「X」がこの書き手にあれば(1 冊でも)シリーズ。
+            // 番号の無い最初の総集編のあとに「総集編2」が出ることがあるので、番号の有無で分け方を変えない(利用者の判断)。
+            let mainKeys = Set(groups[groupsBefore...].map { String(ComparableText($0.ruleName).key) })
+            let byName = Dictionary(grouping: compilations) { String(ComparableText($0.1.name).key) }
+            for key in byName.keys.sorted() {
+                let members = byName[key]!
+                let hasMain = members[0].1.mains.contains { mainKeys.contains(String(ComparableText($0).key)) }
+                guard members.count >= 2 || hasMain else { continue }
+                var g = SeriesGroup(
+                    id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0],
+                    memberIDs: members.map(\.0.id).sorted(), ruleName: members.min { $0.0.id < $1.0.id }!.1.name,
+                    cleanBoundary: true, circlesSharingPrefix: 0)
+                g.allowsSingle = hasMain
+                groups.append(g)
+            }
         }
         groups = splitByGenre(groups, books: books)
+        groups = dissolveSameWorkOnly(groups, books: books)
         // ありふれた言葉の疑い: この前半部分で始まるタイトルを持つ書き手の数。
         let titleKeysByCircle = Dictionary(grouping: books, by: \.circleKey)
-            .mapValues { $0.map { String(ComparableText($0.parsed.title).key) } }
+            .mapValues { $0.map { String(ComparableText($0.parsed.baseTitle).key) } }
         for i in groups.indices {
             let prefix = String(ComparableText(groups[i].ruleName).key)
             groups[i].circlesSharingPrefix = prefix.isEmpty ? 0 : titleKeysByCircle.values

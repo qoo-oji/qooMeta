@@ -102,7 +102,7 @@ public enum SeriesListExporter {
             let x = bySeries[a]![0], y = bySeries[b]![0]
             return (x.parsed.circle, x.series) < (y.parsed.circle, y.series)
         }
-        var lines = ["シリーズ,サークル,作者,冊数,巻,巻の推定,タイトル,ネタ,ファイル"]
+        var lines = ["シリーズ,サークル,作者,冊数,巻,巻の推定,タイトル,ネタ,版,入手元,ファイル"]
         for key in keys {
             let members = bySeries[key]!.sorted { a, b in
                 switch (a.volumeNumber, b.volumeNumber) {
@@ -114,7 +114,8 @@ public enum SeriesListExporter {
             }
             for b in members {
                 lines.append([b.series, b.parsed.circle, b.parsed.authors.joined(separator: "、"), String(members.count),
-                              b.volumeText, b.volumeInferred == true ? "推定" : "", b.parsed.title, b.parsed.trailing, b.file.relativePath].map(field).joined(separator: ","))
+                              b.volumeText, b.volumeInferred == true ? "推定" : "", b.parsed.title, b.parsed.trailing,
+                              (b.parsed.editions ?? []).joined(separator: "、"), (b.parsed.sources ?? []).joined(separator: "、"), b.file.relativePath].map(field).joined(separator: ","))
             }
         }
         return "\u{FEFF}" + lines.joined(separator: "\r\n") + "\r\n"

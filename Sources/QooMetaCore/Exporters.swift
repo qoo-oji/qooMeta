@@ -43,6 +43,8 @@ public enum StackroomExporter {
             if !authors.isEmpty { entry["Author"] = authors.joined(separator: ", ") }
             if !book.parsed.leading.isEmpty { entry["Genre"] = book.parsed.leading }
             if !book.parsed.trailing.isEmpty { entry["Neta"] = book.parsed.trailing }
+            // 版(フルカラー版・完全版 …)は Keyword C へ(利用者との取り決め)。入手経路(DL版など)は書かない。
+            if let editions = book.parsed.editions, !editions.isEmpty { entry["Keyword C"] = editions.joined(separator: ", ") }
             if !book.series.isEmpty { entry["Series"] = book.series }
             if let volume = book.volumeNumber { entry["Volume"] = volume }
             books[String(book.id)] = entry
