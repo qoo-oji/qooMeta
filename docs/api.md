@@ -118,7 +118,7 @@ public enum Confirmation: Sendable, Hashable {
 }
 
 public struct ConfirmedFields: Sendable, Hashable {
-    public var circle: String?, title: String?, relation: String?, genre: String?
+    public var circle: String?, authors: [String]?, title: String?, relation: String?, genre: String?
 }
 
 /// 利用者ごとの語彙と辞書。蔵書の語を含むので、利用側の設定に置く。
@@ -271,6 +271,55 @@ public struct ProposalDelta: Sendable {
 - 今の実装にある「同じ前半部分を持つ書き手の数」(ありふれた言葉の疑い)は単位をまたぐので、提案には含めない。
   必要なら `ProposalSet` に対する別の問い合わせ(`prefixCommonness(of:)`)として、その時点の全体から計算する。
 
+### まとめて編集
+
+複数の本の確定した内容を、まとめて組み立てる。**値を返すだけ**で、何も保存しない(保存と取り消しは利用側)。
+GUI アプリと、qooViewer の「メタデータの編集」の両方から使う。
+
+```swift
+public enum BulkEdit {
+    /// 選んだ本のタイトルから、シリーズ名の候補を返す(共通部分を、規則の名前の整え方に通したもの。無ければ nil)。
+    public static func suggestedSeriesName(for ids: [String], in set: ProposalSet, rules: CompiledRules) -> String?
+
+    /// 選んだ本に同じシリーズ名を設定する(巻は今の値を保つ)。
+    public static func setSeries(_ name: String, for ids: [String], in set: ProposalSet) -> [String: Confirmation]
+
+    /// 欄の値をまとめて設定する(nil の欄は触らない)。
+    public static func setFields(_ fields: ConfirmedFields, for ids: [String], in set: ProposalSet) -> [String: Confirmation]
+
+    /// 並べた順に、上から巻を振る。シリーズ名は今の値(無ければ seriesName。どちらも無ければ何もしない)。
+    public static func numberSequentially(_ orderedIDs: [String], in set: ProposalSet, seriesName: String? = nil,
+                                          numbering: Numbering = .init()) -> [String: Confirmation]
+
+    /// シリーズから外す / 提案に戻す(確定を取り消す)/ 提案をそのまま確定する / 巻だけを消す。
+    public static func removeFromSeries(_ ids: [String], in set: ProposalSet) -> [String: Confirmation]
+    public static func revertToProposal(_ ids: [String]) -> [String: Confirmation]          // すべて .none
+    public static func acceptProposals(_ ids: [String], in set: ProposalSet) -> [String: Confirmation]
+    public static func clearVolumes(_ ids: [String], in set: ProposalSet) -> [String: Confirmation]
+
+    /// 並べ方の候補(連番の前の並べ替え)。日付は利用側が渡す(本体はファイルを見ない)。
+    public static func sorted(_ ids: [String], by order: Order, in set: ProposalSet, dates: [String: Date] = [:]) -> [String]
+}
+
+public struct Numbering: Sendable, Hashable {
+    public var start: Int = 1, step: Int = 1
+    public var padding: Padding = .matchSeries       // .matchSeries(今の表記に合わせる)/ .none / .width(Int)
+}
+
+public enum Order: Sendable { case title, name, date, currentVolume }
+```
+
+- 返した内容を `ProposalIndex.apply`(`BookInput.confirmation` の更新)に渡すと、錨の効果でほかの本の提案も変わる。
+  確定の前に波及を見せたい利用側は、`ProposalIndex.preview(_:)`(状態を変えずに `ProposalDelta` を返す)を使う。
+- 巻は表記(文字列)で持つ。並べ替え用の数は、表記を巻の読み手に通して決める(「3」→ 3、「上」→ 文脈で 1)。
+
+```swift
+extension ProposalIndex {
+    /// 状態を変えずに、変更を当てた場合の差分を返す(「ほかに n 冊がこのシリーズに入ります」)。
+    public func preview(_ changes: [BookChange]) throws(CancellationError) -> ProposalDelta
+}
+```
+
 ### 規則の変更と例(`QooMetaRules`)
 
 ```swift
@@ -353,7 +402,7 @@ public enum Exporter {
   `ProposalIndex` に入れ、提案を初期値にする。規則の編集は `RuleCatalog` と `RuleChanges`、見直しは `Explanation`。
 - **StackNest**: 取り込みの直前に `parseName`、取り込み後に `propose` でシリーズ・巻を補う。確定済みの欄は確定した内容として渡す。
 - **ShelfRow**: `parseName` でタイトル・作者・ジャンル・関連を埋める。
-- **GUI アプリ・CLI**: `QooMetaScan` → `propose` → 見直し → `QooMetaExport`。
+- **GUI アプリ・CLI**: `QooMetaScan` → `propose` → 見直し(`BulkEdit` でまとめて直す)→ `QooMetaExport`。
 
 ## 決まったこと(2026-09-19)
 
