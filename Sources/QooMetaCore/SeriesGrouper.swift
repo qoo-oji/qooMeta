@@ -40,6 +40,14 @@ public struct SeriesGrouper: Sendable {
     /// 語の切れ目で切れる共通部分でも、2 冊とも一般的な英単語だけのタイトルなら組にしない(EnglishWords)。
     public var rejectsCommonEnglishTitles = true
 
+    /// その位置で切ると、元の表記で数字の途中になるか(「2022-01」の「-」は比較用の形では消えるので、元の表記で見る)。
+    static func splitsANumber(_ text: ComparableText, at length: Int) -> Bool {
+        guard length > 0, length < text.key.count else { return false }
+        let chars = Array(text.original)
+        let end = text.originalEnd[length - 1]
+        return end < chars.count && chars[end].isNumber && chars[end - 1].isNumber
+    }
+
     /// 比較用の先頭 `length` 文字より後ろが巻で始まるか。
     static func hasVolume(_ text: ComparableText, after length: Int) -> Bool {
         VolumeExtractor.extract(fromRemainder: text.originalRemainder(afterKeyLength: length)) != nil
@@ -259,7 +267,7 @@ public struct SeriesGrouper: Sendable {
     static func volumeHeadLength(_ text: ComparableText, minLength: Int) -> Int? {
         guard text.key.count > minLength else { return nil }
         for length in minLength..<text.key.count
-        where !(text.key[length - 1].isNumber && text.key[length].isNumber)
+        where !Self.splitsANumber(text, at: length)
             && isCleanCut(text, at: length)
             && VolumeExtractor.isWholeVolume(text.originalRemainder(afterKeyLength: length)) {
             return length

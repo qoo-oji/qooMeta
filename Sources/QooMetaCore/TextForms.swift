@@ -67,7 +67,7 @@ public enum TextRules {
     static let ignoredInComparison: Set<Character> = [
         " ", "\u{3000}", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",",
         "「", "」", "『", "』", "【", "】", "<", ">", "〈", "〉", "《", "》", "♪", "☆", "★", "♡", "♥", "…", ":", "：",
-        "'", "\"", "“", "”", "’",
+        "'", "\"", "“", "”", "’", "_",
     ]
 
     /// 比較のときに同じ字とみなす異体字(左 → 右)。NFKC では揃わない。表記ゆれでシリーズが割れた実例
@@ -91,14 +91,14 @@ public enum TextRules {
     /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。
     static let trailingTrim: CharacterSet = {
         var set = CharacterSet.whitespaces
-        set.insert(charactersIn: "~〜～-‐―・･:：、,。.「『【<〈《(（")
+        set.insert(charactersIn: "~〜～-‐―・･:：、,。.「『【<〈《(（_")
         return set
     }()
 
     /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。
     static func isBoundary(_ ch: Character) -> Bool {
         if ch.isWhitespace || ch.isNumber { return true }
-        return "~〜～-‐―・･!?！？.。、,:：「」『』【】<>〈〉《》()（）♪☆★♡♥…#＃".contains(ch)
+        return "~〜～-‐―・･!?！？.。、,:：「」『』【】<>〈〉《》()（）♪☆★♡♥…#＃_".contains(ch)
     }
 
     /// 表示用の整え方。**元の表記(全角・半角)は変えない**(書き出す値は利用者のファイル名の表記に従う)。
@@ -127,7 +127,7 @@ public enum TextRules {
     /// 後ろに付く名前を導く語(英語の区切り語)。シリーズ名の末尾に残ったときだけ外す。
     static let labelIntroducers: Set<String> = [
         "side", "part", "episode", "ep", "chapter", "act", "phase", "stage", "season", "route", "file", "case",
-        "vol", "vol.", "volume", "ver", "ver.", "version", "no", "no.", "#", "第", "その",
+        "vol", "vol.", "volume", "ver", "ver.", "version", "no", "no.", "#", "第", "その", "其ノ", "其の", "ソノ",
     ]
 }
 

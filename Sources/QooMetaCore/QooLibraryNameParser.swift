@@ -77,12 +77,19 @@ public struct QooLibraryNameParser: Sendable {
         let mediaType = value(.mediaType)
         let event = value(.event)
         let studio = value(.studio)
+        // 末尾の丸括弧が数字だけ(「X (12)」)なら、ネタではなく巻としてタイトルへ戻す(StackNest に倣った)。
+        var genre = value(.genre)
+        var fullTitle = title
+        if VolumeExtractor.isNumeralOnly(genre) {
+            fullTitle = "\(title) (\(genre))"
+            genre = ""
+        }
         return ParsedName(
             leading: mediaType.isEmpty ? event : mediaType,
             circle: studio.isEmpty ? (authors.first ?? "") : studio,
             authors: authors,
-            title: title,
-            trailing: value(.genre),
+            title: fullTitle,
+            trailing: genre,
             matchedPattern: true,
             mediaType: mediaType,
             event: event,

@@ -91,8 +91,12 @@ public enum ReviewReport {
 /// シリーズが付いた本の一覧(CSV)。**蔵書の名前をそのまま含む**ので、リポジトリの外へ書く。
 /// Excel / Numbers でそのまま開けるよう、UTF-8 の BOM を付ける。シリーズ(系列)ごとにまとめ、巻の数値順に並べる。
 public enum SeriesListExporter {
-    public static func csv(_ doc: ProposalDocument) -> String {
-        let books = doc.books.filter { !$0.series.isEmpty }
+    /// - Parameter excludingFileNames: この名前(拡張子付きのファイル名)の本は一覧に出さない。
+    ///   シリーズの判定は除外する前の全冊で済んでいる(先に除くと、比べる相手が減って組が崩れる)。
+    public static func csv(_ doc: ProposalDocument, excludingFileNames excluded: Set<String> = []) -> String {
+        let books = doc.books.filter {
+            !$0.series.isEmpty && !excluded.contains(($0.file.relativePath as NSString).lastPathComponent.precomposedStringWithCanonicalMapping)
+        }
         let bySeries = Dictionary(grouping: books) { "\($0.groupID ?? -1)" }
         let keys = bySeries.keys.sorted { a, b in
             let x = bySeries[a]![0], y = bySeries[b]![0]
@@ -119,5 +123,32 @@ public enum SeriesListExporter {
     static func field(_ s: String) -> String {
         guard s.contains(where: { ",\"\r\n".contains($0) }) else { return s }
         return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+}
+
+extension SeriesListExporter {
+    /// 以前に書き出した一覧(CSV)の「ファイル」列から、ファイル名(パスの最後)を集める。
+    public static func fileNames(inList csv: String) -> Set<String> {
+        var names = Set<String>()
+        for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
+            guard let last = parseCSVLine(String(line)).last, !last.isEmpty else { continue }
+            names.insert((last as NSString).lastPathComponent.precomposedStringWithCanonicalMapping)
+        }
+        return names
+    }
+
+    static func parseCSVLine(_ line: String) -> [String] {
+        var fields: [String] = [], current = "", quoted = false
+        var chars = Array(line.hasPrefix("\u{FEFF}") ? String(line.dropFirst()) : line)[...]
+        while let c = chars.popFirst() {
+            if quoted {
+                if c == "\"" { if chars.first == "\"" { current.append("\""); chars.removeFirst() } else { quoted = false } }
+                else { current.append(c) }
+            } else if c == "\"" { quoted = true }
+            else if c == "," { fields.append(current); current = "" }
+            else { current.append(c) }
+        }
+        fields.append(current)
+        return fields
     }
 }

@@ -33,7 +33,9 @@ public enum BookScanner {
                 size: values?.fileSize.map(Int64.init),
                 created: values?.creationDate,
                 modified: values?.contentModificationDate,
-                inodeNumber: hasStat ? Int64(st.st_ino) : nil,
+                // ネットワークボリュームでは iノード番号が Int64 の範囲を超える(実測)。qooViewer は
+                // `NSNumber.int64Value` でビット列のまま読み替えているので、同じ値になるよう bitPattern で読む。
+                inodeNumber: hasStat ? Int64(bitPattern: UInt64(st.st_ino)) : nil,
                 volumeDeviceNumber: hasStat ? Int64(st.st_dev) : nil,
                 volumeUUID: values?.volumeUUIDString
             ))

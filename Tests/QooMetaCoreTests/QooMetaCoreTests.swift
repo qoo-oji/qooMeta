@@ -149,7 +149,7 @@ import Testing
     @Test(arguments: [
         (" 2", "2", 2.0), ("Vol.3", "3", 3.0), ("第5話", "5", 5.0), ("その二", "二", 2.0),
         ("#4 おまけ", "4", 4.0), ("第十二巻", "十二", 12.0), (" ver2", "2", 2.0), (" Ver.3", "3", 3.0),
-        ("第1幕", "1", 1.0), ("第三部 完結", "三", 3.0), (" II", "II", 2.0), (" Ⅳ", "IV", 4.0), (" IX 完結編", "IX", 9.0), (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
+        ("第1幕", "1", 1.0), ("第弐巻", "弐", 2.0), ("第百二十巻", "百二十", 120.0), (" β", "β", 2.0), (" (12)", "12", 12.0), ("第三部 完結", "三", 3.0), (" II", "II", 2.0), (" Ⅳ", "IV", 4.0), (" IX 完結編", "IX", 9.0), (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
     ])
     func numbers(remainder: String, text: String, number: Double) {
         let v = VolumeExtractor.extract(fromRemainder: remainder)
@@ -157,7 +157,8 @@ import Testing
         #expect(v?.number == number)
     }
 
-    @Test func positionWordsHaveNoNumber() {
+    @Test func positionWordsAreReadAsText() {
+        // 1 冊だけでは数にしない(数はシリーズの中の文脈で決める)。
         let v = VolumeExtractor.extract(fromRemainder: " 後編")
         #expect(v?.text == "後編")
         #expect(v?.number == nil)
@@ -278,6 +279,64 @@ import Testing
         // (番号の無い 1 冊として 1 巻の推定は働く)
         let single = Self.finalized(["月の庭 2", "月の庭 三人の夜"])
         #expect(single.map(\.volumeText) == ["2", "1"])
+    }
+
+    @Test func magazineIssuesAreSeriesPerYear() {
+        let weekly = Self.finalized(["週刊架空 2025年35号", "週刊架空 2025年36-37号", "週刊架空 2025年38号", "週刊架空 2026年1号"])
+        #expect(weekly.map(\.series) == ["週刊架空 2025年", "週刊架空 2025年", "週刊架空 2025年", ""])
+        #expect(weekly.map(\.volumeText) == ["35", "36-37", "38", ""])
+        #expect(weekly.map(\.volumeNumber) == [35, 36, 38, nil])
+        let monthly = Self.finalized(["MOON 架空 2011年03月号", "MOON 架空 2011年04月号", "MOON 幻想 2011年03月号", "MOON 幻想 2011年5月号"])
+        #expect(monthly.map(\.series) == ["MOON 架空 2011年", "MOON 架空 2011年", "MOON 幻想 2011年", "MOON 幻想 2011年"])
+        #expect(monthly.map(\.volumeNumber) == [3, 4, 3, 5])
+    }
+
+    @Test(arguments: [
+        ["MOON 2022 Vol.01", "MOON 2022 Vol.02"],
+        ["MOON_2022-01", "MOON_2022-02"],
+        ["MOON 2022 Vol.01 [付録]", "MOON 2022 Vol.02 [付録]"],
+    ])
+    func magazineYearIssues(titles: [String]) {
+        let books = Self.finalized(titles)
+        #expect(books.allSatisfy { ComparableText($0.series).key == ComparableText("MOON 2022").key })
+        #expect(books.map(\.volumeNumber) == [1, 2])
+    }
+
+    @Test func positionWordsAreNumberedByContext() {
+        let two = Self.finalized(["月の庭 上", "月の庭 下"])
+        #expect(two.map(\.volumeNumber) == [1, 2])
+        let three = Self.finalized(["月の庭 上巻", "月の庭 中巻", "月の庭 下巻"])
+        #expect(three.map(\.volumeNumber) == [1, 2, 3])
+        #expect(three.map(\.volumeText) == ["上巻", "中巻", "下巻"])
+        let parts = Self.finalized(["月の庭 前編", "月の庭 後編"])
+        #expect(parts.map(\.volumeNumber) == [1, 2])
+    }
+
+    @Test func splitPositionWords() {
+        let books = Self.finalized(["月の庭 前編", "月の庭 中編", "月の庭 後編1", "月の庭 後編2"])
+        #expect(books.allSatisfy { $0.series == "月の庭" })
+        #expect(books.map(\.volumeText) == ["前編", "中編", "後編1", "後編2"])
+        #expect(books.map(\.volumeNumber) == [1, 2, 3.1, 3.2])
+    }
+
+    @Test func numericTrailingParenIsAVolume() throws {
+        let parser = try QooLibraryNameParser(mediaTypes: ["種別A"])
+        let p = try #require(parser.parse(baseName: "(種別A) [架空工房] 月の庭 (12)"))
+        #expect(p.title == "月の庭 (12)")
+        #expect(p.trailing.isEmpty)
+    }
+
+    @Test func splitChaptersKeepTheSeriesName() {
+        let books = Self.finalized(["月の庭 第04-1章", "月の庭 第04-2章", "月の庭 第19-1章", "月の庭 第19-2章"])
+        #expect(books.allSatisfy { $0.series == "月の庭" })
+        #expect(books.map(\.volumeText) == ["04-1", "04-2", "19-1", "19-2"])
+        #expect(books.map(\.volumeNumber) == [4.1, 4.2, 19.1, 19.2])
+    }
+
+    @Test func sonoVariants() {
+        let books = Self.finalized(["月の庭 其ノ二", "月の庭 其ノ三", "月の庭 其の四", "月の庭 ソノ5"])
+        #expect(books.allSatisfy { $0.series == "月の庭" })
+        #expect(books.map(\.volumeNumber) == [2, 3, 4, 5])
     }
 
     @Test func ordinalWithAnyCounter() {
@@ -403,7 +462,16 @@ import Testing
         #expect(first["Date Added"] as? Date == Date(timeIntervalSince1970: 1_700_000_000))
         let second = try #require(books["2"])
         #expect(second["File Type"] as? Int == 3)
-        #expect(second["Volume"] == nil)  // 「上」は数値にしない
+        #expect(second["Volume"] as? Double == 1)  // 「上」はシリーズの文脈で数にする(中が無いので 1)
+    }
+
+    @Test func seriesListExcludesNamesFromAPreviousList() {
+        let doc = Self.document()
+        let first = SeriesListExporter.csv(doc)
+        let names = SeriesListExporter.fileNames(inList: first)
+        #expect(names == ["a.cbz", "b.cbr"])
+        let second = SeriesListExporter.csv(doc, excludingFileNames: ["a.cbz"])
+        #expect(second.split(whereSeparator: \.isNewline).count == 2)  // 見出し + 1 冊
     }
 
     @Test func qooViewerJSONShape() throws {

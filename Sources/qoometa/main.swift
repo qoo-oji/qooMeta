@@ -21,7 +21,7 @@ let usage = """
       手元で開く見直し表を書く(名前を含む)
   qoometa export --in <提案.json> --format stackroom|qooviewer --out <ファイル> [--book-type N] [--rules-only]
       StackNest が取り込める Stackroom XML、または qooViewer の保存データ JSON を書く
-  qoometa series-list --in <提案.json> --out <一覧.csv> [--rules-only]
+  qoometa series-list --in <提案.json> --out <一覧.csv> [--rules-only] [--exclude-from <以前の一覧.csv>]
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
   qoometa evaluate --corpus <正解付き.jsonl>
       正解付きのデータ(author / title / series)で候補づくりを採点する
@@ -189,9 +189,18 @@ func run() async throws {
         var doc = try load(try args.require("in"))
         ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"))
         let out = try checkedOutputURL(try args.require("out"), args)
-        try SeriesListExporter.csv(doc).write(to: out, atomically: true, encoding: .utf8)
-        let series = Set(doc.books.filter { !$0.series.isEmpty }.compactMap(\.groupID))
-        print("シリーズの一覧を書きました: \(series.count) シリーズ / \(doc.books.filter { !$0.series.isEmpty }.count) 冊")
+        // --exclude-from <以前の一覧.csv>: そこに載っているファイル名の本は出さない。
+        var excluded = Set<String>()
+        if let previous = args.options["exclude-from"] {
+            excluded = SeriesListExporter.fileNames(inList: try String(contentsOfFile: previous, encoding: .utf8))
+        }
+        let csv = SeriesListExporter.csv(doc, excludingFileNames: excluded)
+        try csv.write(to: out, atomically: true, encoding: .utf8)
+        let written = doc.books.filter {
+            !$0.series.isEmpty && !excluded.contains(($0.file.relativePath as NSString).lastPathComponent.precomposedStringWithCanonicalMapping)
+        }
+        print("シリーズの一覧を書きました: \(Set(written.compactMap(\.groupID)).count) シリーズ / \(written.count) 冊"
+              + (excluded.isEmpty ? "" : "(以前の一覧の \(excluded.count) 件の名前と一致した \(doc.books.filter { !$0.series.isEmpty }.count - written.count) 冊を除いた)"))
 
     case "evaluate":
         // 正解付きのデータ(1 行 1 冊の JSON)で候補づくりを採点する。出すのは集計だけ。
