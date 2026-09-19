@@ -5,9 +5,9 @@
 ## いまの状況
 
 - コンセプトを土台から見直し、利用者と合意した。**シリーズと巻を導く中核は移し、ほかは作り直す。**
-- 作り直しはまだ始めていない。計画は同じ日にコードと突き合わせて見直した。次にやるのは [roadmap.md](roadmap.md) の段階 0(片付け)と
-  段階 1(基準を取る)。roadmap.md の未決は、2026-09-19 にすべて決まった。
-- 見直した docs と `CLAUDE.md` はコミットした。試作(下の「作業ツリー」)は未コミットのまま残っていて、捨てると決まっている。
+- 作り直しはまだ始めていない。計画は同じ日にコードと突き合わせて見直した。次にやるのは [roadmap.md](roadmap.md) の段階 1(基準を取る)。roadmap.md の未決は、2026-09-19 にすべて決まった。
+- 見直した docs と `CLAUDE.md` はコミットした(ブランチ `rebuild-plan`)。旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、
+  2026-09-19 にコミットせずに捨てた。段階 0 は済み。次は段階 1(基準を取る)。
 
 ## 読む順
 
@@ -104,13 +104,6 @@
   一度に全部を並べない。質問の道具の横の欄(プレビュー)は利用者に見えないことがあるので、中身は本文に書く。
 - 他アプリを調べて取り入れるのは、欄・フォーマットの書き方・画面の操作の流れまで。中核に他アプリのやり方を持ち込まない。
 - 決め打ちせず、利用者が選べるようにする(フォーマットで選べることは、仕組みを作らずフォーマットに任せる)。
-
-## 作業ツリー(未コミット)
-
-| 変更 | 扱い |
-|---|---|
-| `docs/concept.md` `docs/metadata.md` `docs/filename-format.md` `docs/roadmap.md` `docs/handoff.md` | 見直しの結果。残す |
-| `App/`・`Sources/QooMetaPreview/`・`Tests/QooMetaPreviewTests/`・`Sources/QooMetaScan/ScanDocument.swift`・`Sources/QooMetaKit/SeriesVerdict.swift`・`scripts/dev/generate-app-project.sh`(追跡していないもの)と、`Sources/qoometa/Document.swift` `Sources/QooMetaAI/SeriesJudge.swift` `Package.swift` `README.md` `.gitignore` `.github/workflows/check.yml` の変更 | 旧来の欄で作った画面とその部品。**捨てる**(2026-09-19 決定。退避しない)。追跡していないものは消し、変更は `86d105a` の状態へ戻す。消したあと `swift build` と `swift test` が通ることを確かめる |
 
 ## 参考にしたもの
 
