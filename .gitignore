@@ -8,3 +8,32 @@ private/
 *.private.*
 private-terms*.txt
 *.local
+
+# ---- 生成物になりうる形式(qoometa の出力・取得した公開データ・StackNest の取り込み結果など)は一切追跡しない ----
+# 追跡すべきファイルがこれらの形式になったときは、ここで個別に例外(! で始まる行)を足すこと。
+*.csv
+*.tsv
+*.json
+*.jsonl
+*.xml
+*.plist
+*.html
+*.htm
+*.sqlite
+*.sqlite-*
+*.db
+*.store
+*.log
+*.txt
+runs/
+corpus/
+output/
+out/
+*.cbz
+*.cbr
+*.cb7
+*.zip
+*.rar
+*.7z
+*.pdf
+*.epub
