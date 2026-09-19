@@ -6,13 +6,13 @@ import Foundation
 /// 標準出力はターミナルの記録や AI との会話へ写りうるので、名前を出さない
 /// (qooViewer の check-private-terms.py と同じ考え方)。名前を見るのは手元で開く HTML の見直し表だけ。
 public enum StatsReport {
-    public static func lines(_ doc: ProposalDocument) -> [String] {
+    public static func lines(_ doc: ProposalDocument, engine: RuleEngine = .builtin) -> [String] {
         let books = doc.books
         let grouped = doc.groups
         let judged = grouped.filter { $0.aiVerdict != nil }
         let accepted = judged.filter { $0.aiVerdict!.isSeries }
         let renamed = accepted.filter {
-            ComparableText($0.aiVerdict!.seriesName).key != ComparableText($0.ruleName).key
+            engine.text.key($0.aiVerdict!.seriesName) != engine.text.key($0.ruleName)
         }
         let excluded = accepted.reduce(0) { $0 + $1.aiVerdict!.excludedIDs.count }
         let seconds = judged.reduce(0.0) { $0 + $1.aiVerdict!.seconds }

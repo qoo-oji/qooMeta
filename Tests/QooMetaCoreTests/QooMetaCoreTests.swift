@@ -82,21 +82,21 @@ import Testing
         ("第1幕", "1", 1.0), ("第弐巻", "弐", 2.0), ("第百二十巻", "百二十", 120.0), (" β", "β", 2.0), (" (12)", "12", 12.0), ("第三部 完結", "三", 3.0), (" II", "II", 2.0), (" Ⅳ", "IV", 4.0), (" IX 完結編", "IX", 9.0), (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
     ])
     func numbers(remainder: String, text: String, number: Double) {
-        let v = VolumeExtractor.extract(fromRemainder: remainder)
+        let v = RuleEngine.builtin.volumes.extract(fromRemainder: remainder)
         #expect(v?.text == text)
         #expect(v?.number == number)
     }
 
     @Test func positionWordsAreReadAsText() {
         // 1 冊だけでは数にしない(数はシリーズの中の文脈で決める)。
-        let v = VolumeExtractor.extract(fromRemainder: " 後編")
+        let v = RuleEngine.builtin.volumes.extract(fromRemainder: " 後編")
         #expect(v?.text == "後編")
         #expect(v?.number == nil)
     }
 
     @Test(arguments: [" 2人の夜", " 冬の章", ""])
     func notVolumes(remainder: String) {
-        #expect(VolumeExtractor.extract(fromRemainder: remainder) == nil)
+        #expect(RuleEngine.builtin.volumes.extract(fromRemainder: remainder) == nil)
     }
 }
 
@@ -123,21 +123,21 @@ import Testing
 
 @Suite struct EditionAndCompilationTests {
     @Test func editionMarkersAreSplit() {
-        let a = EditionMarkers.split("月の庭【フルカラー版】")
+        let a = RuleEngine.builtin.markers.split("月の庭【フルカラー版】")
         #expect(a.base == "月の庭")
         #expect(a.editions == ["フルカラー版"])
-        let b = EditionMarkers.split("月の庭 3 DL版")
+        let b = RuleEngine.builtin.markers.split("月の庭 3 DL版")
         #expect(b.base == "月の庭 3")
         #expect(b.sources == ["DL版"])
-        let c = EditionMarkers.split("月の庭 (英語版) [特装版]")
+        let c = RuleEngine.builtin.markers.split("月の庭 (英語版) [特装版]")
         #expect(c.base == "月の庭")
         #expect(c.editions == ["英語版"])
         #expect(c.sources == ["特装版"])
     }
 
     @Test func rangeBeforeCompilationIsMovedAfterIt() {
-        #expect(Compilation.normalizedTitle("月の庭1~4総集編") == "月の庭 総集編 1~4")
-        #expect(Compilation.normalizedTitle("月の庭 9~11+α総集篇") == "月の庭 総集篇 9~11+α")
+        #expect(RuleEngine.builtin.compilation.normalizedTitle("月の庭1~4総集編") == "月の庭 総集編 1~4")
+        #expect(RuleEngine.builtin.compilation.normalizedTitle("月の庭 9~11+α総集篇") == "月の庭 総集篇 9~11+α")
     }
 }
 

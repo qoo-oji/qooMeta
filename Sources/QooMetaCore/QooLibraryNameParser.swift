@@ -3,7 +3,7 @@ import QooFormat
 
 /// qooLibrary のファイル名フォーマット処理(`Sources/QooFormat` に写したもの)で、ファイル名を部分に分ける。
 ///
-/// フォーマットは `filename-formats.json`(RuleFiles)に、**Stackroom 式の予約語**で書く:
+/// フォーマットは `filename-formats.json` に、**Stackroom 式の予約語**で書く:
 /// `(@genre) [@circle (@author)] @title (@relation) [@keywordA]`。上から順に照合し、最初に一致したものを採る。
 /// 照合の処理(qooLibrary 由来)の予約語へは、JSON の `reservedWords` の対応表で置き換えてからコンパイルする。
 ///
@@ -76,7 +76,7 @@ public struct QooLibraryNameParser: Sendable {
     }
 
     /// - Parameter mediaTypes: 本の種別の語彙(利用者の設定から)。空なら先頭の丸括弧はすべてイベントとして読む。
-    public init(mediaTypes: [String], rules: FilenameFormatRules = RuleFiles.filenameFormats) throws {
+    public init(mediaTypes: [String], rules: FilenameFormatRules = CompiledRules.builtin.formats) throws {
         let vocabulary = Vocabulary(rules)
         settings = try rules.profiles.map { profile in
             let delimiters = Self.delimiters(profile)

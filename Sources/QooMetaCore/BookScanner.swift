@@ -46,22 +46,22 @@ public enum BookScanner {
     /// 走査結果に名前の解析をかけて、提案の下地を作る。
     ///
     /// - Parameter qooLibrary: 渡すと qooLibrary のフォーマット処理で先に読み、一致しなければ NameParser へ戻す。
-    public static func proposals(from files: [BookFile], qooLibrary: QooLibraryNameParser? = nil) -> [BookProposal] {
+    public static func proposals(from files: [BookFile], qooLibrary: QooLibraryNameParser? = nil,
+                                 engine: RuleEngine = .builtin) -> [BookProposal] {
         files.enumerated().map { index, file in
             // どのフォーマットにも一致しなければ、括弧の位置だけで読む(規則 fallback.simpleBrackets)。止めていれば名前全体をタイトルにする。
             var parsed = qooLibrary?.parse(baseName: file.baseName)
-                ?? (RuleFiles.filenameFormats.simpleBracketsEnabled
+                ?? (engine.rules.formats.simpleBracketsEnabled
                     ? NameParser.parse(baseName: file.baseName)
                     : ParsedName(title: TextRules.normalizeDisplay(file.baseName), matchedPattern: false))
-            let split = EditionMarkers.split(parsed.title)
-            if split.base != parsed.title {
-                parsed.workTitle = split.base
-                parsed.editions = split.editions.isEmpty ? nil : split.editions
-                parsed.sources = split.sources.isEmpty ? nil : split.sources
-            }
-            if let reordered = Compilation.normalizedTitle(parsed.baseTitle) { parsed.workTitle = reordered }
+            let split = engine.markers.split(parsed.title)
+            // 印は、比べるタイトルから除かないとき(方針 separateBooks)も見分けて付ける。
+            if split.base != parsed.title { parsed.workTitle = split.base }
+            parsed.editions = split.editions.isEmpty ? nil : split.editions
+            parsed.sources = split.sources.isEmpty ? nil : split.sources
+            if let reordered = engine.compilation.normalizedTitle(parsed.baseTitle) { parsed.workTitle = reordered }
             let owner = parsed.circle.isEmpty ? file.folderName : parsed.circle
-            let key = String(ComparableText(owner).key)
+            let key = engine.text.key(owner)
             return BookProposal(id: index + 1, file: file, parsed: parsed, circleKey: key)
         }
     }

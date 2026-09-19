@@ -9,7 +9,7 @@ import Foundation
 ///
 /// どちらの印も、シリーズを組むときはタイトルから除いて比べる。印を除いて同じタイトルになる本は同じ作品の 1 冊と
 /// 数え、版違い・入手経路違いだけの組はシリーズにしない(SeriesGrouper)。
-public enum EditionMarkers {
+public final class EditionMarkers: Sendable {
     public struct Split: Equatable, Sendable {
         /// 印を除いたタイトル(比べる・巻を読むのに使う)。
         public var base: String
@@ -17,26 +17,31 @@ public enum EditionMarkers {
         public var sources: [String]
     }
 
-    /// 印の一覧は series-rules.json の editions。
-    static let rules = RuleFiles.seriesRules.editions
-
     /// 印の正規表現。前後の括弧ごと取り除く。長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
     /// 「DL版」は全角の「ＤＬ版」も受け付ける。「〇〇語版」(英語版・中国語版 …)は版。
     /// 印の規則(markers.edition / markers.source)を止めると、その語は空になる。両方とも空なら印は探さない。
-    private static let pattern: NSRegularExpression? = {
+    private let pattern: NSRegularExpression?
+    /// 比べるタイトルから除く印(方針 `sameWork`)。`separateBooks` の印は見分けて付けるが、タイトルには残す。
+    private let stripsEditions: Bool
+    private let stripsSources: Bool
+
+    /// 印の一覧は series-rules.json の markers。
+    init(_ rules: SeriesRules.Editions) {
+        stripsEditions = rules.stripsEditions
+        stripsSources = rules.stripsSources
         func alternation(_ words: [String]) -> [String] {
             words.isEmpty ? [] : [words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")]
         }
         let edition = (alternation(rules.edition) + rules.editionPatterns).joined(separator: "|")
         let source = (alternation(rules.source) + rules.sourcePatterns).joined(separator: "|")
         // 空の選択肢は空文字列に一致してしまうので、決して一致しない形(`(?!)`)にする。
-        guard !edition.isEmpty || !source.isEmpty else { return nil }
-        return try! NSRegularExpression(
+        guard !edition.isEmpty || !source.isEmpty else { pattern = nil; return }
+        pattern = try! NSRegularExpression(
             pattern: #"\s*[\[［【(（]?\s*(?:(?<edition>"# + (edition.isEmpty ? "(?!)" : edition) + #")|(?<source>"#
                 + (source.isEmpty ? "(?!)" : source) + #"))\s*[\]］】)）]?"#)
-    }()
+    }
 
-    public static func split(_ title: String) -> Split {
+    public func split(_ title: String) -> Split {
         guard let pattern else { return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: []) }
         let ns = title as NSString
         var editions: [String] = [], sources: [String] = []
@@ -48,6 +53,9 @@ public enum EditionMarkers {
             let e = m.range(withName: "edition"), s = m.range(withName: "source")
             if e.location != NSNotFound { editions.append(ns.substring(with: e)) }
             if s.location != NSNotFound { sources.append(ns.substring(with: s)) }
+            if (e.location != NSNotFound && !stripsEditions) || (s.location != NSNotFound && !stripsSources) {
+                base += ns.substring(with: m.range)
+            }
         }
         base += ns.substring(from: last)
         base = TextRules.normalizeDisplay(base)
@@ -58,12 +66,18 @@ public enum EditionMarkers {
 }
 
 /// 総集編の語と、収録範囲の並べ替え。
-public enum Compilation {
-    /// 「総集編」(「総集篇」とも書く)。series-rules.json の compilation.keywords。
-    static let keyword = try! NSRegularExpression(pattern: RuleFiles.seriesRules.compilation.keywords
-        .sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|"))
+public final class Compilation: Sendable {
+    /// 「総集編」(「総集篇」とも書く)。series-rules.json の grouping.compilation.words。
+    let keyword: NSRegularExpression
+    let text: TextRules
 
-    static func keywordRange(in title: String) -> Range<String.Index>? {
+    init(_ rules: SeriesRules.Compilation, text: TextRules) {
+        let words = rules.keywords.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+        keyword = try! NSRegularExpression(pattern: words.isEmpty ? "(?!)" : words.joined(separator: "|"))
+        self.text = text
+    }
+
+    func keywordRange(in title: String) -> Range<String.Index>? {
         let ns = title as NSString
         guard let m = keyword.firstMatch(in: title, range: NSRange(location: 0, length: ns.length)) else { return nil }
         return Range(m.range, in: title)
@@ -74,13 +88,13 @@ public enum Compilation {
         pattern: #"\s*(?:第\s*)?(\d+(?:\s*[~〜\-‐]\s*\d+)?(?:\s*[+＋]\s*[α-ωA-Za-zぁ-んァ-ン]+)?)\s*(?:巻)?\s*$"#)
 
     /// 「X1~4総集編」を「X 総集編 1~4」に並べ替える(シリーズ名は「X 総集編」、範囲はその巻)。当てはまらなければ nil。
-    public static func normalizedTitle(_ title: String) -> String? {
+    public func normalizedTitle(_ title: String) -> String? {
         guard let r = keywordRange(in: title), r.lowerBound > title.startIndex else { return nil }
         let head = String(title[..<r.lowerBound])
         let ns = head as NSString
-        guard let m = trailingRange.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)),
+        guard let m = Self.trailingRange.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)),
               m.range.location > 0 else { return nil }
-        let main = TextRules.trimSeriesName(ns.substring(to: m.range.location))
+        let main = text.trimSeriesName(ns.substring(to: m.range.location))
         guard !main.isEmpty else { return nil }
         let range = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: " ", with: "")
         let rest = String(title[r.upperBound...]).trimmingCharacters(in: .whitespaces)

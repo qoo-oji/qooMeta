@@ -33,9 +33,8 @@ qooMeta
 
 ## 段階 0: 規則ファイルの土台(形式の第 2 版)
 
-進み具合(2026-09-19): 1〜4・6〜11 は済み(細部は rules-format-design.md「最初の実装で決めた細部」)。5 は方針の読み込みと、
-`subtitled`・`differentRelation`・`differentGenre`・`unnumberedFirst` まで。残りの方針と、例ごとの方針は、処理がグローバルな状態を
-持たなくなってから(段階 1 の 2 を先に行う)。12 は済み。
+進み具合(2026-09-19): 1〜12 は済み(細部は rules-format-design.md「最初の実装で決めた細部」)。方針はすべての値と、例ごとの方針まで。
+そのために段階 1 の 2 の一部(処理が規則を値で受け取る `RuleEngine`)を先に行った。
 
 規則は最初のサンプルにすぎず、利用者のフィードバックで中身を育て、形式も広げていく。その土台を先に作る。
 利用者がまだいないので、作り込みすぎない(rules-format-design.md「最初の実装に入れるもの・後回しにするもの」)。
@@ -66,7 +65,8 @@ qooMeta
 ## 段階 1: ライブラリとして使える形にする(api.md)
 
 1. モジュールを分ける(QooMetaKit / QooMetaRules / QooMetaExport / QooMetaScan / QooMetaAI)。本体は macOS 15 以降、Swift 6.2 以降。
-2. 本体を純粋な計算にする: グローバルな状態(今の `RuleFiles` の固定の読み込み)をなくし、規則・語彙・辞書を値で受け取る。
+2. 本体を純粋な計算にする: 規則・語彙・辞書を値で受け取る(規則と辞書は `RuleEngine` で渡す形にした。段階 0 で前倒し)。
+   残りは、同梱の既定値と英単語の辞書のファイルの読み込みを本体の外(QooMetaRules)へ出すこと。
    **CI の静的検査**で、本体のソースに `FileManager`・`URLSession`・`print`・`os_log` などが無いことを確かめる。
 3. 入力を `BookInput` と `Confirmation`(確定した内容)にする。確定した値の効き方(錨・組を割る・シリーズではない)を実装し、例で確かめる。
 4. `parseName`、`proposeSync` / `propose`(取り消し・進み具合)、`ProposalIndex`(全か無か。一括の計算と同じ結果になることをテストで確かめる)。

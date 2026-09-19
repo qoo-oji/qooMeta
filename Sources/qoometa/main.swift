@@ -116,9 +116,11 @@ func run() async throws {
     let raw = Array(CommandLine.arguments.dropFirst())
     guard let command = raw.first else { print(usage); return }
     let args = Arguments(Array(raw.dropFirst()))
-    // 利用者の変更は、処理が規則を読み始める前に入れる(RuleFiles.install)。
+    // 規則: 同梱の既定値に、利用者の変更(--rules)を重ねたもの。処理の各所へ値で渡す。
+    var engine = RuleEngine.builtin
     if let path = args.options["rules"] {
-        RuleFiles.install(try compileRules(userChanges: Data(contentsOf: URL(fileURLWithPath: path))))
+        engine = RuleEngine(rules: try compileRules(userChanges: Data(contentsOf: URL(fileURLWithPath: path))),
+                            englishWords: .system)
     }
 
     switch command {
@@ -133,14 +135,16 @@ func run() async throws {
         if config.mediaTypes?.isEmpty ?? true {
             FileHandle.standardError.write(Data("注意: 本の種別の語彙が設定に無いので、先頭の丸括弧はイベントとして読みます(\(Config.url.path) の mediaTypes)\n".utf8))
         }
-        let books = BookScanner.proposals(from: files, qooLibrary: try QooLibraryNameParser(mediaTypes: config.mediaTypes ?? []))
+        let books = BookScanner.proposals(
+            from: files, qooLibrary: try QooLibraryNameParser(mediaTypes: config.mediaTypes ?? [], rules: engine.rules.formats),
+            engine: engine)
         print("qooLibrary のフォーマットで読めた: \(books.filter { $0.parsed.mediaType != nil }.count) 冊(本の種別あり \(books.filter { !($0.parsed.mediaType ?? "").isEmpty }.count))")
-        let groups = SeriesGrouper(minPrefix: minPrefix).group(books)
+        let groups = SeriesGrouper(engine: engine, minPrefix: minPrefix).group(books)
         var doc = ProposalDocument(rootPath: URL(fileURLWithPath: root).standardizedFileURL.path,
                                    minPrefix: minPrefix, books: books, groups: groups)
-        ProposalFinalizer.finalize(&doc)
+        ProposalFinalizer.finalize(&doc, engine: engine)
         try save(doc, out)
-        StatsReport.lines(doc).forEach { print($0) }
+        StatsReport.lines(doc, engine: engine).forEach { print($0) }
 
     case "judge":
         let input = try args.require("in")
@@ -166,25 +170,25 @@ func run() async throws {
                 try save(doc, out)  // 途中で止めても、そこまでの判定は残す
             }
         }
-        ProposalFinalizer.finalize(&doc)
+        ProposalFinalizer.finalize(&doc, engine: engine)
         try save(doc, out)
-        StatsReport.lines(doc).forEach { print($0) }
+        StatsReport.lines(doc, engine: engine).forEach { print($0) }
 
     case "stats":
         var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"))
-        StatsReport.lines(doc).forEach { print($0) }
+        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
+        StatsReport.lines(doc, engine: engine).forEach { print($0) }
 
     case "report":
         var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc)
+        ProposalFinalizer.finalize(&doc, engine: engine)
         let out = try checkedOutputURL(try args.require("out"), args)
         try ReviewReport.html(doc).write(to: out, atomically: true, encoding: .utf8)
         print("見直し表を書きました(\(doc.groups.count) 組)")
 
     case "export":
         var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"))
+        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
         let out = try checkedOutputURL(try args.require("out"), args)
         switch try args.require("format") {
         case "stackroom":
@@ -199,7 +203,7 @@ func run() async throws {
 
     case "series-list":
         var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"))
+        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
         let out = try checkedOutputURL(try args.require("out"), args)
         // --exclude-from <以前の一覧.csv>: そこに載っているファイル名の本は出さない。
         var excluded = Set<String>()
@@ -219,12 +223,12 @@ func run() async throws {
         let labeled = try Evaluator.load(URL(fileURLWithPath: try args.require("corpus")))
         let namings: [(String, (SeriesGroup) -> String)] = [
             ("共通部分そのまま", { $0.ruleName }),
-            ("最初の区切りで切る", { SeriesNaming.firstCut($0.ruleName) }),
+            ("最初の区切りで切る", { SeriesNaming.firstCut($0.ruleName, engine: engine) }),
         ]
         print("本 \(labeled.count) 冊")
         // --examples N: 誤りの例を出す。**公開データの分析専用**(蔵書から作ったデータには使わない)。
         if let ex = Int(args.options["examples"] ?? "") {
-            let s = Evaluator.score(labeled, grouper: SeriesGrouper(minPrefix: 4), examples: ex)
+            let s = Evaluator.score(labeled, grouper: SeriesGrouper(engine: engine, minPrefix: 4), examples: ex)
             print("--- 誤って同じ組にした例")
             for (a, b) in s.falsePairs { print("[\(a.author)] \(a.title)〔\(a.series)〕 / \(b.title)〔\(b.series)〕") }
             print("--- 取りこぼした例")
@@ -234,7 +238,7 @@ func run() async throws {
         for single in [true, false] {
           for n in [4] {
             for (label, naming) in namings.prefix(1) {
-                var grouper = SeriesGrouper(minPrefix: n)
+                var grouper = SeriesGrouper(engine: engine, minPrefix: n)
                 grouper.rejectsCommonEnglishTitles = single
                 let s = Evaluator.score(labeled, grouper: grouper, nameFor: naming)
                 print(String(format: "一般英語だけのタイトルを%@ n=%d %@: 適合率 %.3f 再現率 %.3f(正解の組 %d、候補の組 %d)名前一致 %d/%d",
@@ -248,12 +252,12 @@ func run() async throws {
         switch args.positional.first {
         case "test":
             try testExamples(paths: Array(args.positional.dropFirst()), only: args.options["only"],
-                             verbose: args.flags.contains("verbose"))
+                             verbose: args.flags.contains("verbose"), engine: engine)
         case "validate":
             guard let path = args.positional.dropFirst().first else { throw CLIError("確かめる規則ファイルを指定してください") }
             try validateRules(Data(contentsOf: URL(fileURLWithPath: path)))
         case "show":
-            let rules = RuleFiles.current
+            let rules = engine.rules
             print("// シリーズの規則(qoometa.series-rules)")
             print(rules.mergedSeriesRules.rendered())
             print("// ファイル名のフォーマット(qoometa.filename-formats)")
@@ -316,7 +320,7 @@ func validateRules(_ data: Data) throws {
 
 /// 例のファイルを走らせる。例は架空の名前だけなので、食い違いは名前ごと表示する。
 /// 1 つでも通らなければ(読めない例のファイルを含む)終了コード 1。
-func testExamples(paths: [String], only: String?, verbose: Bool) throws {
+func testExamples(paths: [String], only: String?, verbose: Bool, engine: RuleEngine) throws {
     var files: [(label: String, file: ExampleFile)] = []
     var broken = 0
     if paths.isEmpty {
@@ -334,7 +338,7 @@ func testExamples(paths: [String], only: String?, verbose: Bool) throws {
     var passed = 0, failed = 0
     for (label, var file) in files {
         if let only { file.examples = file.examples.filter { $0.id == only } }
-        for outcome in try ExampleRunner.run(file) {
+        for outcome in try ExampleRunner.run(file, engine: engine) {
             if outcome.passed {
                 passed += 1
                 if verbose { print("ok    \(outcome.id)") }

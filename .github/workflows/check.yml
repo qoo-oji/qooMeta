@@ -14,7 +14,7 @@ jobs:
     # FoundationModels(QooMetaAI)のために macOS 26 の SDK が要る。
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # 全コミットのメッセージも検査する
       - name: 約束事の検査

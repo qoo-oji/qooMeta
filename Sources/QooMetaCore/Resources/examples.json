@@ -585,6 +585,110 @@
         { "series": "月がきれいでしかたない！", "volumeSort": 2 }
       ],
       "covers": ["includeFollowing", "firstVolume"]
+    },
+    {
+      "id": "policy-editions-separate-books",
+      "policies": { "editions": "separateBooks" },
+      "files": ["[架空工房] 月の庭", "[架空工房] 月の庭【フルカラー版】"],
+      "expect": [{ "series": "月の庭", "editions": [] }, { "series": "月の庭", "editions": ["フルカラー版"] }],
+      "covers": ["editions", "edition"]
+    },
+    {
+      "id": "policy-editions-ignored",
+      "policies": { "editions": "ignore" },
+      "files": ["[架空工房] 月の庭", "[架空工房] 月の庭【フルカラー版】"],
+      "expect": [{ "series": "月の庭" }, { "series": "月の庭", "editions": [] }],
+      "covers": ["editions"]
+    },
+    {
+      "id": "policy-sources-separate-books",
+      "policies": { "sources": "separateBooks" },
+      "files": ["[架空工房] 月の庭 DL版", "[架空工房] 月の庭 通常版"],
+      "expect": [{ "series": "月の庭", "sources": ["DL版"] }, { "series": "月の庭", "sources": ["通常版"] }],
+      "covers": ["sources", "source"]
+    },
+    {
+      "id": "policy-compilations-in-main-series",
+      "policies": { "compilations": "inMainSeries" },
+      "files": ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭1~4総集編"],
+      "expect": [
+        { "series": "月の庭", "volumeSort": 1 },
+        { "series": "月の庭", "volumeSort": 2 },
+        { "series": "月の庭", "volume": null, "inferred": false },
+        { "series": "月の庭", "volume": null }
+      ],
+      "covers": ["compilations", "compilation"]
+    },
+    {
+      "id": "policy-compilation-volume-after-range",
+      "policies": { "compilations": "inMainSeries", "compilationVolume": "afterRange" },
+      "files": ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭1~4総集編", "[架空工房] 月の庭9~11+α総集編"],
+      "expect": [
+        { "series": "月の庭", "volumeSort": 1 },
+        { "series": "月の庭", "volumeSort": 2 },
+        { "series": "月の庭", "volume": null },
+        { "series": "月の庭", "volume": "総集編 1~4", "volumeSort": 4.5 },
+        { "series": "月の庭", "volumeSort": 11.5 }
+      ],
+      "covers": ["compilations", "compilationVolume"]
+    },
+    {
+      "id": "policy-compilations-in-main-series-without-main",
+      "policies": { "compilations": "inMainSeries" },
+      "files": ["[架空工房] 架空録 総集編", "[架空工房] 架空録 総集編 2"],
+      "expect": [{ "series": "架空録 総集編" }, { "series": "架空録 総集編" }],
+      "covers": ["compilations"]
+    },
+    {
+      "id": "policy-compilations-not-in-series",
+      "policies": { "compilations": "notInSeries" },
+      "files": ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 総集編2"],
+      "expect": [{ "series": "月の庭" }, { "series": "月の庭" }, { "series": null }, { "series": null }],
+      "covers": ["compilations"]
+    },
+    {
+      "id": "policy-magazines-whole",
+      "policies": { "magazines": "whole" },
+      "files": ["[架空工房] 週刊架空 2025年35号", "[架空工房] 週刊架空 2025年36-37号", "[架空工房] 週刊架空 2026年1号", "[架空工房] 週刊架空 2026年2・3号（2026年1月10日）", "[架空工房] MOON 2022 Vol.01", "[架空工房] MOON 2023 Vol.02", "[架空工房] 月刊幻想_2022-01", "[架空工房] 月刊幻想_2022-02"],
+      "expect": [
+        { "series": "週刊架空", "volume": "2025年35号", "volumeSort": 202535 },
+        { "series": "週刊架空", "volume": "2025年36-37号", "volumeSort": 202536 },
+        { "series": "週刊架空", "volume": "2026年1号", "volumeSort": 202601 },
+        { "series": "週刊架空", "volume": "2026年2・3号", "volumeSort": 202602 },
+        { "series": "MOON", "volume": "2022 Vol.01", "volumeSort": 202201 },
+        { "series": "MOON", "volumeSort": 202302 },
+        { "series": "月刊幻想", "volumeSort": 202201 },
+        { "series": "月刊幻想", "volumeSort": 202202 }
+      ],
+      "covers": ["magazines"]
+    },
+    {
+      "id": "policy-unnumbered-first-left-empty",
+      "policies": { "unnumberedFirst": "leaveEmpty" },
+      "files": ["[架空工房] 星降る夜の喫茶店", "[架空工房] 星降る夜の喫茶店 2", "[架空工房] 星降る夜の喫茶店 3"],
+      "expect": [{ "series": "星降る夜の喫茶店", "volume": null, "inferred": false }, { "volumeSort": 2 }, { "volumeSort": 3 }],
+      "covers": ["unnumberedFirst", "firstVolume"]
+    },
+    {
+      "id": "policy-different-relations-kept-together",
+      "policies": { "differentRelation": "keep" },
+      "files": ["(種別A) [架空工房] NEON 夜の街 (作品A)", "(種別A) [架空工房] NEON 朝の港 (作品B)"],
+      "expect": [{ "series": "NEON" }, { "series": "NEON" }],
+      "covers": ["differentRelation", "splitByRelation"]
+    },
+    {
+      "id": "policy-different-genres-kept-together",
+      "policies": { "differentGenre": "keep" },
+      "files": ["(種別A) [架空工房] 月の庭", "(種別A) [架空工房] 月の庭 2つめ", "(種別C) [架空工房] 月の庭 ～作品集～"],
+      "expect": [{ "series": "月の庭" }, { "series": "月の庭" }, { "series": "月の庭", "genre": "種別C" }],
+      "covers": ["differentGenre"]
+    },
+    {
+      "id": "policy-subtitled-kept-separate",
+      "policies": { "subtitled": "separate" },
+      "files": ["[架空工房] 月影 はじまりの章", "[架空工房] 月影 2", "[架空工房] 月影 3"],
+      "expect": [{ "series": null }, { "series": "月影" }, { "series": "月影" }],
+      "covers": ["subtitled"]
     }
   ]
 }

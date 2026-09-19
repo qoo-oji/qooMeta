@@ -45,7 +45,7 @@ public enum Evaluator {
         let files = labeled.enumerated().map { i, b in
             BookFile(path: "/corpus/\(i)", relativePath: "\(i)", baseName: "[\(b.author)] \(b.title)", fileExtension: "cbz")
         }
-        let books = BookScanner.proposals(from: files)
+        let books = BookScanner.proposals(from: files, engine: grouper.engine)
         let groups = grouper.group(books)
         var predicted: [Int: Int] = [:]  // 本の id → 組の id
         var name: [Int: String] = [:]
@@ -55,7 +55,7 @@ public enum Evaluator {
         var score = Score()
         score.books = labeled.count
         score.authors = Set(books.map(\.circleKey)).count
-        let norm: (String) -> [Character] = { ComparableText($0).key }
+        let norm: (String) -> [Character] = { grouper.engine.text.comparable($0).key }
         let truthKey = labeled.map { norm($0.series) }
         let seriesSize = Dictionary(grouping: books.indices, by: { "\(books[$0].circleKey)\u{1}\(String(truthKey[$0]))" })
             .mapValues(\.count)
@@ -88,9 +88,9 @@ public enum Evaluator {
 /// シリーズ名の切り方の候補(比較のため)。
 public enum SeriesNaming {
     /// 共通部分の最初の区切り(空白・記号・数字)の手前で切る。2 文字未満になるなら切らない。
-    public static func firstCut(_ name: String, minLength: Int = 2) -> String {
-        for (i, ch) in name.enumerated() where i >= minLength && TextRules.isBoundary(ch) {
-            return TextRules.trimSeriesName(String(name.prefix(i)))
+    public static func firstCut(_ name: String, minLength: Int = 2, engine: RuleEngine = .builtin) -> String {
+        for (i, ch) in name.enumerated() where i >= minLength && engine.text.isBoundary(ch) {
+            return engine.text.trimSeriesName(String(name.prefix(i)))
         }
         return name
     }

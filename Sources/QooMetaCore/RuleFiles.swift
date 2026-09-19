@@ -150,6 +150,19 @@ public struct CompiledRules: Sendable {
         return RulesCompilation(rules: rules, errors: [], warnings: issues.filter(\.isWarning))
     }
 
+    /// 方針だけを置き換えた規則(例ごとの方針、GUI の「好み」の切り替え)。今の規則(利用者の変更を重ねたもの)を土台にする。
+    public func applying(policies: [String: String], dictionaries: Set<String> = ["english"]) -> RulesCompilation {
+        guard !policies.isEmpty, case .object(var series) = mergedSeriesRules else {
+            return RulesCompilation(rules: self, errors: [], warnings: [])
+        }
+        var current = series["policies"]?.objectValue ?? [:]
+        for (name, choice) in policies { current[name] = .string(choice) }
+        series["policies"] = .object(current)
+        let builtIn = BuiltInRules(seriesRules: Data(JSONValue.object(series).rendered().utf8),
+                                   filenameFormats: Data(mergedFilenameFormats.rendered().utf8))
+        return CompiledRules.compile(RuleSources(builtIn: builtIn), dictionaries: dictionaries)
+    }
+
     /// 処理に関係しない包みのキー(`$schema`・`revision`)を除く。内容のハッシュがそれらに左右されないように。
     static func stripped(_ v: JSONValue) -> JSONValue {
         guard case .object(var o) = v else { return v }
@@ -191,14 +204,6 @@ struct RuleCompiler {
         let policies = root["policies"]?.objectValue?.compactMapValues(\.stringValue) ?? [:]
         func enabled(_ v: JSONValue?) -> Bool { v?["enabled"]?.boolValue ?? true }
 
-        // 方針のうち、まだ今の扱いしか実装していないもの(roadmap 段階 0 の 5)。既定でない値は「まだ働かない」とする
-        // (黙って既定の扱いで動かすと、選んだつもりで効いていないことになる)。
-        for name in ["editions", "sources", "compilations", "compilationVolume", "magazines"] {
-            let defaultChoice = RuleSchema.policies.first { $0.name == name }!.choices[0]
-            if let chosen = policies[name], chosen != defaultChoice {
-                report(.notYetSupported, "policies.\(name)", chosen)
-            }
-        }
 
         let compare = root["compare"], markers = root["markers"], grouping = root["grouping"]
         let naming = root["naming"], volume = root["volume"]
@@ -210,6 +215,10 @@ struct RuleCompiler {
                                      at: "grouping.sharedPrefix.conditions.reject-common-english", name))
             englishEnabled = false
         }
+
+        // 印は、規則を止めたときも、方針で見分けないこと(`ignore`)を選んだときも探さない。
+        let editionsOn = enabled(markers?["edition"]) && policies["editions"] != "ignore"
+        let sourcesOn = enabled(markers?["source"]) && policies["sources"] != "ignore"
 
         let readersJSON = volume?["readers"]?.arrayValue ?? []
         func reader(_ id: String) -> JSONValue? { readersJSON.first { $0["id"]?.stringValue == id } }
@@ -248,11 +257,16 @@ struct RuleCompiler {
                     ? pairs(naming?["includeClosingBrackets"]?["pairs"], lists) : [:],
                 labelIntroducers: enabled(naming?["dropLastWord"]) ? words(naming?["dropLastWord"]?["words"], lists) : []),
             editions: .init(
-                edition: enabled(markers?["edition"]) ? words(markers?["edition"]?["words"], lists) : [],
-                editionPatterns: enabled(markers?["edition"]) ? words(markers?["edition"]?["patterns"], lists) : [],
-                source: enabled(markers?["source"]) ? words(markers?["source"]?["words"], lists) : [],
-                sourcePatterns: enabled(markers?["source"]) ? words(markers?["source"]?["patterns"], lists) : []),
-            compilation: .init(keywords: words(grouping?["compilation"]?["words"], lists)),
+                edition: editionsOn ? words(markers?["edition"]?["words"], lists) : [],
+                editionPatterns: editionsOn ? words(markers?["edition"]?["patterns"], lists) : [],
+                source: sourcesOn ? words(markers?["source"]?["words"], lists) : [],
+                sourcePatterns: sourcesOn ? words(markers?["source"]?["patterns"], lists) : [],
+                stripsEditions: policies["editions"] != "separateBooks",
+                stripsSources: policies["sources"] != "separateBooks"),
+            compilation: .init(
+                keywords: words(grouping?["compilation"]?["words"], lists),
+                placement: SeriesRules.Compilation.Placement(rawValue: policies["compilations"] ?? "") ?? .ownSeries,
+                volumeAfterRange: policies["compilationVolume"] == "afterRange"),
             volume: .init(
                 readers: readers,
                 prefixes: words(number?["prefixes"], lists),
@@ -266,6 +280,7 @@ struct RuleCompiler {
                 sharedLeadingKanjiEnabled: enabled(leadingKanji),
                 sharedLeadingKanjiMinBooks: leadingKanji?["minBooks"]?.intValue ?? 2,
                 inferFirstVolume: policies["unnumberedFirst"] != "leaveEmpty",
+                magazinesWhole: policies["magazines"] == "whole",
                 notFirstMarkers: words(firstVolume?["excludeMarkers"], lists),
                 notFirstPrefixes: words(firstVolume?["excludePrefixes"], lists)))
     }
@@ -372,14 +387,23 @@ public struct SeriesRules: Sendable {
     }
 
     public struct Editions: Sendable {
+        /// 印の語と正規表現(規則を止めたとき、方針 `ignore` のときは空)。
         public var edition: [String]
         public var editionPatterns: [String]
         public var source: [String]
         public var sourcePatterns: [String]
+        /// 比べるタイトルから印を除くか(方針 `sameWork`)。`separateBooks` なら印を見分けて付けるが、除かずに比べる。
+        public var stripsEditions: Bool
+        public var stripsSources: Bool
     }
 
     public struct Compilation: Sendable {
+        public enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
         public var keywords: [String]
+        /// 方針 `compilations`。
+        public var placement: Placement
+        /// 方針 `compilationVolume` が `afterRange`(本編の中での巻を、収録範囲の最後の巻の直後にする)。
+        public var volumeAfterRange: Bool
     }
 
     /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。
@@ -413,6 +437,8 @@ public struct SeriesRules: Sendable {
         public var sharedLeadingKanjiMinBooks: Int
         /// 方針 `unnumberedFirst`。
         public var inferFirstVolume: Bool
+        /// 方針 `magazines` が `whole`(雑誌全体で 1 つのシリーズにし、年と号を巻として読む)。
+        public var magazinesWhole: Bool
         /// シリーズ名より後ろにこの語があれば、1 巻の推定の候補にしない。
         public var notFirstMarkers: [String]
         /// シリーズ名の直後にこの語が付けば、1 巻の推定の候補にしない。
@@ -444,16 +470,8 @@ extension SeriesRules.Volume {
     var positionPattern: String { alternation(positionWords.first + positionWords.middle + positionWords.last) }
 }
 
-/// 処理が使う規則。
-///
-/// **仮の形**: 処理の各所(TextRules・VolumeExtractor など)は、まだ規則を値で受け取らず、ここから読む
-/// (roadmap 段階 1 の 2 で、グローバルな状態をなくす)。利用者の変更を使うときは、処理を始める前に 1 度だけ
-/// `install` する。処理が規則を読み始めた後の `install` は、一部の値が古いまま残るので止める。
-public enum RuleFiles {
-    nonisolated(unsafe) private static var installed: CompiledRules?
-    nonisolated(unsafe) private static var inUse = false
-
-    /// 同梱の既定値だけを組み立てたもの。
+extension CompiledRules {
+    /// 同梱の既定値だけを組み立てたもの。同梱の規則は検証済みなので、組み立てられなければ作りの誤り。
     public static let builtin: CompiledRules = {
         let compilation = CompiledRules.compile(RuleSources(builtIn: try! BuiltInRules.bundled()))
         guard let rules = compilation.rules else {
@@ -461,17 +479,4 @@ public enum RuleFiles {
         }
         return rules
     }()
-
-    public static func install(_ rules: CompiledRules) {
-        precondition(!inUse, "規則は処理を始める前に install する")
-        installed = rules
-    }
-
-    public static var current: CompiledRules {
-        inUse = true
-        return installed ?? builtin
-    }
-
-    public static var filenameFormats: FilenameFormatRules { current.formats }
-    public static var seriesRules: SeriesRules { current.series }
 }

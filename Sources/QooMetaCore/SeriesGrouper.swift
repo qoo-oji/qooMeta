@@ -27,34 +27,48 @@ public struct SeriesGrouper: Sendable {
     public var rejectsHiraganaEndings: Bool
 
     /// ネタ(`@genre`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
-    public var splitsByGenre = RuleFiles.seriesRules.grouping.splitByGenre
+    public var splitsByGenre: Bool
 
     /// 本の種別(`@mediatype`)が違う本を分けるか(方針 differentGenre)。
-    public var splitsByMediaType = RuleFiles.seriesRules.grouping.splitByMediaType
+    public var splitsByMediaType: Bool
 
     /// 1 段目(「タイトル + 巻」を頭でまとめる。規則 volumeHead)と 2 段目(共通する前半部分。規則 sharedPrefix)を使うか。
-    public var usesVolumeHeads = RuleFiles.seriesRules.grouping.volumeHeadEnabled
-    public var usesSharedPrefixes = RuleFiles.seriesRules.grouping.sharedPrefixEnabled
+    public var usesVolumeHeads: Bool
+    public var usesSharedPrefixes: Bool
 
     /// 一般的な英語だけのタイトルでも、後ろに巻があれば組にする。
-    public var commonEnglishUnlessVolume = RuleFiles.seriesRules.grouping.commonEnglishUnlessVolume
+    public var commonEnglishUnlessVolume: Bool
 
     /// 本編のシリーズがあれば、総集編が 1 冊でもシリーズにする。
-    public var singleCompilationWithMain = RuleFiles.seriesRules.grouping.compilationSingleWhenMainExists
-
-    /// 既定値は series-rules.json の grouping。
-    public init(minPrefix: Int = RuleFiles.seriesRules.grouping.minPrefix,
-                minWholeTitle: Int = RuleFiles.seriesRules.grouping.minWholeTitle,
-                attachesSubtitledBooks: Bool = RuleFiles.seriesRules.grouping.attachSubtitled,
-                rejectsHiraganaEndings: Bool = RuleFiles.seriesRules.grouping.rejectHiraganaEndings) {
-        self.minPrefix = minPrefix
-        self.minWholeTitle = minWholeTitle
-        self.attachesSubtitledBooks = attachesSubtitledBooks
-        self.rejectsHiraganaEndings = rejectsHiraganaEndings
-    }
+    public var singleCompilationWithMain: Bool
 
     /// 語の切れ目で切れる共通部分でも、2 冊とも一般的な英単語だけのタイトルなら組にしない(EnglishWords)。
-    public var rejectsCommonEnglishTitles = RuleFiles.seriesRules.grouping.rejectCommonEnglishTitles
+    public var rejectsCommonEnglishTitles: Bool
+
+    /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
+    public var rejectsSingleWordPrefixes: Bool
+
+    /// 比べ方・巻の読み方・辞書(規則から作ったもの)。
+    public let engine: RuleEngine
+    var text: TextRules { engine.text }
+
+    /// 既定値は規則の grouping と policies。`minPrefix` だけは、公開データでの比較のために直接渡せる。
+    public init(engine: RuleEngine = .builtin, minPrefix: Int? = nil) {
+        let g = engine.rules.series.grouping
+        self.engine = engine
+        self.minPrefix = minPrefix ?? g.minPrefix
+        minWholeTitle = g.minWholeTitle
+        attachesSubtitledBooks = g.attachSubtitled
+        rejectsHiraganaEndings = g.rejectHiraganaEndings
+        splitsByGenre = g.splitByGenre
+        splitsByMediaType = g.splitByMediaType
+        usesVolumeHeads = g.volumeHeadEnabled
+        usesSharedPrefixes = g.sharedPrefixEnabled
+        commonEnglishUnlessVolume = g.commonEnglishUnlessVolume
+        singleCompilationWithMain = g.compilationSingleWhenMainExists
+        rejectsCommonEnglishTitles = g.rejectCommonEnglishTitles
+        rejectsSingleWordPrefixes = g.rejectSingleWordPrefixes
+    }
 
     /// その位置で切ると、元の表記で数字の途中になるか(「2022-01」の「-」は比較用の形では消えるので、元の表記で見る)。
     static func splitsANumber(_ text: ComparableText, at length: Int) -> Bool {
@@ -65,12 +79,10 @@ public struct SeriesGrouper: Sendable {
     }
 
     /// 比較用の先頭 `length` 文字より後ろが巻で始まるか。
-    static func hasVolume(_ text: ComparableText, after length: Int) -> Bool {
-        VolumeExtractor.extract(fromRemainder: text.originalRemainder(afterKeyLength: length)) != nil
+    func hasVolume(_ text: ComparableText, after length: Int) -> Bool {
+        engine.volumes.extract(fromRemainder: text.originalRemainder(afterKeyLength: length)) != nil
     }
 
-    /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
-    public var rejectsSingleWordPrefixes = RuleFiles.seriesRules.grouping.rejectSingleWordPrefixes
 
     enum Script { case hiragana, katakana, han, latin, digit, other }
 
@@ -99,7 +111,7 @@ public struct SeriesGrouper: Sendable {
     /// いちばん大きい組へ入れる。分けた結果 2 冊に満たない組は捨てる。
     func splitByGenre(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
         guard splitsByGenre else { return groups }
-        let genreByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(ComparableText($0.parsed.trailing).key)) })
+        let genreByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.trailing).key)) })
         var result: [SeriesGroup] = []
         for group in groups {
             let byGenre = Dictionary(grouping: group.memberIDs.filter { !(genreByID[$0] ?? "").isEmpty }) { genreByID[$0]! }
@@ -121,23 +133,23 @@ public struct SeriesGrouper: Sendable {
     /// タイトルの先頭が「総集編」の本(本編の名前が無い)は対象にしない。
     /// 収録範囲が総集編の前に書かれている形(「X1~4総集編」)は、BookScanner が「X 総集編 1~4」に並べ替えてある
     /// (Compilation.normalizedTitle)。
-    static func compilation(_ title: String) -> (name: String, mains: [String])? {
-        guard let r = Compilation.keywordRange(in: title), r.lowerBound > title.startIndex else { return nil }
+    func compilation(_ title: String) -> (name: String, mains: [String])? {
+        guard let r = engine.compilation.keywordRange(in: title), r.lowerBound > title.startIndex else { return nil }
         let head = String(title[..<r.lowerBound])
-        let main = TextRules.trimSeriesName(head)
+        let main = text.trimSeriesName(head)
         guard !main.isEmpty else { return nil }
         var mains = [main]
         // 「X フルカラー総集編」の「フルカラー」のような、総集編の直前の語を除いた名前も本編の候補にする。
         if !head.hasSuffix(" "), let space = main.lastIndex(where: \.isWhitespace) {
-            mains.append(TextRules.trimSeriesName(String(main[..<space])))
+            mains.append(text.trimSeriesName(String(main[..<space])))
         }
-        return (TextRules.trimSeriesName(head + String(title[r])), mains)
+        return (text.trimSeriesName(head + String(title[r])), mains)
     }
 
     /// 版違い・入手経路違いだけでできた組はシリーズにしない(同じ作品。利用者との取り決め)。
     /// 印(EditionMarkers)を除いたタイトルが 2 種類以上ある組だけを残す。1 冊でもよい組(本編のある総集編)は残す。
     func dissolveSameWorkOnly(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
-        let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(ComparableText($0.parsed.baseTitle).key)) })
+        let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.baseTitle).key)) })
         return groups.filter { g in
             g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
         }
@@ -146,7 +158,7 @@ public struct SeriesGrouper: Sendable {
     /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
     /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。種別が読めなかった本は書き手だけで比べる。
     func partitionKey(_ book: BookProposal) -> String {
-        let mediaType = splitsByMediaType ? String(ComparableText(book.parsed.mediaType ?? "").key) : ""
+        let mediaType = splitsByMediaType ? String(text.comparable(book.parsed.mediaType ?? "").key) : ""
         return mediaType.isEmpty ? book.circleKey : "\(book.circleKey)\u{1}\(mediaType)"
     }
 
@@ -155,11 +167,11 @@ public struct SeriesGrouper: Sendable {
         var groups: [SeriesGroup] = []
         for circleKey in byCircle.keys.sorted() {
             // 総集編は本編と分けて扱う(Self.compilation)。
-            let compilations = byCircle[circleKey]!.compactMap { b in Self.compilation(b.parsed.baseTitle).map { (b, $0) } }
+            let compilations = byCircle[circleKey]!.compactMap { b in compilation(b.parsed.baseTitle).map { (b, $0) } }
             let compilationIDs = Set(compilations.map(\.0.id))
             let items = byCircle[circleKey]!
                 .filter { !compilationIDs.contains($0.id) }
-                .map { (id: $0.id, text: ComparableText($0.parsed.baseTitle)) }
+                .map { (id: $0.id, text: text.comparable($0.parsed.baseTitle)) }
                 .filter { !$0.text.key.isEmpty }
             let groupsBefore = groups.count
 
@@ -170,7 +182,7 @@ public struct SeriesGrouper: Sendable {
             var rest: [(id: Int, text: ComparableText)] = []
             for item in items {
                 // 後ろが巻だけでできていることを求めるので、頭は 1 文字でもよい(「咲 18」)。
-                if usesVolumeHeads, let head = Self.volumeHeadLength(item.text, minLength: 1) {
+                if usesVolumeHeads, let head = volumeHeadLength(item.text, minLength: 1) {
                     byHead[String(item.text.key.prefix(head)), default: []].append((item.id, item.text, head))
                 } else {
                     rest.append(item)
@@ -227,7 +239,7 @@ public struct SeriesGrouper: Sendable {
                 let first = members.min { $0.id < $1.id }!
                 groups.append(SeriesGroup(
                     id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0], memberIDs: members.map(\.id).sorted(),
-                    ruleName: TextRules.trimSeriesName(first.text.originalPrefix(keyLength: first.headLength)),
+                    ruleName: text.trimSeriesName(first.text.originalPrefix(keyLength: first.headLength)),
                     cleanBoundary: true, circlesSharingPrefix: 0))
             }
 
@@ -240,7 +252,7 @@ public struct SeriesGrouper: Sendable {
                     id: 0,
                     circleKey: circleKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: run.map(\.item.id),
-                    ruleName: TextRules.trimSeriesName(first.originalPrefix(keyLength: prefixLength)),
+                    ruleName: text.trimSeriesName(first.originalPrefix(keyLength: prefixLength)),
                     cleanBoundary: run.allSatisfy { Self.isCleanCut($0.item.text, at: prefixLength) },
                     circlesSharingPrefix: 0
                 ))
@@ -248,11 +260,20 @@ public struct SeriesGrouper: Sendable {
 
             // 総集編: 「X 総集編」ごとにまとめる。2 冊以上か、本編のシリーズ「X」がこの書き手にあれば(1 冊でも)シリーズ。
             // 番号の無い最初の総集編のあとに「総集編2」が出ることがあるので、番号の有無で分け方を変えない(利用者の判断)。
-            let mainKeys = Set(groups[groupsBefore...].map { String(ComparableText($0.ruleName).key) })
-            let byName = Dictionary(grouping: compilations) { String(ComparableText($0.1.name).key) }
+            // どこへ入れるかは方針 compilations: 別のシリーズ(既定)/ 本編のシリーズ / どこにも入れない。
+            let placement = engine.rules.series.compilation.placement
+            let mainKeys = Set(groups[groupsBefore...].map { String(text.comparable($0.ruleName).key) })
+            let byName = Dictionary(grouping: placement == .notInSeries ? [] : compilations) { String(text.comparable($0.1.name).key) }
             for key in byName.keys.sorted() {
                 let members = byName[key]!
-                let hasMain = members[0].1.mains.contains { mainKeys.contains(String(ComparableText($0).key)) }
+                let hasMain = members[0].1.mains.contains { mainKeys.contains(String(text.comparable($0).key)) }
+                // 本編に含める: 本編のシリーズがあれば、その組へ入れる。無ければ既定と同じく「X 総集編」にする。
+                if placement == .inMainSeries, let main = (groupsBefore..<groups.count).first(where: { i in
+                    members[0].1.mains.contains { text.key($0) == text.key(groups[i].ruleName) }
+                }) {
+                    groups[main].memberIDs = (groups[main].memberIDs + members.map(\.0.id)).sorted()
+                    continue
+                }
                 guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
                 var g = SeriesGroup(
                     id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0],
@@ -266,9 +287,9 @@ public struct SeriesGrouper: Sendable {
         groups = dissolveSameWorkOnly(groups, books: books)
         // ありふれた言葉の疑い: この前半部分で始まるタイトルを持つ書き手の数。
         let titleKeysByCircle = Dictionary(grouping: books, by: \.circleKey)
-            .mapValues { $0.map { String(ComparableText($0.parsed.baseTitle).key) } }
+            .mapValues { $0.map { String(text.comparable($0.parsed.baseTitle).key) } }
         for i in groups.indices {
-            let prefix = String(ComparableText(groups[i].ruleName).key)
+            let prefix = String(text.comparable(groups[i].ruleName).key)
             groups[i].circlesSharingPrefix = prefix.isEmpty ? 0 : titleKeysByCircle.values
                 .filter { keys in keys.contains { $0.hasPrefix(prefix) } }.count
             groups[i].id = i + 1
@@ -299,9 +320,9 @@ public struct SeriesGrouper: Sendable {
             // ありふれた英語が重なっただけで手がかりにならない(利用者の指摘)。後ろに巻があれば組にする。
             let cleanOnBothSides = l >= 1 && Self.isCleanCut(last.item.text, at: l) && Self.isCleanCut(item.text, at: l)
                 && !(rejectsCommonEnglishTitles
-                     && EnglishWords.isCommonEnglishOnly(last.item.text.original)
-                     && EnglishWords.isCommonEnglishOnly(item.text.original)
-                     && !(commonEnglishUnlessVolume && (Self.hasVolume(last.item.text, after: l) || Self.hasVolume(item.text, after: l))))
+                     && engine.english.isCommonEnglishOnly(last.item.text.original)
+                     && engine.english.isCommonEnglishOnly(item.text.original)
+                     && !(commonEnglishUnlessVolume && (hasVolume(last.item.text, after: l) || hasVolume(item.text, after: l))))
             // 語の途中で切れる一致が、ひらがな(「の」「と」などの助詞)で終わるなら採らない。
             // 言い回しが重なっただけの別作品(利用者の指摘)。
             // 共通部分が文字種の 1 続き(カタカナだけ・漢字だけ…)なら、それは 1 語でしかない。語の途中で切れる一致としては
@@ -335,12 +356,12 @@ public struct SeriesGrouper: Sendable {
     /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比較用の形で)。語の切れ目で切れていて、
     /// 後ろが巻だけでできている、いちばん短い頭を採る(長い方から探すと「X Vol.5」の頭が「X Vol」に、
     /// 「X 21」の頭が「X 2」になる)。
-    static func volumeHeadLength(_ text: ComparableText, minLength: Int) -> Int? {
+    func volumeHeadLength(_ text: ComparableText, minLength: Int) -> Int? {
         guard text.key.count > minLength else { return nil }
         for length in minLength..<text.key.count
         where !Self.splitsANumber(text, at: length)
-            && isCleanCut(text, at: length)
-            && VolumeExtractor.isWholeVolume(text.originalRemainder(afterKeyLength: length)) {
+            && Self.isCleanCut(text, at: length)
+            && engine.volumes.isWholeVolume(text.originalRemainder(afterKeyLength: length)) {
             return length
         }
         return nil
@@ -366,7 +387,7 @@ public struct SeriesGrouper: Sendable {
         // 比較用の形で飛ばした記号・空白が挟まっていれば切れ目。
         let end = text.originalEnd[length - 1]
         let chars = Array(text.original)
-        if end < chars.count, TextRules.isBoundary(chars[end]) { return true }
+        if end < chars.count, text.rules.isBoundary(chars[end]) { return true }
         // 漢字・かなの直後に英字が続くなら切れ目(「Xex」「X DX」の空白なし)。
         if end < chars.count, end > 0, chars[end].isASCII, chars[end].isLetter, !chars[end - 1].isASCII,
            chars[end - 1].isLetter { return true }

@@ -353,7 +353,7 @@
 
 ## 最初の実装で決めた細部(2026-09-19)
 
-実装(`Sources/QooMetaCore/RuleSchema.swift`・`RuleLoader.swift`・`RuleFiles.swift`)で決めたこと。説明は docs/rules.md。
+実装(`Sources/QooMetaCore/RuleSchema.swift`・`RuleLoader.swift`・`RuleFiles.swift`・`RuleEngine.swift`)で決めたこと。説明は docs/rules.md。
 
 - 語の切れ目の記号は、1 段目(`volumeHead`)と 2 段目(`sharedPrefix`)の両方が使うので、`compare.boundaries` に置いた。
 - 既定値では、`enabled` を持つ規則(方針が働きを決める `compilation`・`splitByRelation`・`rejectSameWork`・`firstVolume` 以外)は
@@ -366,11 +366,11 @@
 - `fallback.wholeNameAsTitle` は、止めたときの代わりが無いので規則にしなかった(最後の手段として常に働く)。
 - 知らないキーでも、値が `"since"` を持つオブジェクトで、その番号が本体の水準より大きければ「新しい版の規則」として警告で飛ばす。
   それ以外の知らないキーは書き間違いとしてエラー。
-- 方針のうち、今の版で既定でない値を選べるのは `subtitled`・`differentRelation`・`differentGenre`・`unnumberedFirst`。
-  残り(`editions`・`sources`・`compilations`・`compilationVolume`・`magazines`)の既定でない値は、実装するまで `notYetSupported` のエラー。
+- 方針はすべての値を実装した。`compilations` の `inMainSeries` で本編のシリーズが無いときは、既定と同じく「X 総集編」にする。
+  `compilationVolume` の `afterRange` の巻の表記は「総集編 1~4」(数は 4.5)。`magazines` の `whole` の巻の表記は年と号のまま。
 - 内容のハッシュ(`contentHash`)は、`$schema` と `revision` を除いた、重ねた後の中身から計算する。
-- 処理の各所は、まだ規則を値で受け取らず、組み立てた規則を処理の前に 1 度だけ入れる(`RuleFiles.install`)。
-  そのため、例ごとに方針を変える(`"policies": { … }`)ことはまだできない(roadmap 段階 1 の 2 でグローバルな状態をなくしてから)。
+- 処理の各所は、規則を値で受け取る(`RuleEngine`: 組み立てた規則と、そこから作った正規表現・比べ方・辞書の一式)。
+  例ごとの方針は、今の規則の方針だけを置き換えて組み立て直したもの(`CompiledRules.applying(policies:)`)で確かめる。
 
 ## 決まったこと(2026-09-19)
 

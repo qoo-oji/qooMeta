@@ -52,6 +52,16 @@ import Testing
         #expect(b.issues.map(\.path) == ["schemaVersion"])
     }
 
+    @Test func examplePoliciesAreChecked() {
+        guard case .failure(let failure) = Self.load("""
+        { "kind": "qoometa.examples", "schemaVersion": 2, "examples": [
+          { "id": "a", "files": ["x"], "expect": [{}], "policies": { "subtitle": "separate", "editions": "separat" } }
+        ] }
+        """) else { Issue.record("誤りを見落とした"); return }
+        #expect(Set(failure.issues.map(\.path)) == ["examples[0].policies.subtitle", "examples[0].policies.editions"])
+        #expect(failure.issues.contains { $0.path == "examples[0].policies.subtitle" && $0.suggestion == "subtitled" })
+    }
+
     /// `"series": null` は「シリーズに入ってはいけない」。シリーズに入れば食い違いになる。
     @Test func nullSeriesMeansNotInASeries() throws {
         let file = try Self.load("""

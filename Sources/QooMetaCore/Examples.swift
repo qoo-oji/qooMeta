@@ -43,6 +43,8 @@ public struct Example: Sendable {
     public var covers: [String]
     /// 本の種別の語彙(書いてあればファイル全体の既定を置き換える)。
     public var genres: [String]?
+    /// この例で選ぶ方針(書いた方針だけを、渡された規則の上で置き換える)。
+    public var policies: [String: String] = [:]
 }
 
 public struct ExampleBook: Sendable {
@@ -130,7 +132,7 @@ struct ExampleReader {
     }
 
     mutating func example(_ value: JSONValue, _ path: String) -> Example? {
-        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary"]) else { return nil }
+        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary", "policies"]) else { return nil }
         let id = string(o["id"], join(path, "id")) ?? ""
         if id.isEmpty, o["id"] != nil { error(join(path, "id"), .invalidValue, "空の ID") }
 
@@ -168,7 +170,21 @@ struct ExampleReader {
             error("\(path).covers[\(i)]", .unknownKey, rule, suggestion: Spelling.suggestion(for: rule, among: KnownRuleIDs.all))
         }
         let genres = o["vocabulary"].flatMap { vocabulary($0, join(path, "vocabulary")) }
-        return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres)
+        var policies: [String: String] = [:]
+        if let p = o["policies"] {
+            let names = RuleSchema.policies.map(\.name)
+            if let map = object(p, join(path, "policies"), allowed: names) {
+                for (name, v) in map.sorted(by: { $0.key < $1.key }) {
+                    guard let choices = RuleSchema.policies.first(where: { $0.name == name })?.choices else { continue }
+                    let place = join(join(path, "policies"), name)
+                    if let choice = string(v, place) {
+                        if choices.contains(choice) { policies[name] = choice }
+                        else { error(place, .invalidValue, choice, suggestion: Spelling.suggestion(for: choice, among: choices)) }
+                    }
+                }
+            }
+        }
+        return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres, policies: policies)
     }
 
     mutating func expectation(_ value: JSONValue, _ path: String) -> Expectation? {
@@ -207,12 +223,26 @@ public enum ExampleRunner {
         public var passed: Bool { mismatches.isEmpty }
     }
 
-    public static func run(_ file: ExampleFile) throws -> [Outcome] {
-        var parsers: [[String]: QooLibraryNameParser] = [:]
+    /// - Parameter engine: 例を確かめる規則(既定値、または利用者の変更を重ねたもの)。例が方針を書いていれば、その上で置き換える。
+    public static func run(_ file: ExampleFile, engine: RuleEngine = .builtin) throws -> [Outcome] {
+        var engines: [[String: String]: RuleEngine] = [[:]: engine]
+        var parsers: [String: QooLibraryNameParser] = [:]
         return try file.examples.map { example in
+            if engines[example.policies] == nil {
+                let compilation = engine.rules.applying(policies: example.policies)
+                guard let rules = compilation.rules else {
+                    return Outcome(id: example.id, covers: example.covers,
+                                   mismatches: compilation.errors.map { "方針を選べない: \($0)" })
+                }
+                engines[example.policies] = RuleEngine(rules: rules, englishWords: engine.english)
+            }
+            let exampleEngine = engines[example.policies]!
             let genres = example.genres ?? file.genres
-            if parsers[genres] == nil { parsers[genres] = try QooLibraryNameParser(mediaTypes: genres) }
-            let books = propose(example.books, parser: parsers[genres]!)
+            let parserKey = genres.joined(separator: "\u{1}") + "\u{2}" + exampleEngine.rules.contentHash
+            if parsers[parserKey] == nil {
+                parsers[parserKey] = try QooLibraryNameParser(mediaTypes: genres, rules: exampleEngine.rules.formats)
+            }
+            let books = propose(example.books, parser: parsers[parserKey]!, engine: exampleEngine)
             var mismatches: [String] = []
             for (i, expectation) in example.expectations.enumerated() where i < books.count {
                 for (field, expected) in expectation.checks {
@@ -228,16 +258,17 @@ public enum ExampleRunner {
     }
 
     /// CLI の scan と同じ流れ(ファイル名の解析 → 組 → 巻)を、規則だけで通す(端末内モデルは使わない)。
-    static func propose(_ books: [ExampleBook], parser: QooLibraryNameParser) -> [BookProposal] {
+    static func propose(_ books: [ExampleBook], parser: QooLibraryNameParser, engine: RuleEngine) -> [BookProposal] {
         let files = books.enumerated().map { i, book in
             let relative = (book.folders + [book.name + ".cbz"]).joined(separator: "/")
             return BookFile(path: "/example/\(i + 1)/" + relative, relativePath: relative, baseName: book.name,
                             fileExtension: "cbz")
         }
-        let proposals = BookScanner.proposals(from: files, qooLibrary: parser)
-        var doc = ProposalDocument(rootPath: "/example", minPrefix: SeriesGrouper().minPrefix, books: proposals,
-                                   groups: SeriesGrouper().group(proposals))
-        ProposalFinalizer.finalize(&doc, useAI: false)
+        let proposals = BookScanner.proposals(from: files, qooLibrary: parser, engine: engine)
+        let grouper = SeriesGrouper(engine: engine)
+        var doc = ProposalDocument(rootPath: "/example", minPrefix: grouper.minPrefix, books: proposals,
+                                   groups: grouper.group(proposals))
+        ProposalFinalizer.finalize(&doc, useAI: false, engine: engine)
         return doc.books
     }
 

@@ -107,10 +107,39 @@ import Testing
         #expect(!rules.series.volume.inferFirstVolume)
     }
 
-    @Test func policiesNotYetImplementedAreRejected() {
-        let c = Self.compile(Self.diff(#""policies": { "compilations": "inMainSeries" }"#))
-        #expect(c.errors.map(\.code) == [.notYetSupported])
-        #expect(c.errors.first?.path == "policies.compilations")
+    @Test func everyPolicyChoiceCompiles() throws {
+        for (name, choices) in RuleSchema.policies {
+            for choice in choices {
+                let c = Self.compile(Self.diff(#""policies": { "\#(name)": "\#(choice)" }"#))
+                #expect(c.rules != nil, "\(name) = \(choice): \(c.errors)")
+            }
+        }
+        let rules = try #require(Self.compile(Self.diff("""
+        "policies": { "editions": "separateBooks", "sources": "ignore", "compilations": "inMainSeries",
+                      "compilationVolume": "afterRange", "magazines": "whole" }
+        """)).rules)
+        #expect(!rules.series.editions.stripsEditions)
+        #expect(rules.series.editions.source.isEmpty && rules.series.editions.sourcePatterns.isEmpty)
+        #expect(rules.series.compilation.placement == .inMainSeries)
+        #expect(rules.series.compilation.volumeAfterRange)
+        #expect(rules.series.volume.magazinesWhole)
+    }
+
+    /// 規則はグローバルな状態ではなく値なので、1 つのプロセスで別々の規則を並べて使える。
+    @Test func twoEnginesSideBySide() throws {
+        let separate = try #require(CompiledRules.builtin.applying(policies: ["subtitled": "separate"]).rules)
+        let engines = [RuleEngine.builtin, RuleEngine(rules: separate, englishWords: .system)]
+        let names = ["[架空工房] 月影 はじまりの章", "[架空工房] 月影 2", "[架空工房] 月影 3"]
+        let files = names.enumerated().map { BookFile(path: "/nowhere/\($0.offset)", relativePath: "\($0.offset)",
+                                                      baseName: $0.element, fileExtension: "cbz") }
+        let firstBookSeries = engines.map { engine -> String in
+            let books = BookScanner.proposals(from: files, engine: engine)
+            var doc = ProposalDocument(rootPath: "/nowhere", minPrefix: 4, books: books,
+                                       groups: SeriesGrouper(engine: engine).group(books))
+            ProposalFinalizer.finalize(&doc, engine: engine)
+            return doc.books[0].series
+        }
+        #expect(firstBookSeries == ["月影", ""])
     }
 
     @Test func newerRulesAreSkippedWithAWarning() throws {
