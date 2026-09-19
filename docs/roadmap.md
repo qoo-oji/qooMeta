@@ -60,9 +60,9 @@
    中核へ渡す形に直す。前段はまだ替えない。入口と中核の中の語は qooMeta の欄の語にする(qooLibrary 由来の `mediaType` `Vocabulary` などを
    ジャンル・原作へ。concept.md「ターゲットと参考」)。
    - 終わりの条件: 指紋が段階 1 と **1 文字も変わらない**。`swift test` と `qoometa rules test` が通る。
-3. **欄**(済み。2026-09-19。`Sources/QooMetaKit/BookMetadata.swift`): `BookMetadata`(タイトル、著者の並び、ジャンル、イベント、原作、キーワード A〜C、メモ、シリーズ、巻 = 表記と数)。
+3. **欄**(済み。2026-09-19。`Sources/QooMetaKit/BookMetadata.swift`): `BookMetadata`(タイトル、著者の並び、ジャンル、イベント、原作、情報、シリーズ、巻 = 表記と数)。
    - 終わりの条件: 型とテスト(合成した値)。
-4. **ファイル名フォーマット**(済み。2026-09-19。`Sources/QooMetaKit/FilenameFormat.swift`、集計は `qoometa formats`): 予約語 `@title @author @genre @event @source @keywordA @keywordB @keywordC @ignore`、型の並び
+4. **ファイル名フォーマット**(済み。2026-09-19。`Sources/QooMetaKit/FilenameFormat.swift`、集計は `qoometa formats`): 予約語 `@title @author @genre @event @source @info @ignore`、型の並び
    (上から、名前全体に一致した最初のもの)、並びの欄の区切り(既定は括弧・`,`・`、`。設定で足せる)、最も近い型、同梱の型の並び(filename-format.md の 5)。フォルダ名は読まない。
    照合は qooMeta で書く(QooFormat は使わない)。filename-formats.json と規則の検証の予約語(`@event` `@circle` …)は、今の前段が読んで
    いて指紋の確かめに要るので、前段と一緒に段階 6 で直す(同梱の並びは、それまでコードの `FilenameFormats.presetTexts` に持つ)。

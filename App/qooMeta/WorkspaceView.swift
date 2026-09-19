@@ -72,8 +72,7 @@ struct BookTableView: View {
     @State private var customization = TableColumnCustomization<BookRow>()
 
     /// ファイル名のほかの列(どれも見出しで昇順・降順に並べ替えられる)。
-    static let columns: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .series, .volume,
-                                                .keywordA, .keywordB, .keywordC]
+    static let columns: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .info, .series, .volume]
 
     var body: some View {
         // 列は Group でまとめない(Group に入れた列は見出しを押しても並べ替わらない)。欄の列は TableColumnForEach で作る。
@@ -102,10 +101,7 @@ extension BookMetadata.Field {
         case .genre: "ジャンル"
         case .event: "イベント"
         case .source: "原作"
-        case .keywordA: "キーワード A"
-        case .keywordB: "キーワード B"
-        case .keywordC: "キーワード C"
-        case .memo: "メモ"
+        case .info: "情報"
         case .series: "シリーズ"
         case .volume: "巻"
         }

@@ -7,8 +7,7 @@ struct DetailView: View {
     @Bindable var workspace: Workspace
 
     /// 利用者が書き換えられる欄。シリーズと巻は中核が導く(シリーズの操作は段階 7)。
-    static let editableFields: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .keywordA, .keywordB,
-                                                       .keywordC, .memo]
+    static let editableFields: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .info]
 
     var body: some View {
         let books = workspace.selectedBooks
@@ -281,7 +280,7 @@ extension FormatWord {
         case .genre: .orange
         case .event: .pink
         case .source: .purple
-        case .keywordA, .keywordB, .keywordC: .teal
+        case .info: .teal
         case .ignore: .gray
         }
     }

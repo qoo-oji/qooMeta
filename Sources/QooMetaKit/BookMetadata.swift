@@ -2,8 +2,8 @@ import Foundation
 
 /// 1 冊のメタデータ(qooMeta の欄)。docs/metadata.md の 2。
 ///
-/// 欄は、ターゲットの 3 アプリ(qooViewer・StackNest・ShelfRow)が管理に使う欄の和集合だけ。どの利用先へ何を渡すかは
-/// 書き出しで決めるので、ここでは利用先の制約(著者が 1 つ・巻が数だけ …)に合わせて削らない。
+/// 欄は意味の決まったものだけ。どの利用先のどの欄へ何を渡すかは書き出しの対応表で決める(キーワード A〜C のような、利用先の
+/// 意味の決まらない入れ物は欄にしない)。利用先の制約(著者が 1 つ・巻が数だけ …)に合わせても削らない。
 /// 空の欄は空の文字列・空の並びで表す(「無い」と「空」を分けない。絞り込みでは、どちらも「(空)」に入る)。
 public struct BookMetadata: Sendable, Hashable, Codable {
     public var title: String
@@ -16,10 +16,9 @@ public struct BookMetadata: Sendable, Hashable, Codable {
     public var event: String
     /// 原作(二次創作の元の作品。型の予約語は `@source`。StackNest の neta・ShelfRow の relation にあたる)。
     public var source: String
-    public var keywordA: String
-    public var keywordB: String
-    public var keywordC: String
-    public var memo: String
+    /// 情報(名前の中の付記など。タイトル・著者 … のどれでもない部分)。型の予約語は `@info`。読んだ時点では何も捨てず、
+    /// 書き出し先に合う欄が無ければ、書き出しの対応表で捨てる。
+    public var info: String
     /// シリーズ。ファイル名からは読まず、中核の規則で導く。
     public var series: String
     /// 巻の表記(「3」「上」「総集編1」)。表記は数に読めなくてもよい。
@@ -28,17 +27,13 @@ public struct BookMetadata: Sendable, Hashable, Codable {
     public var volumeNumber: Double?
 
     public init(title: String = "", authors: [String] = [], genre: String = "", event: String = "", source: String = "",
-                keywordA: String = "", keywordB: String = "", keywordC: String = "",
-                memo: String = "", series: String = "", volume: String = "", volumeNumber: Double? = nil) {
+                info: String = "", series: String = "", volume: String = "", volumeNumber: Double? = nil) {
         self.title = title
         self.authors = authors
         self.genre = genre
         self.event = event
         self.source = source
-        self.keywordA = keywordA
-        self.keywordB = keywordB
-        self.keywordC = keywordC
-        self.memo = memo
+        self.info = info
         self.series = series
         self.volume = volume
         self.volumeNumber = volumeNumber
@@ -46,7 +41,7 @@ public struct BookMetadata: Sendable, Hashable, Codable {
 
     /// 欄。絞り込み・まとめて書き換える操作・書き出しのプレビューが、欄を 1 つずつ書かずに済むように。
     public enum Field: String, Sendable, Hashable, CaseIterable, Codable {
-        case title, authors, genre, event, source, keywordA, keywordB, keywordC, memo, series, volume
+        case title, authors, genre, event, source, info, series, volume
 
         /// 並びの欄か(著者だけ)。
         public var isList: Bool { self == .authors }
@@ -67,10 +62,7 @@ public struct BookMetadata: Sendable, Hashable, Codable {
         case .genre: genre
         case .event: event
         case .source: source
-        case .keywordA: keywordA
-        case .keywordB: keywordB
-        case .keywordC: keywordC
-        case .memo: memo
+        case .info: info
         case .series: series
         case .volume: volume
         }
@@ -89,10 +81,7 @@ public struct BookMetadata: Sendable, Hashable, Codable {
         case .genre: genre = one
         case .event: event = one
         case .source: source = one
-        case .keywordA: keywordA = one
-        case .keywordB: keywordB = one
-        case .keywordC: keywordC = one
-        case .memo: memo = one
+        case .info: info = one
         case .series: series = one
         case .volume:
             if volume != one { volumeNumber = nil }

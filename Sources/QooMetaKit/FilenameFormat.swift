@@ -9,12 +9,12 @@ import Foundation
 
 /// 予約語。
 public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
-    case title, author, genre, event, source, keywordA, keywordB, keywordC, ignore
+    case title, author, genre, event, source, info, ignore
 
     /// 書いたときの綴り(`@title`)。
     public var spelling: String { "@" + rawValue }
 
-    /// 入る欄(`@ignore` は捨てるので nil)。`@source` は原作(StackNest・ShelfRow の `@relation` にあたる)。
+    /// 入る欄(`@ignore` は捨てるので nil。同梱の型は `@ignore` を使わず、付記も `@info` として残す)。`@source` は原作(StackNest・ShelfRow の `@relation` にあたる)。
     public var field: BookMetadata.Field? {
         switch self {
         case .title: .title
@@ -22,9 +22,7 @@ public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
         case .genre: .genre
         case .event: .event
         case .source: .source
-        case .keywordA: .keywordA
-        case .keywordB: .keywordB
-        case .keywordC: .keywordC
+        case .info: .info
         case .ignore: nil
         }
     }
@@ -206,14 +204,14 @@ public struct FilenameFormats: Sendable, Hashable {
         self.separators = separators
     }
 
-    /// 同梱の並び(docs/filename-format.md の 5)。ターゲットの既定(qooViewer の 12 通り)の `@ignore` の位置へ欄を割り当て、
+    /// 同梱の並び(docs/filename-format.md の 5)。ターゲットの既定(qooViewer の 12 通り)の `@ignore` の位置へ欄を割り当て(末尾の角括弧は `@info`)、
     /// 末尾が角括弧だけの形を足した 16 通り。具体的な型を上に置く。タイトル・著者が壊れる型(`@title` だけ、
     /// `@title - @author`、`@title [@author]`)は入れない。
     public static let presetTexts: [String] = {
         var texts: [String] = []
         for genre in ["(@genre) ", ""] {
             for author in ["[@author (@author)]", "[@author]"] {
-                for tail in [" (@source) [@ignore]", " (@source)", " [@ignore]", ""] {
+                for tail in [" (@source) [@info]", " (@source)", " [@info]", ""] {
                     texts.append("\(genre)\(author) @title\(tail)")
                 }
             }

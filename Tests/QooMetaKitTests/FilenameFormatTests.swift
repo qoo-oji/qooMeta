@@ -44,14 +44,16 @@ import Testing
         #expect(r.formatIndex == 0)
         #expect(r.metadata.title == "月の庭 3")
         #expect(r.metadata.source == "架空の原作")
-        // 末尾の角括弧は捨てる(@ignore)。
-        #expect(r.metadata.keywordA.isEmpty && r.metadata.memo.isEmpty)
-        #expect(r.spans.map(\.word) == [.genre, .author, .author, .title, .source, .ignore])
+        // 末尾の角括弧は捨てずに情報へ(@info)。
+        #expect(r.metadata.info == "付記")
+        #expect(r.metadata.event.isEmpty)
+        #expect(r.spans.map(\.word) == [.genre, .author, .author, .title, .source, .info])
     }
 
-    @Test func trailingSquareBracketOnlyIsIgnored() {
+    @Test func trailingSquareBracketIsInfo() {
         let r = Self.read("[架空工房] 月の庭 [付記]")
-        #expect(r.formatIndex == FilenameFormats.presetTexts.firstIndex(of: "[@author] @title [@ignore]"))
+        #expect(r.formatIndex == FilenameFormats.presetTexts.firstIndex(of: "[@author] @title [@info]"))
+        #expect(r.metadata.info == "付記")
         #expect(r.metadata.title == "月の庭")
     }
 
@@ -119,7 +121,7 @@ import Testing
 
     @Test func presetHasSixteenFormats() {
         #expect(FilenameFormats.presetTexts.count == 16)
-        #expect(FilenameFormats.presetTexts.first == "(@genre) [@author (@author)] @title (@source) [@ignore]")
+        #expect(FilenameFormats.presetTexts.first == "(@genre) [@author (@author)] @title (@source) [@info]")
         #expect(FilenameFormats.presetTexts.last == "[@author] @title")
     }
 

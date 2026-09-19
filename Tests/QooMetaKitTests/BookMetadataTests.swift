@@ -8,8 +8,8 @@ import QooMetaRules
 @Suite struct BookMetadataTests {
     static let sample = BookMetadata(
         title: "星降る夜の喫茶店 3", authors: ["架空工房", "月見そば太郎", "原案の人"], genre: "架空ジャンル",
-        source: "架空の原作", keywordA: "甲", keywordB: "乙", keywordC: "",
-        memo: "手元のメモ", series: "星降る夜の喫茶店", volume: "3", volumeNumber: 3)
+        source: "架空の原作",
+        info: "付記", series: "星降る夜の喫茶店", volume: "3", volumeNumber: 3)
 
     @Test func emptyByDefault() {
         let m = BookMetadata()
@@ -25,8 +25,7 @@ import QooMetaRules
         #expect(m.values(.authors) == ["架空工房", "月見そば太郎", "原案の人"])
         #expect(m.values(.genre) == ["架空ジャンル"])
         #expect(m.values(.source) == ["架空の原作"])
-        #expect(m.values(.keywordB) == ["乙"])
-        #expect(m.values(.keywordC).isEmpty)
+        #expect(m.values(.event).isEmpty)
         #expect(m.values(.series) == ["星降る夜の喫茶店"])
         #expect(m.values(.volume) == ["3"])
     }
@@ -42,8 +41,8 @@ import QooMetaRules
         #expect(m.authors == ["別の架空工房"])
         m.set(.source, to: [])
         #expect(m.source.isEmpty)
-        m.set(.memo, to: [""])
-        #expect(m.memo.isEmpty)
+        m.set(.info, to: [""])
+        #expect(m.info.isEmpty)
         // 書き換えた欄のほかは変わらない。
         #expect(m.genre == Self.sample.genre)
         #expect(m.title == Self.sample.title)
