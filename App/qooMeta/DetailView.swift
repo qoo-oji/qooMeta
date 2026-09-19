@@ -28,15 +28,21 @@ struct DetailView: View {
                         FieldEditor(workspace: workspace, field: field, books: books)
                     }
                 }
-                Section("シリーズと巻(規則で導いたもの)") {
+                Section("シリーズと巻数(規則で導いたもの)") {
                     LabeledContent("シリーズ", value: uniform(books, .series) ?? "<複数値>")
-                    LabeledContent("巻", value: uniform(books, .volume) ?? "<複数値>")
+                    LabeledContent("巻数(表示)", value: uniform(books, .volume) ?? "<複数値>")
+                    LabeledContent("巻数(ソート)", value: uniformSort(books) ?? "<複数値>")
                 }
             }
             .formStyle(.grouped)
             // 選択が変わったら、入力中の値を捨てる。
             .id(books.map(\.id))
         }
+    }
+
+    func uniformSort(_ books: [BookRow]) -> String? {
+        let values = Set(books.map(\.volumeSortText))
+        return values.count == 1 ? values.first! : nil
     }
 
     func uniform(_ books: [BookRow], _ field: BookMetadata.Field) -> String? {

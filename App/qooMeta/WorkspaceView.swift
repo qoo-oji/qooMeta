@@ -82,6 +82,11 @@ struct BookTableView: View {
                 .width(min: 160, ideal: 360)
                 .customizationID("fileName")
                 .disabledCustomizationBehavior(.visibility)
+            TableColumn("巻数(ソート)", value: \BookRow[sortKey: .volume]) { book in
+                Text(book.volumeSortText)
+            }
+            .width(min: 60, ideal: 90)
+            .customizationID("volumeSort")
             TableColumnForEach(Self.columns, id: \.self) { field in
                 TableColumn(field.label, sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
                     Text(book[text: field])
@@ -103,7 +108,7 @@ extension BookMetadata.Field {
         case .source: "原作"
         case .info: "情報"
         case .series: "シリーズ"
-        case .volume: "巻"
+        case .volume: "巻数(表示)"
         }
     }
 }

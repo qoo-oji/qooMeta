@@ -1,7 +1,6 @@
 .build/
 .swiftpm/
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
+xcuserdata/
 .DS_Store
 # 蔵書の名前を含みうる生成物・手元の一覧は、リポジトリの外(~/Library/Application Support/qooMeta-dev/)へ置く。
 # 誤ってここへ書き出したときの最後の防波堤。

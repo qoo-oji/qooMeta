@@ -22,6 +22,12 @@ struct BookRow: Identifiable, Hashable {
         metadata.values(field).joined(separator: "、")
     }
 
+    /// 巻数(ソート用)の表示(空なら「-」)。
+    var volumeSortText: String {
+        guard let n = metadata.volumeSort else { return "" }
+        return n == n.rounded() ? String(Int(n)) : String(n)
+    }
+
     /// 並べ替えの鍵。シリーズは シリーズ → 巻(シリーズの無い本は後ろ)、巻は数の順(数に読めない表記は後ろ)。
     subscript(sortKey field: BookMetadata.Field) -> String {
         switch field {
@@ -29,7 +35,7 @@ struct BookRow: Identifiable, Hashable {
             guard !metadata.series.isEmpty else { return "\u{10FFFF}" + metadata.title }
             return metadata.series + "\u{1}" + self[sortKey: .volume]
         case .volume:
-            if let n = metadata.volumeNumber { return String(format: "%012.3f", n) }
+            if let n = metadata.volumeSort { return String(format: "%012.3f", n) }
             return metadata.volume.isEmpty ? "\u{10FFFF}" : "~" + metadata.volume
         default:
             return self[text: field]
@@ -108,7 +114,7 @@ final class Workspace {
             books[i].seriesID = r?.seriesID
             books[i].metadata.series = r?.series ?? ""
             books[i].metadata.volume = r?.volume?.text ?? ""
-            books[i].metadata.volumeNumber = r?.volume?.sortKey
+            books[i].metadata.volumeSort = r?.volume?.sortKey
         }
         // 書き換えで消えた値の絞り込みは外す(残すと、どの本にも合わない絞り込みで一覧が空になる)。
         if let g = genreFilter, !genreValues.contains(where: { $0.key == g }) { genreFilter = nil }

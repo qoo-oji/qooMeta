@@ -9,14 +9,14 @@ import QooMetaRules
     static let sample = BookMetadata(
         title: "星降る夜の喫茶店 3", authors: ["架空工房", "月見そば太郎", "原案の人"], genre: "架空ジャンル",
         source: "架空の原作",
-        info: "付記", series: "星降る夜の喫茶店", volume: "3", volumeNumber: 3)
+        info: "付記", series: "星降る夜の喫茶店", volume: "3", volumeSort: 3)
 
     @Test func emptyByDefault() {
         let m = BookMetadata()
         for field in BookMetadata.Field.allCases {
             #expect(m.values(field).isEmpty, "\(field)")
         }
-        #expect(m.volumeNumber == nil)
+        #expect(m.volumeSort == nil)
     }
 
     @Test func valuesOfEachField() {
@@ -58,13 +58,13 @@ import QooMetaRules
         }
     }
 
-    @Test func changingVolumeTextDropsNumber() {
+    @Test func changingVolumeDropsSortKey() {
         var m = Self.sample
         m.set(.volume, to: ["3"])
-        #expect(m.volumeNumber == 3)  // 同じ表記なら数は残す
+        #expect(m.volumeSort == 3)  // 同じ表記なら数は残す
         m.set(.volume, to: ["上"])
         #expect(m.volume == "上")
-        #expect(m.volumeNumber == nil)
+        #expect(m.volumeSort == nil)
     }
 
     @Test func codableRoundTrip() throws {

@@ -21,13 +21,14 @@ public struct BookMetadata: Sendable, Hashable, Codable {
     public var info: String
     /// シリーズ。ファイル名からは読まず、中核の規則で導く。
     public var series: String
-    /// 巻の表記(「3」「上」「総集編1」)。表記は数に読めなくてもよい。
+    /// 巻数(表示用)。名前に書かれていた表記(「第01巻」「上」「総集編2」)。数に読めなくてもよい。
     public var volume: String
-    /// 巻の数(並べ替え用。読めなければ nil)。巻を数でしか持てない利用先へはこれを渡す。
-    public var volumeNumber: Double?
+    /// 巻数(ソート用)。シリーズの中の位置(「第01巻」なら 1.0)。総集編などをシリーズに含めるときは、設定したオフセットを足した数
+    /// (オフセット 100 の「総集編2」なら 102.0)。読めなければ nil。
+    public var volumeSort: Double?
 
     public init(title: String = "", authors: [String] = [], genre: String = "", event: String = "", source: String = "",
-                info: String = "", series: String = "", volume: String = "", volumeNumber: Double? = nil) {
+                info: String = "", series: String = "", volume: String = "", volumeSort: Double? = nil) {
         self.title = title
         self.authors = authors
         self.genre = genre
@@ -36,7 +37,7 @@ public struct BookMetadata: Sendable, Hashable, Codable {
         self.info = info
         self.series = series
         self.volume = volume
-        self.volumeNumber = volumeNumber
+        self.volumeSort = volumeSort
     }
 
     /// 欄。絞り込み・まとめて書き換える操作・書き出しのプレビューが、欄を 1 つずつ書かずに済むように。
@@ -71,7 +72,7 @@ public struct BookMetadata: Sendable, Hashable, Codable {
     /// 欄を書き換える。著者の並びからは空の値を除く(空の要素は絞り込みで「(空)」と見分けられないので作らない)。
     /// 1 つの値の欄は先頭の値にする。
     ///
-    /// 巻の表記を書き換えると、巻の数は捨てる(表記と食い違った数を残さない。読み直すのは呼び出し側)。
+    /// 巻数(表示用)を書き換えると、巻数(ソート用)は捨てる(表記と食い違った数を残さない。読み直すのは呼び出し側)。
     public mutating func set(_ field: Field, to newValues: [String]) {
         let list = newValues.filter { !$0.isEmpty }
         let one = list.first ?? ""
@@ -84,7 +85,8 @@ public struct BookMetadata: Sendable, Hashable, Codable {
         case .info: info = one
         case .series: series = one
         case .volume:
-            if volume != one { volumeNumber = nil }
+            // 表示用を書き換えたら、ソート用は捨てる(食い違った数を残さない。読み直すのは呼び出し側)。
+            if volume != one { volumeSort = nil }
             volume = one
         }
     }
