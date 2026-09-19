@@ -79,6 +79,13 @@ public struct RulesIssue: Sendable, Hashable {
 
 /// 規則の一覧(種類・パラメータの型と範囲・今の値・既定値・利用者が変えたかどうか)。表示の言葉は含まない。
 public struct RuleCatalog: Sendable {
+    /// 好みで選ぶ方針(版・総集編・雑誌の扱い …)。規則より手前の、ふつうの設定として見せる。
+    public struct Policy: Sendable, Identifiable {
+        public let id: PolicyID
+        public let choices: [String], current: String, defaultChoice: String
+    }
+    public let policies: [Policy]
+
     public struct Entry: Sendable, Identifiable {
         public let id: RuleID, stage: Stage
         public let isEnabled: Bool, isModified: Bool
@@ -193,7 +200,7 @@ public struct BookProposal: Sendable, Hashable {
     public let parsed: ParsedName
     public let seriesID: SeriesID?
     public let volume: Volume?
-    public let flags: Set<Flag>                    // .inferredVolume, .edition, .compilation, .confirmed …
+    public let flags: Set<Flag>                    // .inferredVolume, .edition, .source, .compilation, .magazineIssue, .confirmed …
 }
 
 public struct SeriesProposal: Sendable, Hashable, Identifiable {
@@ -210,6 +217,9 @@ public struct Volume: Sendable, Hashable {
     public let inferred: Bool
 }
 ```
+
+認識の結果(`flags`、`parsed.editions`・`sources`)は、**方針に関わらず返す**。総集編を本編に含めるか・版違いを別の本として数えるか、
+といった扱いは規則の `policies` で選べるが(rules-format-design.md「認識と方針を分ける」)、利用側は印を見て自分の扱いを決めてもよい。
 
 #### `SeriesID` の約束
 
@@ -269,6 +279,7 @@ public struct RuleChanges: Sendable {
     public static var none: RuleChanges { get }                           // 初期化
     public init(data: Data) throws(RulesIssue)
     public func data() -> Data                                            // 保存・持ち運び用(rules-bundle)
+    public mutating func setPolicy(_ choice: String, for policy: PolicyID)
     public mutating func setEnabled(_ enabled: Bool, rule: RuleID)
     public mutating func setValue(_ value: RuleValue, rule: RuleID, parameter: String)
     public mutating func add(_ words: [String], to list: String)
@@ -297,6 +308,8 @@ public func makeFeedbackExample(_ books: [BookInput], corrected: [String: Confir
 | それ以外の英字の語 | 辞書に無い作り語(同じ長さ) |
 | かな・カタカナ・漢字の語 | 同じ文字種・同じ長さの架空の語(同じ語は同じ語へ。先頭が共通する語は、置き換えた後も同じ長さだけ共通させる) |
 
+- 利用者の直しが、方針(`policies`)を 1 つ切り替えれば満たされるなら、それは好みの違いであって報告する不具合ではない。
+  `FeedbackExample.satisfiedByPolicy` に、その方針と値を返す(利用側は、報告の前に切り替えを提案する)。
 - 置き換えた例で、元と同じ結果(組と巻)になることを確かめてから返す。ならなければ `FeedbackExample.isFaithful == false`。
 - 利用側は、置き換えた結果を利用者に見せ、同意を得てから送る。
 

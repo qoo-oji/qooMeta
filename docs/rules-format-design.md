@@ -28,6 +28,52 @@
 7. **処理に関係しない説明は入れない**(理由・由来の文は書かない。説明は docs/rules.md)。
 8. 規則の中の正規表現は **ICU の正規表現**(NSRegularExpression)とする。どのアプリでも同じ規則ファイルが同じ意味になるように。
 
+## 認識と方針を分ける(利用者の判断)
+
+今の既定値の一部は、**作者の好みで決めた扱い**であって、正解が 1 つあるわけではない(「フルカラー版や総集編もシリーズに含めたい」
+という人もいる)。そこで、規則を 2 種類に分ける。
+
+- **認識**: それが何であるかを見分ける(これは版の印、これは総集編、これは雑誌の号、これは巻)。好みに依らない。
+- **方針**: 見分けたものを**どう扱うか**。好みで選ぶ。選択肢は決まった値の中から選ぶ(自由な式にはしない)。
+
+方針は `policies` にまとめて置く。規則の編集より手前の、ふつうの設定として見せられるようにするため
+(GUI では「規則」ではなく「好み」として最初に出す)。既定値は今の扱いのまま。
+
+| 方針 | 値(**太字**が既定) | 意味 |
+|---|---|---|
+| `editions` | **`sameWork`** / `separateBooks` / `ignore` | 版違い(フルカラー版 …)を、同じ作品の別の版とみなす(同じ巻。版違いだけの組はシリーズにしない)/ 別の本としてシリーズに数える(「X」と「X フルカラー版」で組になる)/ 印を見分けない |
+| `sources` | **`sameWork`** / `separateBooks` / `ignore` | 入手経路違い(DL版・特装版 …)。同上 |
+| `compilations` | **`ownSeries`** / `inMainSeries` / `notInSeries` | 総集編を「X 総集編」という別のシリーズにする / 本編のシリーズ「X」に含める / どのシリーズにも入れない |
+| `compilationVolume` | **`none`** / `afterRange` | (`inMainSeries` のとき)本編の中での総集編の巻。付けない(並びは末尾)/ 収録範囲が読めたら、その最後の巻の直後(「1~4」なら 4.5) |
+| `magazines` | **`perYear`** / `whole` | 雑誌を 1 年ぶんごとのシリーズにする(巻は号)/ 雑誌全体で 1 つのシリーズにする(並べ替え用の数は 年 × 100 + 号) |
+| `unnumberedFirst` | **`inferFirst`** / `leaveEmpty` | 番号の無い 1 冊を 1 巻とみなす / みなさない |
+| `differentRelation` | **`split`** / `keep` | ネタ(関連)が違う本を別のシリーズに分ける / 分けない |
+| `differentGenre` | **`split`** / `keep` | 本の種別が違う本を別のシリーズにする / 同じシリーズにしてよい |
+| `subtitled` | **`attach`** / `separate` | 副題付きの本(「X 〇〇編」)を、巻でまとめた「X」に含める / 含めない |
+
+- どの方針を選んでも、**認識の結果は提案に付けて返す**(`.edition`・`.compilation`・`.magazineIssue` などの印、版・入手経路の語)。
+  利用側は、方針に関わらず自分の扱いを決められる。
+- 方針を足すときは、値の 1 つを今の動きに当てて既定にし、`since` を付ける(今の結果が変わらないように)。
+- **フィードバックとの関係**: 利用者の直しが、方針を 1 つ切り替えれば満たされるものなら、それは規則の不具合ではなく好みの違い。
+  GUI は報告を作る前に、合う方針への切り替えを提案する(api.md「フィードバック」)。
+- 例のファイルは既定の方針で確かめる。方針に依る例は、例ごとに `"policies": { … }` を書いて、その方針での期待値を確かめる。
+
+```json
+"policies": {
+  "editions": "sameWork",
+  "sources": "sameWork",
+  "compilations": "ownSeries",
+  "compilationVolume": "none",
+  "magazines": "perYear",
+  "unnumberedFirst": "inferFirst",
+  "differentRelation": "split",
+  "differentGenre": "split",
+  "subtitled": "attach"
+}
+```
+
+差分では値を書くだけ: `"policies": { "compilations": "inMainSeries", "editions": "separateBooks" }`。
+
 ## 版の番号
 
 | 番号 | どこに書くか | いつ上がるか | 何に使うか |
@@ -162,7 +208,7 @@
     "variants": "@list:variantKanji"
   },
 
-  "partition": { "by": ["circle", "genre"] },
+  "policies": { "editions": "sameWork", "compilations": "ownSeries", "…": "上の表のとおり" },
 
   "markers": {
     "edition": { "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
@@ -170,8 +216,8 @@
   },
 
   "grouping": {
-    "compilation":  { "enabled": true, "words": "@list:compilationWords", "singleWhenMainExists": true },
-    "volumeHead":   { "enabled": true, "attachSubtitled": true },
+    "compilation":  { "words": "@list:compilationWords", "singleWhenMainExists": true },
+    "volumeHead":   { "enabled": true },
     "sharedPrefix": {
       "enabled": true, "minPrefix": 4, "minWholeTitle": 2, "boundaries": "@list:boundaryCharacters",
       "conditions": {
@@ -180,8 +226,8 @@
         "reject-common-english":  { "enabled": true, "dictionary": "english", "unlessVolume": true }
       }
     },
-    "splitByRelation": { "enabled": true, "unlabeled": "joinLargest" },
-    "rejectSameWork":  { "enabled": true }
+    "splitByRelation": { "unlabeled": "joinLargest" },
+    "rejectSameWork":  { }
   },
 
   "naming": {
@@ -202,7 +248,7 @@
     ],
     "inference": {
       "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },
-      "firstVolume": { "enabled": true, "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
+      "firstVolume": { "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
     }
   },
 
@@ -211,7 +257,9 @@
 }
 ```
 
-- 段階(`compare` → `partition` → `markers` → `grouping` → `naming` → `volume`)と、`grouping`・`naming`・`inference` の中の規則の順は固定。
+- `compilation`・`splitByRelation`・`rejectSameWork`・`firstVolume` と、比べる単位・副題付きの扱いは、**働くかどうかを `policies` が決める**
+  (ここに書くのは認識のための語とパラメータだけ)。
+- 段階(`compare` → 比べる単位 → `markers` → `grouping` → `naming` → `volume`)と、`grouping`・`naming`・`inference` の中の規則の順は固定。
   キーの名前が規則の ID を兼ねる。
 - **`volume.readers` だけは並び順が優先順位**(上から試し、最初に読めたものを採る)。差分の `$order` で並べ替えられ、新しい読み手を足せる。
 - 最初の実装では、処理に埋め込んである読み方(`ordinal`・`roman`・`greek` など)は**オン・オフだけ**を外に出す。細かいパラメータは、
@@ -294,7 +342,7 @@
 
 | 入れる | 後回し |
 |---|---|
-| 包みと `schemaVersion`・`engineLevel`・`since`・`required` | 第 1 版からのマイグレーション(仕組みだけ) |
+| 包みと `schemaVersion`・`engineLevel`・`since`・`required`、`policies` | 第 1 版からのマイグレーション(仕組みだけ) |
 | 固定の段階と、ID の付いた規則のオン・オフ・パラメータ | 埋め込みの読み方の細かいパラメータ |
 | `lists` と `$add`/`$remove`/`$set`/`$unset`/`$replace`、読み手の `$order` | プロファイルの適用の条件 |
 | 誤りをすべて集める厳密な検証(近い綴りの候補、`retiredIDs`・`aliases`) | JSON Schema を登録簿から自動で作ること(最初は手で書く) |
@@ -308,4 +356,5 @@
 - このリポジトリの規則は既定値。利用者の変更は別の JSON(差分)に保存して以降それを使い、初期化で既定値に戻す。
 - 例のファイルは、実在しない本の名前だけで書いて公開する。
 - 段階は固定。並べ替えられるのは巻の読み手だけ。
+- 認識と方針を分ける。好みで決まる扱い(版・総集編・雑誌・1 巻の推定 …)は `policies` で選べるようにし、既定値は今の扱い。
 - 規則ファイルはパスを指さない。辞書は名前で指し、利用側が渡す。
