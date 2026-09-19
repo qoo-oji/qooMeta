@@ -16,31 +16,22 @@ public struct ExampleFile: Sendable {
     public static func bundled() throws -> ExampleFile {
         guard let url = Bundle.module.url(forResource: "examples", withExtension: "json", subdirectory: "Resources")
             ?? Bundle.module.url(forResource: "examples", withExtension: "json") else {
-            throw RuleIssue(.error, at: "", "同梱の例のファイルが見つからない")
+            throw RulesIssue(.missingKey, source: "examples", at: "", "同梱の examples.json")
         }
         return try load(Data(contentsOf: url)).get()
     }
 
     /// 読んで検証する。誤りは最初の 1 件で止めず、すべて集めて返す。
-    public static func load(_ data: Data) -> Result<ExampleFile, RuleIssues> {
+    public static func load(_ data: Data) -> Result<ExampleFile, RulesIssues> {
         let root: JSONValue
-        do { root = try JSONValue.parse(data) } catch let issue as RuleIssue {
-            return .failure(RuleIssues([issue]))
-        } catch {
-            return .failure(RuleIssues([RuleIssue(.error, at: "", "\(error)")]))
+        do { root = try JSONValue.parse(data, source: "examples") } catch {
+            return .failure(RulesIssues([error]))
         }
         var reader = ExampleReader()
         let file = reader.file(root)
-        if let file, !reader.issues.contains(where: { $0.severity == .error }) { return .success(file) }
-        return .failure(RuleIssues(reader.issues))
+        if let file, reader.issues.isEmpty { return .success(file) }
+        return .failure(RulesIssues(reader.issues))
     }
-}
-
-/// 読み込みで見つかった誤りの一式(`Error` として投げられるように包む)。
-public struct RuleIssues: Error, Sendable, CustomStringConvertible {
-    public var issues: [RuleIssue]
-    public init(_ issues: [RuleIssue]) { self.issues = issues }
-    public var description: String { issues.map(\.description).joined(separator: "\n") }
 }
 
 public struct Example: Sendable {
@@ -73,33 +64,33 @@ public struct Expectation: Sendable {
 
 /// 例のファイルの読み手。道筋(`examples[2].expect[0]`)を付けて誤りを集める。
 struct ExampleReader {
-    var issues: [RuleIssue] = []
+    var issues: [RulesIssue] = []
 
-    mutating func error(_ path: String, _ message: String, suggestion: String? = nil) {
-        issues.append(RuleIssue(.error, at: path, message, suggestion: suggestion))
+    mutating func error(_ path: String, _ code: RulesIssue.Code, _ detail: String? = nil, suggestion: String? = nil) {
+        issues.append(RulesIssue(code, source: "examples", at: path, detail, suggestion: suggestion))
     }
 
     /// 知らないキーを誤りにする(読み飛ばすと、書き間違えた期待値が黙って確かめられなくなる)。
     mutating func object(_ value: JSONValue, _ path: String, allowed: [String]) -> [String: JSONValue]? {
         guard case .object(let o) = value else {
-            error(path, "オブジェクトであるべきところが\(value.kindName)")
+            error(path, .invalidValue, "オブジェクトであるべきところが\(value.kindName)")
             return nil
         }
         for key in o.keys.sorted() where !allowed.contains(key) {
-            error(join(path, key), "知らないキー", suggestion: Spelling.suggestion(for: key, among: allowed))
+            error(join(path, key), .unknownKey, suggestion: Spelling.suggestion(for: key, among: allowed))
         }
         return o
     }
 
     mutating func string(_ value: JSONValue?, _ path: String) -> String? {
-        guard let value else { error(path, "必要なキーが無い"); return nil }
-        guard case .string(let s) = value else { error(path, "文字列であるべきところが\(value.kindName)"); return nil }
+        guard let value else { error(path, .missingKey); return nil }
+        guard case .string(let s) = value else { error(path, .invalidValue, "文字列であるべきところが\(value.kindName)"); return nil }
         return s
     }
 
     mutating func strings(_ value: JSONValue?, _ path: String) -> [String]? {
         guard let value else { return nil }
-        guard case .array(let items) = value else { error(path, "文字列の配列であるべきところが\(value.kindName)"); return nil }
+        guard case .array(let items) = value else { error(path, .invalidValue, "文字列の配列であるべきところが\(value.kindName)"); return nil }
         return items.enumerated().compactMap { string($0.element, "\(path)[\($0.offset)]") }
     }
 
@@ -109,17 +100,17 @@ struct ExampleReader {
         guard let o = object(root, "", allowed: ["$schema", "kind", "schemaVersion", "revision", "vocabulary", "examples"])
         else { return nil }
         if let kind = string(o["kind"], "kind"), kind != ExampleFile.kind {
-            error("kind", "例のファイルではない(\(kind))")
+            error("kind", .wrongKind, kind)
         }
         switch o["schemaVersion"] {
         case .number(let v) where v == Double(ExampleFile.supportedSchemaVersion): break
-        case .number(let v): error("schemaVersion", "この版の qooMeta が読めない形式の版(\(v))")
-        case nil: error("schemaVersion", "必要なキーが無い")
-        case let v?: error("schemaVersion", "数であるべきところが\(v.kindName)")
+        case .number(let v): error("schemaVersion", .unsupportedSchemaVersion, JSONValue.number(v).rendered())
+        case nil: error("schemaVersion", .missingKey)
+        case let v?: error("schemaVersion", .invalidValue, "数であるべきところが\(v.kindName)")
         }
         let genres = o["vocabulary"].flatMap { vocabulary($0, "vocabulary") } ?? []
         guard case .array(let items)? = o["examples"] else {
-            error("examples", o["examples"] == nil ? "必要なキーが無い" : "配列であるべきところ")
+            if o["examples"] == nil { error("examples", .missingKey) } else { error("examples", .invalidValue, "配列であるべきところ") }
             return nil
         }
         var seen = Set<String>()
@@ -127,7 +118,7 @@ struct ExampleReader {
         for (i, item) in items.enumerated() {
             let path = "examples[\(i)]"
             guard let e = example(item, path) else { continue }
-            if !seen.insert(e.id).inserted { error("\(path).id", "同じ ID の例がほかにある(\(e.id))") }
+            if !seen.insert(e.id).inserted { error("\(path).id", .duplicateID, e.id) }
             examples.append(e)
         }
         return ExampleFile(genres: genres, examples: examples)
@@ -141,7 +132,7 @@ struct ExampleReader {
     mutating func example(_ value: JSONValue, _ path: String) -> Example? {
         guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary"]) else { return nil }
         let id = string(o["id"], join(path, "id")) ?? ""
-        if id.isEmpty, o["id"] != nil { error(join(path, "id"), "空の ID") }
+        if id.isEmpty, o["id"] != nil { error(join(path, "id"), .invalidValue, "空の ID") }
 
         var books: [ExampleBook] = []
         if case .array(let files)? = o["files"], !files.isEmpty {
@@ -153,28 +144,28 @@ struct ExampleReader {
                     guard let b = object(f, p, allowed: ["name", "folders"]), let name = string(b["name"], "\(p).name")
                     else { continue }
                     books.append(ExampleBook(name: name, folders: strings(b["folders"], "\(p).folders") ?? []))
-                default: error(p, "文字列か { \"name\": …, \"folders\": […] } であるべきところが\(f.kindName)")
+                default: error(p, .invalidValue, "文字列か { \"name\": …, \"folders\": […] } であるべきところが\(f.kindName)")
                 }
             }
         } else {
-            error(join(path, "files"), "本の名前の配列(1 冊以上)が必要")
+            error(join(path, "files"), .invalidValue, "本の名前の配列(1 冊以上)が必要")
         }
 
         var expectations: [Expectation] = []
         if case .array(let items)? = o["expect"] {
             if items.count != books.count, !books.isEmpty {
-                error(join(path, "expect"), "files と同じ数の期待値が必要(files \(books.count)、expect \(items.count))")
+                error(join(path, "expect"), .invalidValue, "files と同じ数の期待値が必要(files \(books.count)、expect \(items.count))")
             }
             for (i, item) in items.enumerated() {
                 if let e = expectation(item, "\(path).expect[\(i)]") { expectations.append(e) }
             }
         } else {
-            error(join(path, "expect"), "期待値の配列が必要")
+            error(join(path, "expect"), .invalidValue, "期待値の配列が必要")
         }
 
         let covers = strings(o["covers"], join(path, "covers")) ?? []
         for (i, rule) in covers.enumerated() where !KnownRuleIDs.all.contains(rule) {
-            error("\(path).covers[\(i)]", "知らない規則の ID(\(rule))", suggestion: Spelling.suggestion(for: rule, among: KnownRuleIDs.all))
+            error("\(path).covers[\(i)]", .unknownKey, rule, suggestion: Spelling.suggestion(for: rule, among: KnownRuleIDs.all))
         }
         let genres = o["vocabulary"].flatMap { vocabulary($0, join(path, "vocabulary")) }
         return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres)
@@ -197,35 +188,13 @@ struct ExampleReader {
                  (.event, .string), (.event, .null):
                 break
             default:
-                error(p, "この項目に\(v.kindName)は書けない")
+                error(p, .invalidValue, "この項目に\(v.kindName)は書けない")
                 continue
             }
             checks.append((field, v))
         }
         return Expectation(checks: checks)
     }
-}
-
-/// 例の `covers` に書ける規則の ID。第 2 版の規則ファイルの段階・規則・方針の名前(docs/rules-format-design.md)。
-///
-/// 規則のカタログ(roadmap.md 段階 0 の 6)ができたら、そちらから引く。それまでの仮の一覧。
-public enum KnownRuleIDs {
-    public static let all: [String] = [
-        // 比べる形・印
-        "ignored", "variants", "edition", "source",
-        // 組の作り方と、組にしない条件
-        "compilation", "volumeHead", "sharedPrefix", "reject-hiragana-ending", "reject-single-script",
-        "reject-common-english", "splitByRelation", "rejectSameWork",
-        // 名前の整え方
-        "includeClosingBrackets", "includeFollowing", "trimTrailing", "dropLastWord",
-        // 巻の読み手と推定
-        "ordinal", "number", "kanji", "greek", "roman", "position", "sharedLeadingKanji", "firstVolume",
-        // ファイル名のフォーマット
-        "doujinshi", "simpleBrackets", "wholeNameAsTitle",
-        // 方針
-        "editions", "sources", "compilations", "compilationVolume", "magazines", "unnumberedFirst",
-        "differentRelation", "differentGenre", "subtitled",
-    ]
 }
 
 /// 例を今の規則で処理し、期待値と比べる。

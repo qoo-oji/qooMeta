@@ -26,8 +26,21 @@ public struct SeriesGrouper: Sendable {
     /// 語の途中で切れる共通部分が、ひらがなで終わるなら組にしない。
     public var rejectsHiraganaEndings: Bool
 
-    /// ネタ(`@genre`)が違う本を分けるか。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
+    /// ネタ(`@genre`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
     public var splitsByGenre = RuleFiles.seriesRules.grouping.splitByGenre
+
+    /// 本の種別(`@mediatype`)が違う本を分けるか(方針 differentGenre)。
+    public var splitsByMediaType = RuleFiles.seriesRules.grouping.splitByMediaType
+
+    /// 1 段目(「タイトル + 巻」を頭でまとめる。規則 volumeHead)と 2 段目(共通する前半部分。規則 sharedPrefix)を使うか。
+    public var usesVolumeHeads = RuleFiles.seriesRules.grouping.volumeHeadEnabled
+    public var usesSharedPrefixes = RuleFiles.seriesRules.grouping.sharedPrefixEnabled
+
+    /// 一般的な英語だけのタイトルでも、後ろに巻があれば組にする。
+    public var commonEnglishUnlessVolume = RuleFiles.seriesRules.grouping.commonEnglishUnlessVolume
+
+    /// 本編のシリーズがあれば、総集編が 1 冊でもシリーズにする。
+    public var singleCompilationWithMain = RuleFiles.seriesRules.grouping.compilationSingleWhenMainExists
 
     /// 既定値は series-rules.json の grouping。
     public init(minPrefix: Int = RuleFiles.seriesRules.grouping.minPrefix,
@@ -133,7 +146,7 @@ public struct SeriesGrouper: Sendable {
     /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
     /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。種別が読めなかった本は書き手だけで比べる。
     func partitionKey(_ book: BookProposal) -> String {
-        let mediaType = String(ComparableText(book.parsed.mediaType ?? "").key)
+        let mediaType = splitsByMediaType ? String(ComparableText(book.parsed.mediaType ?? "").key) : ""
         return mediaType.isEmpty ? book.circleKey : "\(book.circleKey)\u{1}\(mediaType)"
     }
 
@@ -157,14 +170,16 @@ public struct SeriesGrouper: Sendable {
             var rest: [(id: Int, text: ComparableText)] = []
             for item in items {
                 // 後ろが巻だけでできていることを求めるので、頭は 1 文字でもよい(「咲 18」)。
-                if let head = Self.volumeHeadLength(item.text, minLength: 1) {
+                if usesVolumeHeads, let head = Self.volumeHeadLength(item.text, minLength: 1) {
                     byHead[String(item.text.key.prefix(head)), default: []].append((item.id, item.text, head))
                 } else {
                     rest.append(item)
                 }
             }
             var headGroups: [(key: String, members: [(id: Int, text: ComparableText, headLength: Int)])] = []
-            for (key, members) in byHead {
+            // 辞書の並びはプロセスごとに変わるので、キーの順に並べてから使う。下の「1 冊だけの頭の組を移す」処理は
+            // 組の並びで結果が変わりうる(同じ入力なら毎回同じ結果にする。api.md「方針」の 5)。
+            for (key, members) in byHead.sorted(by: { $0.key < $1.key }) {
                 // 巻の無い本(「X」)が同じ頭なら、その組に入れる(1 巻目に番号が無いことは多い)。
                 var members = members
                 rest.removeAll { item in
@@ -176,7 +191,12 @@ public struct SeriesGrouper: Sendable {
             }
             // 1 冊だけの頭の組は、もっと短い頭の組に語の切れ目で当たるなら、そちらへ移す。
             // 「X2～副題 1～」のように末尾の別の番号を巻と読んで長い頭になった本を、「X」の組へ戻すため。
-            for g in headGroups.indices where headGroups[g].members.count == 1 {
+            // 長い頭から順に見る(移す先がまだ移されていないうちに。並びで結果が変わらないように)。
+            let longestFirst = headGroups.indices.sorted {
+                headGroups[$0].key.count != headGroups[$1].key.count
+                    ? headGroups[$0].key.count > headGroups[$1].key.count : headGroups[$0].key < headGroups[$1].key
+            }
+            for g in longestFirst where headGroups[g].members.count == 1 {
                 let m = headGroups[g].members[0]
                 let key = String(m.text.key)
                 guard let h = headGroups.indices
@@ -213,7 +233,7 @@ public struct SeriesGrouper: Sendable {
 
             // 2 段目: 残りを、共通する前半部分でまとめる。
             let sorted = rest.sorted { String($0.text.key) < String($1.text.key) }
-            for run in runs(sorted) where run.count >= 2 {
+            for run in (usesSharedPrefixes ? runs(sorted) : []) where run.count >= 2 {
                 let prefixLength = run.map(\.prefixLength).min()!
                 let first = run[0].item.text
                 groups.append(SeriesGroup(
@@ -233,12 +253,12 @@ public struct SeriesGrouper: Sendable {
             for key in byName.keys.sorted() {
                 let members = byName[key]!
                 let hasMain = members[0].1.mains.contains { mainKeys.contains(String(ComparableText($0).key)) }
-                guard members.count >= 2 || hasMain else { continue }
+                guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
                 var g = SeriesGroup(
                     id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: members.map(\.0.id).sorted(), ruleName: members.min { $0.0.id < $1.0.id }!.1.name,
                     cleanBoundary: true, circlesSharingPrefix: 0)
-                g.allowsSingle = hasMain
+                g.allowsSingle = hasMain && singleCompilationWithMain
                 groups.append(g)
             }
         }
@@ -281,7 +301,7 @@ public struct SeriesGrouper: Sendable {
                 && !(rejectsCommonEnglishTitles
                      && EnglishWords.isCommonEnglishOnly(last.item.text.original)
                      && EnglishWords.isCommonEnglishOnly(item.text.original)
-                     && !Self.hasVolume(last.item.text, after: l) && !Self.hasVolume(item.text, after: l))
+                     && !(commonEnglishUnlessVolume && (Self.hasVolume(last.item.text, after: l) || Self.hasVolume(item.text, after: l))))
             // 語の途中で切れる一致が、ひらがな(「の」「と」などの助詞)で終わるなら採らない。
             // 言い回しが重なっただけの別作品(利用者の指摘)。
             // 共通部分が文字種の 1 続き(カタカナだけ・漢字だけ…)なら、それは 1 語でしかない。語の途中で切れる一致としては

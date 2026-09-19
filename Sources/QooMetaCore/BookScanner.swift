@@ -48,7 +48,11 @@ public enum BookScanner {
     /// - Parameter qooLibrary: 渡すと qooLibrary のフォーマット処理で先に読み、一致しなければ NameParser へ戻す。
     public static func proposals(from files: [BookFile], qooLibrary: QooLibraryNameParser? = nil) -> [BookProposal] {
         files.enumerated().map { index, file in
-            var parsed = qooLibrary?.parse(baseName: file.baseName) ?? NameParser.parse(baseName: file.baseName)
+            // どのフォーマットにも一致しなければ、括弧の位置だけで読む(規則 fallback.simpleBrackets)。止めていれば名前全体をタイトルにする。
+            var parsed = qooLibrary?.parse(baseName: file.baseName)
+                ?? (RuleFiles.filenameFormats.simpleBracketsEnabled
+                    ? NameParser.parse(baseName: file.baseName)
+                    : ParsedName(title: TextRules.normalizeDisplay(file.baseName), matchedPattern: false))
             let split = EditionMarkers.split(parsed.title)
             if split.base != parsed.title {
                 parsed.workTitle = split.base

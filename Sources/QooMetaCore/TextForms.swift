@@ -63,11 +63,11 @@ public struct ComparableText: Sendable, Equatable {
 }
 
 public enum TextRules {
-    /// 比較のときに無視する文字(空白と、タイトルの飾りによく使われる記号)。series-rules.json の compare.ignoredCharacters。
+    /// 比較のときに無視する文字(空白と、タイトルの飾りによく使われる記号)。series-rules.json の compare.ignored。
     static let ignoredInComparison = Set(RuleFiles.seriesRules.compare.ignoredCharacters)
 
     /// 比較のときに同じ字とみなす異体字(左 → 右)。NFKC では揃わない。表記ゆれでシリーズが割れた実例
-    /// (1 巻だけ異体字)から始めた。書き出す名前の表記は変えない(比較用の形にだけ使う)。series-rules.json の compare.variantKanji。
+    /// (1 巻だけ異体字)から始めた。書き出す名前の表記は変えない(比較用の形にだけ使う)。series-rules.json の compare.variants。
     static let variantFolding: [Character: Character] = Dictionary(uniqueKeysWithValues:
         RuleFiles.seriesRules.compare.variantKanji.compactMap { k, v in
             guard let a = k.first, let b = v.first, k.count == 1, v.count == 1 else { return nil }
@@ -79,7 +79,7 @@ public enum TextRules {
         ignoredInComparison.contains(ch)
     }
 
-    /// 閉じ括弧 → 開き括弧。series-rules.json の naming.brackets。
+    /// 閉じ括弧 → 開き括弧。series-rules.json の naming.includeClosingBrackets(止めていれば空)。
     static let closingToOpening: [Character: Character] = Dictionary(uniqueKeysWithValues:
         RuleFiles.seriesRules.naming.brackets.compactMap { k, v in
             guard let a = k.first, let b = v.first, k.count == 1, v.count == 1 else { return nil }
@@ -87,18 +87,22 @@ public enum TextRules {
         })
 
     /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。series-rules.json の naming.trimTrailing。
+    /// 巻の前の区切り(VolumeExtractor.leadingSeparators)にも使うので、規則を止めてもここは空にしない。
     static let trailingTrim: CharacterSet = {
         var set = CharacterSet.whitespaces
         set.insert(charactersIn: RuleFiles.seriesRules.naming.trimTrailing)
         return set
     }()
 
-    /// 共通部分の直後にあれば名前に含める文字(「!」「?」)。series-rules.json の naming.keepFollowing。
+    /// シリーズ名の末尾から落とす文字(規則 trimTrailing を止めていれば空白だけ)。
+    static let seriesNameTrim: CharacterSet = RuleFiles.seriesRules.naming.trimTrailingEnabled ? trailingTrim : .whitespaces
+
+    /// 共通部分の直後にあれば名前に含める文字(「!」「?」)。series-rules.json の naming.includeFollowing。
     static let keepFollowing = Set(RuleFiles.seriesRules.naming.keepFollowing)
 
-    static let boundaryCharacters = Set(RuleFiles.seriesRules.grouping.boundaryCharacters)
+    static let boundaryCharacters = Set(RuleFiles.seriesRules.compare.boundaryCharacters)
 
-    /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。series-rules.json の grouping.boundaryCharacters。
+    /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。series-rules.json の compare.boundaries。
     static func isBoundary(_ ch: Character) -> Bool {
         if ch.isWhitespace || ch.isNumber { return true }
         return boundaryCharacters.contains(ch)
@@ -116,7 +120,7 @@ public enum TextRules {
     /// (先頭の「【」まで削っていた。利用者の指摘)。
     static func trimSeriesName(_ s: String) -> String {
         var scalars = Substring(s.trimmingCharacters(in: .whitespaces)).unicodeScalars
-        while let last = scalars.last, trailingTrim.contains(last) { scalars.removeLast() }
+        while let last = scalars.last, seriesNameTrim.contains(last) { scalars.removeLast() }
         let trimmed = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespaces)
         // 末尾の 1 語が、後ろに付く名前を導く語(「side」「part」など)なら外す。「X side A」「X side B」の
         // 共通部分は「X side」だが、シリーズ名は「X」(利用者の指摘)。
@@ -127,7 +131,7 @@ public enum TextRules {
         return trimmed
     }
 
-    /// 後ろに付く名前を導く語。シリーズ名の末尾に残ったときだけ外す。series-rules.json の naming.labelIntroducers。
+    /// 後ろに付く名前を導く語。シリーズ名の末尾に残ったときだけ外す。series-rules.json の naming.dropLastWord。
     static let labelIntroducers = Set(RuleFiles.seriesRules.naming.labelIntroducers.map { $0.lowercased() })
 }
 

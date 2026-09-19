@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/examples.schema.json",
   "kind": "qoometa.examples",
   "schemaVersion": 2,
   "revision": "2026.09.19",
@@ -44,7 +45,7 @@
       "id": "parse-plain-name-is-whole-title",
       "files": ["ただのファイル名"],
       "expect": [{ "title": "ただのファイル名", "circle": null, "series": null }],
-      "covers": ["wholeNameAsTitle"]
+      "covers": ["simpleBrackets"]
     },
     {
       "id": "parse-edition-and-source-markers",
@@ -333,6 +334,18 @@
     },
 
     {
+      "id": "single-head-groups-move-longest-first",
+      "files": ["[架空工房] MOON 架空 2", "[架空工房] MOON 架空 3", "[架空工房] MOON 架空 2011年03月号", "[架空工房] MOON 架空 2011年03月号 2"],
+      "expect": [
+        { "series": "MOON 架空", "volumeSort": 2 },
+        { "series": "MOON 架空", "volumeSort": 3 },
+        { "series": "MOON 架空 2011年", "volume": "03" },
+        { "series": "MOON 架空 2011年", "volume": "03" }
+      ],
+      "covers": ["volumeHead", "magazines"]
+    },
+
+    {
       "id": "same-work-in-different-editions-is-not-a-series",
       "files": ["[架空工房] 月の庭", "[架空工房] 月の庭【フルカラー版】"],
       "expect": [{ "series": null }, { "series": null, "editions": ["フルカラー版"] }],
@@ -415,7 +428,7 @@
         { "name": "星降る夜の喫茶店 3", "folders": ["幻想舎"] }
       ],
       "expect": [{ "series": "星降る夜の喫茶店" }, { "series": "星降る夜の喫茶店" }, { "series": null }],
-      "covers": ["volumeHead", "wholeNameAsTitle"]
+      "covers": ["volumeHead", "simpleBrackets"]
     },
     {
       "id": "shrink-only-at-a-word-boundary",

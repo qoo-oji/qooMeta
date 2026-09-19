@@ -52,7 +52,12 @@ $Q export --in "$OUT/proposals.json" --format qooviewer --out "$OUT/qooviewer.js
 $Q judge --in "$OUT/proposals.json"                            # 任意: 端末内モデルでシリーズの組を判定
 $Q evaluate --corpus <正解付き.jsonl>                           # 公開データで規則を採点
 $Q rules test [<例.json> …]                                    # 例のファイル(架空の名前)で規則を確かめる
+$Q rules validate <変更.json>                                  # 規則の変更(差分)を確かめる
+$Q rules show --rules <変更.json>                              # 既定値に変更を重ねた結果
 ```
+
+どのコマンドにも `--rules <変更.json>` を付けると、同梱の既定値に利用者の変更(差分)を重ねて使います。
+書き方は [docs/rules.md](docs/rules.md) です。
 
 ### 設定
 

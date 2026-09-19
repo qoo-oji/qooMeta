@@ -22,17 +22,22 @@ public enum EditionMarkers {
 
     /// 印の正規表現。前後の括弧ごと取り除く。長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
     /// 「DL版」は全角の「ＤＬ版」も受け付ける。「〇〇語版」(英語版・中国語版 …)は版。
-    private static let pattern: NSRegularExpression = {
-        func alternation(_ words: [String]) -> String {
-            words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+    /// 印の規則(markers.edition / markers.source)を止めると、その語は空になる。両方とも空なら印は探さない。
+    private static let pattern: NSRegularExpression? = {
+        func alternation(_ words: [String]) -> [String] {
+            words.isEmpty ? [] : [words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")]
         }
-        let edition = ([alternation(rules.edition)] + rules.editionPatterns).joined(separator: "|")
-        let source = ([alternation(rules.source)] + rules.sourcePatterns).joined(separator: "|")
+        let edition = (alternation(rules.edition) + rules.editionPatterns).joined(separator: "|")
+        let source = (alternation(rules.source) + rules.sourcePatterns).joined(separator: "|")
+        // 空の選択肢は空文字列に一致してしまうので、決して一致しない形(`(?!)`)にする。
+        guard !edition.isEmpty || !source.isEmpty else { return nil }
         return try! NSRegularExpression(
-            pattern: #"\s*[\[［【(（]?\s*(?:(?<edition>"# + edition + #")|(?<source>"# + source + #"))\s*[\]］】)）]?"#)
+            pattern: #"\s*[\[［【(（]?\s*(?:(?<edition>"# + (edition.isEmpty ? "(?!)" : edition) + #")|(?<source>"#
+                + (source.isEmpty ? "(?!)" : source) + #"))\s*[\]］】)）]?"#)
     }()
 
     public static func split(_ title: String) -> Split {
+        guard let pattern else { return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: []) }
         let ns = title as NSString
         var editions: [String] = [], sources: [String] = []
         var base = ""

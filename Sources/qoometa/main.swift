@@ -27,6 +27,12 @@ let usage = """
       正解付きのデータ(author / title / series)で候補づくりを採点する
   qoometa rules test [<例.json> …] [--only <例の ID>] [--verbose]
       例のファイル(架空の名前)を今の規則で処理し、期待値と比べる。ファイルを省くと同梱の例
+  qoometa rules validate <規則.json>
+      規則ファイル(差分、rules-bundle、または既定値の全体)を確かめ、誤りと警告をすべて出す
+  qoometa rules show
+      既定値に利用者の変更を重ねた結果と、変更が効いている所を出す
+
+どのコマンドにも --rules <変更.json> を付けられる(既定値に重ねる利用者の変更。差分か rules-bundle)。
 """
 
 struct Arguments {
@@ -110,6 +116,10 @@ func run() async throws {
     let raw = Array(CommandLine.arguments.dropFirst())
     guard let command = raw.first else { print(usage); return }
     let args = Arguments(Array(raw.dropFirst()))
+    // 利用者の変更は、処理が規則を読み始める前に入れる(RuleFiles.install)。
+    if let path = args.options["rules"] {
+        RuleFiles.install(try compileRules(userChanges: Data(contentsOf: URL(fileURLWithPath: path))))
+    }
 
     switch command {
     case "scan":
@@ -235,13 +245,73 @@ func run() async throws {
         }
 
     case "rules":
-        guard args.positional.first == "test" else { throw CLIError("rules のあとに test を指定してください") }
-        try testExamples(paths: Array(args.positional.dropFirst()), only: args.options["only"],
-                         verbose: args.flags.contains("verbose"))
+        switch args.positional.first {
+        case "test":
+            try testExamples(paths: Array(args.positional.dropFirst()), only: args.options["only"],
+                             verbose: args.flags.contains("verbose"))
+        case "validate":
+            guard let path = args.positional.dropFirst().first else { throw CLIError("確かめる規則ファイルを指定してください") }
+            try validateRules(Data(contentsOf: URL(fileURLWithPath: path)))
+        case "show":
+            let rules = RuleFiles.current
+            print("// シリーズの規則(qoometa.series-rules)")
+            print(rules.mergedSeriesRules.rendered())
+            print("// ファイル名のフォーマット(qoometa.filename-formats)")
+            print(rules.mergedFilenameFormats.rendered())
+            print("// 内容のハッシュ: \(rules.contentHash)")
+            if rules.changedPaths.isEmpty {
+                print("// 利用者の変更: なし(既定値のまま)")
+            } else {
+                print("// 利用者の変更が効いている所:")
+                rules.changedPaths.forEach { print("//   \($0)") }
+            }
+        default:
+            throw CLIError("rules のあとに test・validate・show のどれかを指定してください")
+        }
 
     default:
         print(usage)
     }
+}
+
+/// 渡せる辞書(規則は辞書を名前で指す。ここでは macOS の英単語の一覧だけ)。
+func availableDictionaries() -> Set<String> { EnglishWords.isAvailable ? ["english"] : [] }
+
+func printIssues(_ issues: [RulesIssue]) {
+    for issue in issues { FileHandle.standardError.write(Data("\(issue)\n".utf8)) }
+}
+
+/// 既定値に利用者の変更を重ねて組み立てる。警告は出して続け、誤りがあれば止める。
+func compileRules(userChanges: Data) throws -> CompiledRules {
+    let compilation = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: userChanges),
+                                            dictionaries: availableDictionaries())
+    printIssues(compilation.warnings)
+    guard let rules = compilation.rules else {
+        printIssues(compilation.errors)
+        throw CLIError("規則の変更に誤りがある(\(compilation.errors.count) 件)")
+    }
+    return rules
+}
+
+/// 規則ファイルを確かめる。`"base": "builtin"` があれば差分(または rules-bundle)として既定値に重ね、
+/// 無ければ既定値の全体(同梱の同じ種類のファイルの代わり)として確かめる。
+func validateRules(_ data: Data) throws {
+    var builtIn = try BuiltInRules.bundled()
+    var userChanges: Data? = data
+    if let root = try? JSONValue.parse(data, source: "user"), root["base"] == nil {
+        switch root["kind"]?.stringValue {
+        case "qoometa.series-rules": builtIn.seriesRules = data
+        case "qoometa.filename-formats": builtIn.filenameFormats = data
+        default: break
+        }
+        if builtIn.seriesRules == data || builtIn.filenameFormats == data { userChanges = nil }
+    }
+    let compilation = CompiledRules.compile(RuleSources(builtIn: builtIn, userChanges: userChanges),
+                                            dictionaries: availableDictionaries())
+    for issue in compilation.errors + compilation.warnings { print(issue) }
+    print("誤り \(compilation.errors.count) 件、警告 \(compilation.warnings.count) 件"
+          + (compilation.rules.map { "(内容のハッシュ \($0.contentHash))" } ?? ""))
+    if compilation.rules == nil { exit(1) }
 }
 
 /// 例のファイルを走らせる。例は架空の名前だけなので、食い違いは名前ごと表示する。

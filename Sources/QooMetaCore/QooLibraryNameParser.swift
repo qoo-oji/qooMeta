@@ -16,19 +16,37 @@ import QooFormat
 ///
 /// どのフォーマットにも一致しない名前は nil を返し、呼び出し側が qooMeta 自身の NameParser へ戻す。
 public struct QooLibraryNameParser: Sendable {
-    let settings: LibrarySettingsSnapshot
+    /// プロファイルごとの照合の設定(上から試す)。
+    let settings: [LibrarySettingsSnapshot]
     let parser = FilenameParser()
     /// qooMeta の欄 → 照合の処理のフィールド。
     let fieldRefs: [String: FieldRef]
     let authorSeparators: Set<Character>
 
-    /// - Parameter mediaTypes: 本の種別の語彙(利用者の設定から)。空なら先頭の丸括弧はすべてイベントとして読む。
-    public init(mediaTypes: [String], rules: FilenameFormatRules = RuleFiles.filenameFormats) throws {
-        // Stackroom 式の予約語 → 照合の処理の予約語(1 回の走査で置き換える。順に置き換えると
-        // 「@relation → @genre → @mediatype」のように連鎖してしまう)。
-        let engineWord = rules.reservedWords.mapValues(\.engine)
-        let token = try NSRegularExpression(pattern: "@[A-Za-z]+[0-9]*")
+    /// フォーマットの予約語の読み替えと、意味のある予約語へのフィールドの番号。
+    struct Vocabulary {
+        var bindings: [SemanticKeyword: Int] = [:]
+        var refs: [String: FieldRef] = [:]
+        let engineWord: [String: String]
+
+        init(_ rules: FilenameFormatRules) {
+            engineWord = rules.reservedWords.mapValues(\.engine)
+            // 意味のある予約語(サークル・作者・ネタ …)に、フィールドの番号を振る(番号そのものに意味は無い)。
+            for (i, word) in rules.reservedWords.keys.sorted().enumerated() {
+                let entry = rules.reservedWords[word]!
+                if let keyword = SemanticKeyword(rawValue: entry.engine) {
+                    bindings[keyword] = i + 1
+                    refs[entry.field] = keyword.fieldRef
+                } else if entry.engine == "@title" {
+                    refs[entry.field] = .title
+                }
+            }
+        }
+
+        /// Stackroom 式の予約語 → 照合の処理の予約語(1 回の走査で置き換える。順に置き換えると
+        /// 「@relation → @genre → @mediatype」のように連鎖してしまう)。
         func translate(_ format: String) -> String {
+            let token = try! NSRegularExpression(pattern: "@[A-Za-z]+[0-9]*")
             let ns = format as NSString
             var out = "", last = 0
             for m in token.matches(in: format, range: NSRange(location: 0, length: ns.length)) {
@@ -39,39 +57,48 @@ public struct QooLibraryNameParser: Sendable {
             }
             return out + ns.substring(from: last)
         }
-        // 意味のある予約語(サークル・作者・ネタ …)に、フィールドの番号を振る(番号そのものに意味は無い)。
-        var bindings: [SemanticKeyword: Int] = [:]
-        var refs: [String: FieldRef] = [:]
-        for (i, word) in rules.reservedWords.keys.sorted().enumerated() {
-            let entry = rules.reservedWords[word]!
-            if let keyword = SemanticKeyword(rawValue: entry.engine) {
-                bindings[keyword] = i + 1
-                refs[entry.field] = keyword.fieldRef
-            } else if entry.engine == "@title" {
-                refs[entry.field] = .title
-            }
-        }
-        let delimiters = DelimiterSet(pairs: rules.delimiters.compactMap { pair in
+    }
+
+    static func delimiters(_ profile: FilenameFormatRules.Profile) -> DelimiterSet {
+        DelimiterSet(pairs: profile.delimiters.compactMap { pair in
             guard pair.count == 2, let open = pair[0].first, let close = pair[1].first else { return nil }
             return PairDelimiter(open: open, close: close)
         })
-        let context = FormatCompilationContext(delimiters: delimiters, mediaTypeVocabulary: mediaTypes,
-                                               semanticBindings: bindings)
-        let compiled = try rules.formats.enumerated().map {
-            try FormatCompiler.compile(translate($0.element), context: context, priority: $0.offset)
+    }
+
+    /// フォーマット 1 つを組み立てる(規則の検証にも使う)。
+    static func compile(_ format: String, profile: FilenameFormatRules.Profile, rules: FilenameFormatRules,
+                        mediaTypes: [String], priority: Int = 0) throws -> CompiledFormat {
+        let vocabulary = Vocabulary(rules)
+        let context = FormatCompilationContext(delimiters: delimiters(profile), mediaTypeVocabulary: mediaTypes,
+                                               semanticBindings: vocabulary.bindings)
+        return try FormatCompiler.compile(vocabulary.translate(format), context: context, priority: priority)
+    }
+
+    /// - Parameter mediaTypes: 本の種別の語彙(利用者の設定から)。空なら先頭の丸括弧はすべてイベントとして読む。
+    public init(mediaTypes: [String], rules: FilenameFormatRules = RuleFiles.filenameFormats) throws {
+        let vocabulary = Vocabulary(rules)
+        settings = try rules.profiles.map { profile in
+            let delimiters = Self.delimiters(profile)
+            let context = FormatCompilationContext(delimiters: delimiters, mediaTypeVocabulary: mediaTypes,
+                                                   semanticBindings: vocabulary.bindings)
+            let compiled = try profile.formats.enumerated().map {
+                try FormatCompiler.compile(vocabulary.translate($0.element), context: context, priority: $0.offset)
+            }
+            return LibrarySettingsSnapshot(
+                mediaTypeVocabulary: mediaTypes,
+                delimiters: delimiters,
+                protectedTokens: ProtectedTokenCompiler.compileAll(profile.protectedTokens.map { ProtectedToken(pattern: $0) }),
+                filenameFormats: compiled,
+                semanticBindings: vocabulary.bindings)
         }
-        settings = LibrarySettingsSnapshot(
-            mediaTypeVocabulary: mediaTypes,
-            delimiters: delimiters,
-            protectedTokens: ProtectedTokenCompiler.compileAll(rules.protectedTokens.map { ProtectedToken(pattern: $0) }),
-            filenameFormats: compiled,
-            semanticBindings: bindings)
-        fieldRefs = refs
+        fieldRefs = vocabulary.refs
         authorSeparators = Set(rules.authorSeparators)
     }
 
     public func parse(baseName: String) -> ParsedName? {
-        guard let result = parser.parse(TextRules.normalizeDisplay(baseName), settings: settings) else { return nil }
+        let name = TextRules.normalizeDisplay(baseName)
+        guard let result = settings.lazy.compactMap({ parser.parse(name, settings: $0) }).first else { return nil }
         func value(_ field: String) -> String {
             guard let ref = fieldRefs[field] else { return "" }
             return TextRules.normalizeDisplay(result.fields[ref]?.text ?? "")

@@ -1,0 +1,1183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
+  "title": "qooMeta のシリーズの規則(第 2 版)",
+  "description": "既定値の全体、または base: builtin の差分。説明は docs/rules.md",
+  "type": "object",
+  "required": [
+    "kind",
+    "schemaVersion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "qoometa.series-rules"
+    },
+    "schemaVersion": {
+      "const": 2
+    },
+    "revision": {
+      "type": "string"
+    },
+    "base": {
+      "const": "builtin",
+      "description": "差分のファイルにだけ書く。同梱の既定値に重ねる"
+    },
+    "retiredIDs": {
+      "$ref": "#/$defs/retiredIDs"
+    },
+    "aliases": {
+      "$ref": "#/$defs/aliases"
+    },
+    "lists": {
+      "type": "object",
+      "properties": {
+        "ignoredInComparison": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/characters"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "variantKanji": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pairs"
+            },
+            {
+              "$ref": "#/$defs/pairOps"
+            }
+          ]
+        },
+        "boundaryCharacters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/characters"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "trimTrailing": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/characters"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "keepFollowing": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/characters"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "brackets": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pairs"
+            },
+            {
+              "$ref": "#/$defs/pairOps"
+            }
+          ]
+        },
+        "labelIntroducers": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "editionWords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "sourceWords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "compilationWords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "volumePrefixes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "volumeCounters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "wholeOnlyCounters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "kanjiCounters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "positionFirst": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "positionMiddle": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "positionLast": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "notFirstMarkers": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "notFirstPrefixes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "policies": {
+      "type": "object",
+      "properties": {
+        "editions": {
+          "enum": [
+            "sameWork",
+            "separateBooks",
+            "ignore"
+          ],
+          "default": "sameWork"
+        },
+        "sources": {
+          "enum": [
+            "sameWork",
+            "separateBooks",
+            "ignore"
+          ],
+          "default": "sameWork"
+        },
+        "compilations": {
+          "enum": [
+            "ownSeries",
+            "inMainSeries",
+            "notInSeries"
+          ],
+          "default": "ownSeries"
+        },
+        "compilationVolume": {
+          "enum": [
+            "none",
+            "afterRange"
+          ],
+          "default": "none"
+        },
+        "magazines": {
+          "enum": [
+            "perYear",
+            "whole"
+          ],
+          "default": "perYear"
+        },
+        "unnumberedFirst": {
+          "enum": [
+            "inferFirst",
+            "leaveEmpty"
+          ],
+          "default": "inferFirst"
+        },
+        "differentRelation": {
+          "enum": [
+            "split",
+            "keep"
+          ],
+          "default": "split"
+        },
+        "differentGenre": {
+          "enum": [
+            "split",
+            "keep"
+          ],
+          "default": "split"
+        },
+        "subtitled": {
+          "enum": [
+            "attach",
+            "separate"
+          ],
+          "default": "attach"
+        }
+      },
+      "additionalProperties": false
+    },
+    "compare": {
+      "type": "object",
+      "properties": {
+        "ignored": {
+          "$ref": "#/$defs/charactersValue"
+        },
+        "variants": {
+          "$ref": "#/$defs/pairsValue"
+        },
+        "boundaries": {
+          "$ref": "#/$defs/charactersValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "markers": {
+      "type": "object",
+      "properties": {
+        "edition": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "words": {
+              "$ref": "#/$defs/wordsValue"
+            },
+            "patterns": {
+              "$ref": "#/$defs/patternsValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "words": {
+              "$ref": "#/$defs/wordsValue"
+            },
+            "patterns": {
+              "$ref": "#/$defs/patternsValue"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "grouping": {
+      "type": "object",
+      "properties": {
+        "compilation": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "words": {
+              "$ref": "#/$defs/wordsValue"
+            },
+            "singleWhenMainExists": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "volumeHead": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sharedPrefix": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "minPrefix": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "minWholeTitle": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "conditions": {
+              "type": "object",
+              "properties": {
+                "reject-hiragana-ending": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "reject-single-script": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "reject-common-english": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "dictionary": {
+                      "enum": [
+                        "english"
+                      ]
+                    },
+                    "unlessVolume": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "splitByRelation": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "rejectSameWork": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "naming": {
+      "type": "object",
+      "properties": {
+        "includeClosingBrackets": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "pairs": {
+              "$ref": "#/$defs/pairsValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        "includeFollowing": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "characters": {
+              "$ref": "#/$defs/charactersValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        "trimTrailing": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "characters": {
+              "$ref": "#/$defs/charactersValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        "dropLastWord": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "words": {
+              "$ref": "#/$defs/wordsValue"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "volume": {
+      "type": "object",
+      "properties": {
+        "readers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "ordinal"
+                      },
+                      "type": {
+                        "const": "ordinal"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "number"
+                      },
+                      "type": {
+                        "const": "number"
+                      },
+                      "prefixes": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "counters": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "wholeOnlyCounters": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "mergedSpan": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "kanji"
+                      },
+                      "type": {
+                        "const": "kanjiNumber"
+                      },
+                      "prefixes": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "counters": {
+                        "$ref": "#/$defs/wordsValue"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "greek"
+                      },
+                      "type": {
+                        "const": "greekLetter"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "roman"
+                      },
+                      "type": {
+                        "const": "romanNumeral"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "position"
+                      },
+                      "type": {
+                        "const": "positionWord"
+                      },
+                      "first": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "middle": {
+                        "$ref": "#/$defs/wordsValue"
+                      },
+                      "last": {
+                        "$ref": "#/$defs/wordsValue"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "ordinal": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "ordinal"
+                    },
+                    "type": {
+                      "const": "ordinal"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "number": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "number"
+                    },
+                    "type": {
+                      "const": "number"
+                    },
+                    "prefixes": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "counters": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "wholeOnlyCounters": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "mergedSpan": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "kanji": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "kanji"
+                    },
+                    "type": {
+                      "const": "kanjiNumber"
+                    },
+                    "prefixes": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "counters": {
+                      "$ref": "#/$defs/wordsValue"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "greek": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "greek"
+                    },
+                    "type": {
+                      "const": "greekLetter"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "roman": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "roman"
+                    },
+                    "type": {
+                      "const": "romanNumeral"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "position"
+                    },
+                    "type": {
+                      "const": "positionWord"
+                    },
+                    "first": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "middle": {
+                      "$ref": "#/$defs/wordsValue"
+                    },
+                    "last": {
+                      "$ref": "#/$defs/wordsValue"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "$order": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "ordinal",
+                      "number",
+                      "kanji",
+                      "greek",
+                      "roman",
+                      "position"
+                    ]
+                  },
+                  "description": "挙げた読み手をこの順で先頭に寄せる"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "inference": {
+          "type": "object",
+          "properties": {
+            "sharedLeadingKanji": {
+              "type": "object",
+              "properties": {
+                "since": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minBooks": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 10
+                }
+              },
+              "additionalProperties": false
+            },
+            "firstVolume": {
+              "type": "object",
+              "properties": {
+                "since": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "excludeMarkers": {
+                  "$ref": "#/$defs/wordsValue"
+                },
+                "excludePrefixes": {
+                  "$ref": "#/$defs/wordsValue"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "listRef": {
+      "type": "string",
+      "pattern": "^@list:[A-Za-z0-9]+$",
+      "description": "lists の一覧を名前で指す"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2
+      },
+      "description": "1 文字ずつの並び"
+    },
+    "words": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      }
+    },
+    "pairs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2
+      },
+      "description": "1 文字 → 1 文字"
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "description": "ICU の正規表現"
+    },
+    "arrayOps": {
+      "type": "object",
+      "properties": {
+        "$add": {
+          "type": "array"
+        },
+        "$remove": {
+          "type": "array"
+        },
+        "$replace": {
+          "type": "array"
+        },
+        "since": {
+          "type": "integer"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "description": "差分: 足す・外す・丸ごと置き換える"
+    },
+    "orderedOps": {
+      "type": "object",
+      "properties": {
+        "$add": {
+          "type": "array"
+        },
+        "$remove": {
+          "type": "array"
+        },
+        "$replace": {
+          "type": "array"
+        },
+        "at": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "pairOps": {
+      "type": "object",
+      "properties": {
+        "$set": {
+          "$ref": "#/$defs/pairs"
+        },
+        "$unset": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "$replace": {
+          "$ref": "#/$defs/pairs"
+        },
+        "since": {
+          "type": "integer"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "charactersValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/listRef"
+        },
+        {
+          "$ref": "#/$defs/characters"
+        },
+        {
+          "$ref": "#/$defs/arrayOps"
+        }
+      ]
+    },
+    "wordsValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/listRef"
+        },
+        {
+          "$ref": "#/$defs/words"
+        },
+        {
+          "$ref": "#/$defs/arrayOps"
+        }
+      ]
+    },
+    "pairsValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/listRef"
+        },
+        {
+          "$ref": "#/$defs/pairs"
+        },
+        {
+          "$ref": "#/$defs/pairOps"
+        }
+      ]
+    },
+    "patternsValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/patterns"
+        },
+        {
+          "$ref": "#/$defs/arrayOps"
+        }
+      ]
+    },
+    "retiredIDs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "廃止した規則の ID(既定値にだけ書く)"
+    },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "旧 ID → 新 ID(既定値にだけ書く)"
+    }
+  }
+}

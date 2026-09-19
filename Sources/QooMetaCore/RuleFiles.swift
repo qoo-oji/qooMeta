@@ -1,122 +1,426 @@
+import CryptoKit
 import Foundation
+import QooFormat
 
-/// 規則の既定値(パッケージに同梱した 2 つの JSON)。
+/// 同梱の既定値(パッケージに入れた 2 つの JSON)。
 ///
 /// - `filename-formats.json`: ファイル名をどう区切り、どこがサークル・作者・タイトル・ネタ(関連)かを決めるフォーマット。
-///   予約語は Stackroom(StackNest・ShelfRow)に合わせ、照合の処理(Sources/QooFormat、qooLibrary 由来)の予約語へは
-///   `reservedWords` の対応表で置き換える。
-/// - `series-rules.json`: タイトルからシリーズ名と巻を取り出す規則(比べ方・組の作り方と例外・名前の整え方・
-///   版と入手経路・総集編・巻の読み方)。
+/// - `series-rules.json`: タイトルからシリーズ名と巻を取り出す規則。
 ///
-/// どちらも**蔵書の名前を含まない**(一般的な語と記号だけ)。公開リポジトリに置く。
-public enum RuleFiles {
-    public static let filenameFormats: FilenameFormatRules = load("filename-formats")
-    public static let seriesRules: SeriesRules = load("series-rules")
+/// どちらも**蔵書の名前を含まない**(一般的な語と記号だけ)。公開リポジトリに置く。形式は docs/rules-format-design.md。
+public struct BuiltInRules: Sendable {
+    public var seriesRules: Data
+    public var filenameFormats: Data
 
-    static func load<T: Decodable>(_ name: String) -> T {
-        guard let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Resources")
-            ?? Bundle.module.url(forResource: name, withExtension: "json") else {
-            fatalError("規則のファイルが見つからない: \(name).json")
+    public init(seriesRules: Data, filenameFormats: Data) {
+        self.seriesRules = seriesRules
+        self.filenameFormats = filenameFormats
+    }
+
+    public static func bundled() throws -> BuiltInRules {
+        func data(_ name: String) throws -> Data {
+            guard let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Resources")
+                ?? Bundle.module.url(forResource: name, withExtension: "json") else {
+                throw RulesIssue(.missingKey, source: "builtin", at: "", "\(name).json")
+            }
+            return try Data(contentsOf: url)
         }
-        do {
-            return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
-        } catch {
-            fatalError("規則のファイルを読めない: \(name).json: \(error)")
-        }
+        return BuiltInRules(seriesRules: try data("series-rules"), filenameFormats: try data("filename-formats"))
     }
 }
 
-public struct FilenameFormatRules: Decodable, Sendable {
-    public struct ReservedWord: Decodable, Sendable {
+/// 規則のデータ: 同梱の既定値と、利用者の変更(差分。シリーズの規則・フォーマット・rules-bundle のどれか)。
+public struct RuleSources: Sendable {
+    public var builtIn: BuiltInRules
+    public var userChanges: Data?
+
+    public init(builtIn: BuiltInRules, userChanges: Data? = nil) {
+        self.builtIn = builtIn
+        self.userChanges = userChanges
+    }
+}
+
+public struct RulesCompilation: Sendable {
+    /// 誤りが 1 件でもあれば nil。
+    public let rules: CompiledRules?
+    public let errors: [RulesIssue]
+    /// 新しい版の規則を飛ばした、廃止された ID への参照、辞書が無い、など。
+    public let warnings: [RulesIssue]
+}
+
+/// 組み立て済みの規則。
+public struct CompiledRules: Sendable {
+    /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
+    public static let engineLevel = 1
+
+    public let series: SeriesRules
+    public let formats: FilenameFormatRules
+    /// 重ねた結果(`rules show` 用)。
+    public let mergedSeriesRules: JSONValue
+    public let mergedFilenameFormats: JSONValue
+    /// 利用者の変更が効いている値の道筋。
+    public let changedPaths: [String]
+    /// 内容から計算したハッシュ(キャッシュの判定用。`revision` には依らない)。
+    public let contentHash: String
+
+    /// - Parameter dictionaries: 利用側が渡せる辞書の名前。規則が指す辞書が無ければ、その条件は働かず警告になる。
+    public static func compile(_ sources: RuleSources, dictionaries: Set<String> = ["english"]) -> RulesCompilation {
+        var issues: [RulesIssue] = []
+        var builtin = RuleLoader(source: "builtin", engineLevel: engineLevel)
+
+        func parse(_ data: Data, _ loader: inout RuleLoader) -> JSONValue? {
+            guard data.count <= RuleLoader.Limits.bytes else {
+                loader.report(.tooLarge, "", "\(data.count) バイト")
+                return nil
+            }
+            do { return try JSONValue.parse(data, source: loader.source) } catch {
+                loader.issues.append(error)
+                return nil
+            }
+        }
+
+        var seriesRoot = parse(sources.builtIn.seriesRules, &builtin)
+        if let root = seriesRoot, builtin.envelope(root, expected: [.seriesRules], isDiff: false) != nil {
+            builtin.checkSeriesDefaults(root)
+        }
+        let seriesRetired = (builtin.retiredIDs, builtin.aliases)
+        var formatsRoot = parse(sources.builtIn.filenameFormats, &builtin)
+        if let root = formatsRoot, builtin.envelope(root, expected: [.filenameFormats], isDiff: false) != nil {
+            builtin.checkFormatDefaults(root)
+        }
+        builtin.retiredIDs.formUnion(seriesRetired.0)
+        builtin.aliases.merge(seriesRetired.1) { a, _ in a }
+        issues += builtin.issues
+        guard !builtin.hasErrors, seriesRoot != nil, formatsRoot != nil else {
+            return RulesCompilation(rules: nil, errors: issues.filter { !$0.isWarning }, warnings: issues.filter(\.isWarning))
+        }
+
+        var changed: [String] = []
+        if let data = sources.userChanges {
+            var user = RuleLoader(source: "user", engineLevel: engineLevel)
+            user.retiredIDs = builtin.retiredIDs
+            user.aliases = builtin.aliases
+            if let root = parse(data, &user), let kind = user.envelope(root, expected: [.seriesRules, .filenameFormats, .bundle], isDiff: true),
+               let o = root.objectValue {
+                var series = seriesRoot!, formats = formatsRoot!
+                switch kind {
+                case .seriesRules:
+                    series = user.applySeries(o, to: series)
+                case .filenameFormats:
+                    formats = user.applyFormats(o, to: formats)
+                case .bundle:
+                    let allowed = RuleLoader.envelopeKeys + ["seriesRules", "filenameFormats"]
+                    user.unknownKeys(o, "", allowed: allowed)
+                    if let s = o["seriesRules"] {
+                        if let so = s.objectValue { series = user.applySeries(so.filter { $0.key != "kind" && $0.key != "schemaVersion" }, to: series) }
+                        else { user.report(.invalidValue, "seriesRules", "オブジェクトであるべきところが\(s.kindName)") }
+                    }
+                    if let f = o["filenameFormats"] {
+                        if let fo = f.objectValue { formats = user.applyFormats(fo.filter { $0.key != "kind" && $0.key != "schemaVersion" }, to: formats) }
+                        else { user.report(.invalidValue, "filenameFormats", "オブジェクトであるべきところが\(f.kindName)") }
+                    }
+                }
+                // 本体の知らない必須の規則があれば、そのファイルは適用しない(既定値だけで動く)。
+                if user.sawRequiredUnknown {
+                    user.issues.removeAll { !$0.isWarning }
+                } else if !user.hasErrors {
+                    seriesRoot = series
+                    formatsRoot = formats
+                    changed = user.changedPaths
+                }
+            }
+            issues += user.issues
+        }
+        guard !issues.contains(where: { !$0.isWarning }) else {
+            return RulesCompilation(rules: nil, errors: issues.filter { !$0.isWarning }, warnings: issues.filter(\.isWarning))
+        }
+
+        var compiler = RuleCompiler(source: sources.userChanges == nil ? "builtin" : "user", dictionaries: dictionaries)
+        let series = compiler.series(seriesRoot!)
+        let formats = compiler.formats(formatsRoot!)
+        issues += compiler.issues
+        let errors = issues.filter { !$0.isWarning }
+        guard errors.isEmpty, let series, let formats else {
+            return RulesCompilation(rules: nil, errors: errors, warnings: issues.filter(\.isWarning))
+        }
+        let hashed = Data((stripped(seriesRoot!).rendered() + "\n" + stripped(formatsRoot!).rendered()).utf8)
+        let hash = SHA256.hash(data: hashed).prefix(12).map { String(format: "%02x", $0) }.joined()
+        let rules = CompiledRules(series: series, formats: formats, mergedSeriesRules: seriesRoot!,
+                                  mergedFilenameFormats: formatsRoot!, changedPaths: changed.sorted(), contentHash: hash)
+        return RulesCompilation(rules: rules, errors: [], warnings: issues.filter(\.isWarning))
+    }
+
+    /// 処理に関係しない包みのキー(`$schema`・`revision`)を除く。内容のハッシュがそれらに左右されないように。
+    static func stripped(_ v: JSONValue) -> JSONValue {
+        guard case .object(var o) = v else { return v }
+        o["$schema"] = nil
+        o["revision"] = nil
+        return .object(o)
+    }
+}
+
+/// 重ねた規則を、エンジンが使う形に組み立てる。一覧の参照(`@list:`)を解き、方針を今の扱いへ写す。
+struct RuleCompiler {
+    let source: String
+    let dictionaries: Set<String>
+    var issues: [RulesIssue] = []
+
+    mutating func report(_ code: RulesIssue.Code, _ path: String, _ detail: String? = nil) {
+        issues.append(RulesIssue(code, source: source, at: path, detail))
+    }
+
+    /// 一覧の値(`@list:` を解いたもの)。
+    func words(_ v: JSONValue?, _ lists: [String: JSONValue]) -> [String] {
+        guard let v else { return [] }
+        if let ref = v.stringValue, ref.hasPrefix("@list:") {
+            return words(lists[String(ref.dropFirst("@list:".count))], lists)
+        }
+        return v.arrayValue?.compactMap(\.stringValue) ?? []
+    }
+
+    func pairs(_ v: JSONValue?, _ lists: [String: JSONValue]) -> [String: String] {
+        guard let v else { return [:] }
+        if let ref = v.stringValue, ref.hasPrefix("@list:") {
+            return pairs(lists[String(ref.dropFirst("@list:".count))], lists)
+        }
+        return v.objectValue?.compactMapValues(\.stringValue) ?? [:]
+    }
+
+    mutating func series(_ root: JSONValue) -> SeriesRules? {
+        let lists = root["lists"]?.objectValue ?? [:]
+        let policies = root["policies"]?.objectValue?.compactMapValues(\.stringValue) ?? [:]
+        func enabled(_ v: JSONValue?) -> Bool { v?["enabled"]?.boolValue ?? true }
+
+        // 方針のうち、まだ今の扱いしか実装していないもの(roadmap 段階 0 の 5)。既定でない値は「まだ働かない」とする
+        // (黙って既定の扱いで動かすと、選んだつもりで効いていないことになる)。
+        for name in ["editions", "sources", "compilations", "compilationVolume", "magazines"] {
+            let defaultChoice = RuleSchema.policies.first { $0.name == name }!.choices[0]
+            if let chosen = policies[name], chosen != defaultChoice {
+                report(.notYetSupported, "policies.\(name)", chosen)
+            }
+        }
+
+        let compare = root["compare"], markers = root["markers"], grouping = root["grouping"]
+        let naming = root["naming"], volume = root["volume"]
+        let shared = grouping?["sharedPrefix"], conditions = shared?["conditions"]
+        let english = conditions?["reject-common-english"]
+        var englishEnabled = enabled(english)
+        if englishEnabled, let name = english?["dictionary"]?.stringValue, !dictionaries.contains(name) {
+            issues.append(RulesIssue(.missingDictionary, source: source,
+                                     at: "grouping.sharedPrefix.conditions.reject-common-english", name))
+            englishEnabled = false
+        }
+
+        let readersJSON = volume?["readers"]?.arrayValue ?? []
+        func reader(_ id: String) -> JSONValue? { readersJSON.first { $0["id"]?.stringValue == id } }
+        let readers = readersJSON.compactMap { r -> SeriesRules.Reader? in
+            guard enabled(r), let id = r["id"]?.stringValue else { return nil }
+            return SeriesRules.Reader(rawValue: id)
+        }
+        let number = reader("number"), kanji = reader("kanji"), position = reader("position")
+        let inference = volume?["inference"]
+        let leadingKanji = inference?["sharedLeadingKanji"], firstVolume = inference?["firstVolume"]
+
+        return SeriesRules(
+            compare: .init(
+                ignoredCharacters: words(compare?["ignored"], lists).joined(),
+                variantKanji: pairs(compare?["variants"], lists),
+                boundaryCharacters: words(compare?["boundaries"], lists).joined()),
+            grouping: .init(
+                minPrefix: shared?["minPrefix"]?.intValue ?? 4,
+                minWholeTitle: shared?["minWholeTitle"]?.intValue ?? 2,
+                attachSubtitled: policies["subtitled"] != "separate",
+                splitByGenre: policies["differentRelation"] != "keep",
+                splitByMediaType: policies["differentGenre"] != "keep",
+                volumeHeadEnabled: enabled(grouping?["volumeHead"]),
+                sharedPrefixEnabled: enabled(shared),
+                rejectHiraganaEndings: enabled(conditions?["reject-hiragana-ending"]),
+                rejectSingleWordPrefixes: enabled(conditions?["reject-single-script"]),
+                rejectCommonEnglishTitles: englishEnabled,
+                commonEnglishUnlessVolume: english?["unlessVolume"]?.boolValue ?? true,
+                compilationSingleWhenMainExists: grouping?["compilation"]?["singleWhenMainExists"]?.boolValue ?? true),
+            naming: .init(
+                trimTrailing: words(naming?["trimTrailing"]?["characters"], lists).joined(),
+                trimTrailingEnabled: enabled(naming?["trimTrailing"]),
+                keepFollowing: enabled(naming?["includeFollowing"])
+                    ? words(naming?["includeFollowing"]?["characters"], lists).joined() : "",
+                brackets: enabled(naming?["includeClosingBrackets"])
+                    ? pairs(naming?["includeClosingBrackets"]?["pairs"], lists) : [:],
+                labelIntroducers: enabled(naming?["dropLastWord"]) ? words(naming?["dropLastWord"]?["words"], lists) : []),
+            editions: .init(
+                edition: enabled(markers?["edition"]) ? words(markers?["edition"]?["words"], lists) : [],
+                editionPatterns: enabled(markers?["edition"]) ? words(markers?["edition"]?["patterns"], lists) : [],
+                source: enabled(markers?["source"]) ? words(markers?["source"]?["words"], lists) : [],
+                sourcePatterns: enabled(markers?["source"]) ? words(markers?["source"]?["patterns"], lists) : []),
+            compilation: .init(keywords: words(grouping?["compilation"]?["words"], lists)),
+            volume: .init(
+                readers: readers,
+                prefixes: words(number?["prefixes"], lists),
+                counters: words(number?["counters"], lists),
+                wholeOnlyCounters: words(number?["wholeOnlyCounters"], lists),
+                kanjiPrefixes: words(kanji?["prefixes"], lists),
+                kanjiCounters: words(kanji?["counters"], lists),
+                positionWords: .init(first: words(position?["first"], lists), middle: words(position?["middle"], lists),
+                                     last: words(position?["last"], lists)),
+                mergedIssueMaxSpan: number?["mergedSpan"]?.intValue ?? 3,
+                sharedLeadingKanjiEnabled: enabled(leadingKanji),
+                sharedLeadingKanjiMinBooks: leadingKanji?["minBooks"]?.intValue ?? 2,
+                inferFirstVolume: policies["unnumberedFirst"] != "leaveEmpty",
+                notFirstMarkers: words(firstVolume?["excludeMarkers"], lists),
+                notFirstPrefixes: words(firstVolume?["excludePrefixes"], lists)))
+    }
+
+    mutating func formats(_ root: JSONValue) -> FilenameFormatRules? {
+        var reserved: [String: FilenameFormatRules.ReservedWord] = [:]
+        for (word, entry) in root["reservedWords"]?.objectValue ?? [:] {
+            reserved[word] = .init(engine: entry["engine"]?.stringValue ?? "", field: entry["field"]?.stringValue ?? "")
+        }
+        let separators = words(root["reservedWords"]?["@author"]?["split"], [:]).joined()
+        let profiles = (root["profiles"]?.arrayValue ?? []).map { p in
+            FilenameFormatRules.Profile(
+                id: p["id"]?.stringValue ?? "",
+                delimiters: p["delimiters"]?.arrayValue?.map { $0.arrayValue?.compactMap(\.stringValue) ?? [] } ?? [],
+                formats: words(p["formats"], [:]),
+                protectedTokens: words(p["protectedTokens"], [:]))
+        }
+        let rules = FilenameFormatRules(reservedWords: reserved, authorSeparators: separators, profiles: profiles,
+                                        simpleBracketsEnabled: root["fallback"]?["simpleBrackets"]?["enabled"]?.boolValue ?? true)
+        // フォーマットは照合の処理(QooFormat)で組み立てて確かめる。書き間違いは位置付きで返す。
+        for profile in profiles {
+            for (j, format) in profile.formats.enumerated() {
+                do { _ = try QooLibraryNameParser.compile(format, profile: profile, rules: rules, mediaTypes: []) } catch {
+                    report(.invalidValue, "profiles.\(profile.id).formats[\(j)]", "\(error)")
+                }
+            }
+        }
+        return rules
+    }
+}
+
+/// エンジンが使う形のファイル名のフォーマット。
+public struct FilenameFormatRules: Sendable {
+    public struct ReservedWord: Sendable {
         /// 照合の処理(QooFormat)での予約語。
         public var engine: String
         /// qooMeta の欄(genre / event / circle / authors / title / relation / keyword)。
         public var field: String
     }
 
-    public var version: Int
+    public struct Profile: Sendable {
+        public var id: String
+        /// 区切りに使う括弧の組(開き, 閉じ)。
+        public var delimiters: [[String]]
+        /// 上から順に照合し、最初に一致したものを採る。
+        public var formats: [String]
+        /// 1 かたまりとして扱う文字列(正規表現)。「(2019)」のような年や「(完結)」を、末尾の丸括弧と取り違えないため。
+        public var protectedTokens: [String]
+    }
+
     /// Stackroom 式の予約語 → 照合の処理の予約語と、qooMeta の欄。
     public var reservedWords: [String: ReservedWord]
-    /// 区切りに使う括弧の組(開き, 閉じ)。
-    public var delimiters: [[String]]
     /// 作者が複数のときの区切り文字。
     public var authorSeparators: String
-    /// 上から順に照合し、最初に一致したものを採る。
-    public var formats: [String]
-    /// 1 かたまりとして扱う文字列(正規表現)。「(2019)」のような年や「(完結)」を、末尾の丸括弧と取り違えないため。
-    public var protectedTokens: [String]
+    /// 上から試し、どれかのフォーマットが一致した最初のプロファイルを採る。
+    public var profiles: [Profile]
+    /// どのフォーマットにも一致しない名前を、括弧の位置だけで読むか(NameParser)。止めるとタイトルだけになる。
+    public var simpleBracketsEnabled: Bool
 }
 
-public struct SeriesRules: Decodable, Sendable {
-    public struct Compare: Decodable, Sendable {
+/// エンジンが使う形のシリーズの規則。方針(`policies`)は、ここでは今の扱いのフラグに写してある。
+public struct SeriesRules: Sendable {
+    public struct Compare: Sendable {
         /// 比べるときに無視する文字(空白と、タイトルの飾りによく使われる記号)。
         public var ignoredCharacters: String
         /// 比べるときに同じ字とみなす異体字(左 → 右)。
         public var variantKanji: [String: String]
-    }
-
-    public struct Grouping: Decodable, Sendable {
-        /// 語の途中で切れる共通部分は、この文字数以上のときだけ組にする。
-        public var minPrefix: Int
-        /// 片方のタイトル全体がもう片方の前半と一致する場合の下限。
-        public var minWholeTitle: Int
-        public var attachSubtitled: Bool
-        public var splitByGenre: Bool
-        public var rejectHiraganaEndings: Bool
-        public var rejectSingleWordPrefixes: Bool
-        public var rejectCommonEnglishTitles: Bool
-        public var englishDictionary: String
         /// 語の切れ目とみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。
         public var boundaryCharacters: String
     }
 
-    public struct Naming: Decodable, Sendable {
-        /// シリーズ名の末尾から落とす文字。
+    public struct Grouping: Sendable {
+        /// 語の途中で切れる共通部分は、この文字数以上のときだけ組にする。
+        public var minPrefix: Int
+        /// 片方のタイトル全体がもう片方の前半と一致する場合の下限。
+        public var minWholeTitle: Int
+        /// 方針 `subtitled`。
+        public var attachSubtitled: Bool
+        /// 方針 `differentRelation`(ネタが違う本を分ける)。
+        public var splitByGenre: Bool
+        /// 方針 `differentGenre`(本の種別が違う本を分ける)。
+        public var splitByMediaType: Bool
+        public var volumeHeadEnabled: Bool
+        public var sharedPrefixEnabled: Bool
+        public var rejectHiraganaEndings: Bool
+        public var rejectSingleWordPrefixes: Bool
+        public var rejectCommonEnglishTitles: Bool
+        /// 一般的な英語だけのタイトルでも、後ろに巻があれば組にする。
+        public var commonEnglishUnlessVolume: Bool
+        /// 本編のシリーズがあれば、総集編が 1 冊でもシリーズにする。
+        public var compilationSingleWhenMainExists: Bool
+    }
+
+    public struct Naming: Sendable {
+        /// シリーズ名の末尾から落とす文字(巻の前の区切りとしても使う)。
         public var trimTrailing: String
-        /// 共通部分の直後にあれば、名前に含める文字。
+        public var trimTrailingEnabled: Bool
+        /// 共通部分の直後にあれば、名前に含める文字(止めていれば空)。
         public var keepFollowing: String
-        /// 閉じ括弧 → 開き括弧。開いたままの括弧があれば、直後の閉じ括弧まで名前に含める。
+        /// 閉じ括弧 → 開き括弧。開いたままの括弧があれば、直後の閉じ括弧まで名前に含める(止めていれば空)。
         public var brackets: [String: String]
-        /// 名前の末尾に残ったら外す語(後ろに付く名前を導く語)。
+        /// 名前の末尾に残ったら外す語(止めていれば空)。
         public var labelIntroducers: [String]
     }
 
-    public struct Editions: Decodable, Sendable {
+    public struct Editions: Sendable {
         public var edition: [String]
         public var editionPatterns: [String]
         public var source: [String]
         public var sourcePatterns: [String]
     }
 
-    public struct Compilation: Decodable, Sendable {
+    public struct Compilation: Sendable {
         public var keywords: [String]
     }
 
-    public struct Volume: Decodable, Sendable {
-        public struct PositionWords: Decodable, Sendable {
+    /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。
+    public enum Reader: String, Sendable {
+        case ordinal, number, kanji, greek, roman, position
+    }
+
+    public struct Volume: Sendable {
+        public struct PositionWords: Sendable {
             public var first: [String]
             public var middle: [String]
             public var last: [String]
         }
 
+        /// 働いている読み手(優先の順)。
+        public var readers: [Reader]
         /// 巻の番号の前に付く語(`vol` `第` `その` …)。英字の語は後ろの「.」も受け付ける。
         public var prefixes: [String]
         /// 巻の番号の後ろに付く単位。
         public var counters: [String]
         /// 巻だけでできているかを見るときにだけ使う単位。
         public var wholeOnlyCounters: [String]
+        /// 漢数字の前に付く語(英字・記号の語は使わない)。
+        public var kanjiPrefixes: [String]
         /// 漢数字の後ろに付く単位。
         public var kanjiCounters: [String]
         public var positionWords: PositionWords
         /// 「36-37」を合併号とみなす、前後の差の上限。
         public var mergedIssueMaxSpan: Int
+        public var sharedLeadingKanjiEnabled: Bool
+        public var sharedLeadingKanjiMinBooks: Int
+        /// 方針 `unnumberedFirst`。
+        public var inferFirstVolume: Bool
         /// シリーズ名より後ろにこの語があれば、1 巻の推定の候補にしない。
         public var notFirstMarkers: [String]
         /// シリーズ名の直後にこの語が付けば、1 巻の推定の候補にしない。
         public var notFirstPrefixes: [String]
+
+        public func reads(_ reader: Reader) -> Bool { readers.contains(reader) }
     }
 
-    public var version: Int
     public var compare: Compare
     public var grouping: Grouping
     public var naming: Naming
@@ -136,6 +440,38 @@ extension SeriesRules.Volume {
 
     var prefixPattern: String { alternation(prefixes, allowDot: true) }
     /// 漢数字の前に付く語(英字・記号でないもの)。
-    var kanjiPrefixPattern: String { alternation(prefixes.filter { !$0.allSatisfy(\.isASCII) }) }
+    var kanjiPrefixPattern: String { alternation(kanjiPrefixes.filter { !$0.allSatisfy(\.isASCII) }) }
     var positionPattern: String { alternation(positionWords.first + positionWords.middle + positionWords.last) }
+}
+
+/// 処理が使う規則。
+///
+/// **仮の形**: 処理の各所(TextRules・VolumeExtractor など)は、まだ規則を値で受け取らず、ここから読む
+/// (roadmap 段階 1 の 2 で、グローバルな状態をなくす)。利用者の変更を使うときは、処理を始める前に 1 度だけ
+/// `install` する。処理が規則を読み始めた後の `install` は、一部の値が古いまま残るので止める。
+public enum RuleFiles {
+    nonisolated(unsafe) private static var installed: CompiledRules?
+    nonisolated(unsafe) private static var inUse = false
+
+    /// 同梱の既定値だけを組み立てたもの。
+    public static let builtin: CompiledRules = {
+        let compilation = CompiledRules.compile(RuleSources(builtIn: try! BuiltInRules.bundled()))
+        guard let rules = compilation.rules else {
+            fatalError("同梱の規則を組み立てられない:\n" + compilation.errors.map(\.description).joined(separator: "\n"))
+        }
+        return rules
+    }()
+
+    public static func install(_ rules: CompiledRules) {
+        precondition(!inUse, "規則は処理を始める前に install する")
+        installed = rules
+    }
+
+    public static var current: CompiledRules {
+        inUse = true
+        return installed ?? builtin
+    }
+
+    public static var filenameFormats: FilenameFormatRules { current.formats }
+    public static var seriesRules: SeriesRules { current.series }
 }

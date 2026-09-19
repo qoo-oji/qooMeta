@@ -43,3 +43,5 @@ out/
 !Sources/QooMetaCore/Resources/series-rules.json
 # 例のファイル(公開する。架空の名前だけで書く)
 !Sources/QooMetaCore/Resources/examples.json
+# 規則ファイルの JSON Schema(手で書いたもの)
+!schema/*.schema.json

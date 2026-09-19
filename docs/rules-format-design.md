@@ -205,28 +205,29 @@
 
   "compare": {
     "ignored": "@list:ignoredInComparison",
-    "variants": "@list:variantKanji"
+    "variants": "@list:variantKanji",
+    "boundaries": "@list:boundaryCharacters"
   },
 
   "policies": { "editions": "sameWork", "compilations": "ownSeries", "…": "上の表のとおり" },
 
   "markers": {
-    "edition": { "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
-    "source":  { "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] }
+    "edition": { "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
+    "source":  { "enabled": true, "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] }
   },
 
   "grouping": {
     "compilation":  { "words": "@list:compilationWords", "singleWhenMainExists": true },
     "volumeHead":   { "enabled": true },
     "sharedPrefix": {
-      "enabled": true, "minPrefix": 4, "minWholeTitle": 2, "boundaries": "@list:boundaryCharacters",
+      "enabled": true, "minPrefix": 4, "minWholeTitle": 2,
       "conditions": {
         "reject-hiragana-ending": { "enabled": true },
         "reject-single-script":   { "enabled": true },
         "reject-common-english":  { "enabled": true, "dictionary": "english", "unlessVolume": true }
       }
     },
-    "splitByRelation": { "unlabeled": "joinLargest" },
+    "splitByRelation": { },
     "rejectSameWork":  { }
   },
 
@@ -239,12 +240,13 @@
 
   "volume": {
     "readers": [
-      { "id": "ordinal",  "type": "ordinal" },
-      { "id": "number",   "type": "number", "prefixes": "@list:volumePrefixes", "counters": "@list:volumeCounters", "mergedSpan": 3 },
-      { "id": "kanji",    "type": "kanjiNumber", "counters": "@list:kanjiCounters" },
-      { "id": "greek",    "type": "greekLetter" },
-      { "id": "roman",    "type": "romanNumeral" },
-      { "id": "position", "type": "positionWord", "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" }
+      { "id": "ordinal",  "type": "ordinal", "enabled": true },
+      { "id": "number",   "type": "number", "enabled": true, "prefixes": "@list:volumePrefixes", "counters": "@list:volumeCounters",
+        "wholeOnlyCounters": "@list:wholeOnlyCounters", "mergedSpan": 3 },
+      { "id": "kanji",    "type": "kanjiNumber", "enabled": true, "prefixes": "@list:volumePrefixes", "counters": "@list:kanjiCounters" },
+      { "id": "greek",    "type": "greekLetter", "enabled": true },
+      { "id": "roman",    "type": "romanNumeral", "enabled": true },
+      { "id": "position", "type": "positionWord", "enabled": true, "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" }
     ],
     "inference": {
       "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },
@@ -290,7 +292,7 @@
       "formats": ["(@genre) [@circle (@author)] @title (@relation) [@keywordA]", "[@circle] @title"]
     }
   ],
-  "fallback": { "simpleBrackets": { "enabled": true }, "wholeNameAsTitle": { "enabled": true } }
+  "fallback": { "simpleBrackets": { "enabled": true } }
 }
 ```
 
@@ -348,6 +350,27 @@
 | 誤りをすべて集める厳密な検証(近い綴りの候補、`retiredIDs`・`aliases`) | JSON Schema を登録簿から自動で作ること(最初は手で書く) |
 | 例のファイルと `rules test` | `rules-bundle` 以外の持ち運びの形 |
 | 規則の上限と正規表現の安全性の検査 | |
+
+## 最初の実装で決めた細部(2026-09-19)
+
+実装(`Sources/QooMetaCore/RuleSchema.swift`・`RuleLoader.swift`・`RuleFiles.swift`)で決めたこと。説明は docs/rules.md。
+
+- 語の切れ目の記号は、1 段目(`volumeHead`)と 2 段目(`sharedPrefix`)の両方が使うので、`compare.boundaries` に置いた。
+- 既定値では、`enabled` を持つ規則(方針が働きを決める `compilation`・`splitByRelation`・`rejectSameWork`・`firstVolume` 以外)は
+  すべて `enabled` を書く(欠けていれば既定値の誤り)。巻の読み手も同じ。
+- 規則のパラメータは、一覧の参照(`"@list:名前"`)か、その場の値。差分では、参照を別の参照に替えるか、その場の値に操作を書く。
+  参照している一覧の語は `lists` の側で変える。差分で一覧を配列のまま書くのは誤り(既定の語がすべて消えるので `$replace` と書かせる)。
+- `lists` に書けるのは決まった名前の一覧だけ(利用者が新しい一覧を作ることはまだできない)。
+- 読み手・プロファイルを足すこと、予約語の `engine`・`field` を変えることは、まだできない(`notYetSupported` か誤り)。
+  差分で変えられる予約語の値は `@author` の `split` だけ。
+- `fallback.wholeNameAsTitle` は、止めたときの代わりが無いので規則にしなかった(最後の手段として常に働く)。
+- 知らないキーでも、値が `"since"` を持つオブジェクトで、その番号が本体の水準より大きければ「新しい版の規則」として警告で飛ばす。
+  それ以外の知らないキーは書き間違いとしてエラー。
+- 方針のうち、今の版で既定でない値を選べるのは `subtitled`・`differentRelation`・`differentGenre`・`unnumberedFirst`。
+  残り(`editions`・`sources`・`compilations`・`compilationVolume`・`magazines`)の既定でない値は、実装するまで `notYetSupported` のエラー。
+- 内容のハッシュ(`contentHash`)は、`$schema` と `revision` を除いた、重ねた後の中身から計算する。
+- 処理の各所は、まだ規則を値で受け取らず、組み立てた規則を処理の前に 1 度だけ入れる(`RuleFiles.install`)。
+  そのため、例ごとに方針を変える(`"policies": { … }`)ことはまだできない(roadmap 段階 1 の 2 でグローバルな状態をなくしてから)。
 
 ## 決まったこと(2026-09-19)
 

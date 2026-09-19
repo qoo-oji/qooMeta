@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/rules-bundle.schema.json",
+  "title": "qooMeta の規則の持ち運び(rules-bundle)",
+  "type": "object",
+  "required": [
+    "kind",
+    "schemaVersion",
+    "base"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "qoometa.rules-bundle"
+    },
+    "schemaVersion": {
+      "const": 2
+    },
+    "revision": {
+      "type": "string"
+    },
+    "base": {
+      "const": "builtin"
+    },
+    "seriesRules": {
+      "type": "object"
+    },
+    "filenameFormats": {
+      "type": "object"
+    }
+  }
+}

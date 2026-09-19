@@ -6,8 +6,14 @@ import Foundation
 /// 先頭の 1 語が一致しただけでシリーズにしないため(利用者の指摘)。一覧が無い環境では、どの語も一般語と
 /// みなさない(組を作る側に倒す。これまでと同じ動き)。
 public enum EnglishWords {
+    /// 規則は辞書を名前(`"english"`)で指すだけで、パスを持たない(規則ファイルから利用側のファイルを読ませないため)。
+    /// 実体の置き場所はここで決める(roadmap 段階 1 で、利用側が値で渡す形にする)。
+    public static let path = "/usr/share/dict/words"
+
+    public static var isAvailable: Bool { FileManager.default.isReadableFile(atPath: path) }
+
     static let words: Set<String> = {
-        guard let text = try? String(contentsOfFile: RuleFiles.seriesRules.grouping.englishDictionary, encoding: .utf8) else { return [] }
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
         return Set(text.split(separator: "\n").map { $0.lowercased() })
     }()
 

@@ -18,47 +18,58 @@ public enum VolumeExtractor {
         public var number: Double?
     }
 
-    /// 巻の読み方の語の一覧は series-rules.json の volume(prefixes / counters / kanjiCounters / positionWords)。
+    /// 巻の読み方の語の一覧は series-rules.json の volume.readers(prefixes / counters / …)。
     static let rules = RuleFiles.seriesRules.volume
     static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟"
 
+    /// 語の一覧を空にしたとき、空の選択肢が何にでも一致しないよう、決して一致しない形にする。
+    static func nonEmpty(_ pattern: String) -> String { pattern.isEmpty ? "(?!)" : pattern }
+
     private static let numeric = try! NSRegularExpression(
-        pattern: #"^(?:"# + rules.prefixPattern + #")?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:"# + rules.alternation(rules.counters)
-            + #"|$|\s|[~\-・!?.)])"#,
+        pattern: #"^(?:"# + nonEmpty(rules.prefixPattern) + #")?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:"#
+            + nonEmpty(rules.alternation(rules.counters)) + #"|$|\s|[~\-・!?.)])"#,
         options: [.caseInsensitive])
     private static let kanji = try! NSRegularExpression(
-        pattern: #"^(?:(?:"# + rules.kanjiPrefixPattern + #")(["# + kanjiDigits + #"]+)|(["# + kanjiDigits + #"]+)(?:"#
-            + rules.alternation(rules.kanjiCounters) + #"))"#)
+        pattern: #"^(?:(?:"# + nonEmpty(rules.kanjiPrefixPattern) + #")(["# + kanjiDigits + #"]+)|(["# + kanjiDigits + #"]+)(?:"#
+            + nonEmpty(rules.alternation(rules.kanjiCounters)) + #"))"#)
     private static let position = try! NSRegularExpression(
-        pattern: #"^((?:"# + rules.positionPattern + #")(?:\s*\d{1,2})?)(?:$|\s)"#)
+        pattern: #"^((?:"# + nonEmpty(rules.positionPattern) + #")(?:\s*\d{1,2})?)(?:$|\s)"#)
 
     /// 巻の前に付く区切り。シリーズ名の末尾から落とす記号(TextRules.trailingTrim)に加えて「!」「?」と閉じ括弧も落とす
     /// (「X! ver2」)。シリーズ名の側では「!」を落とさない(「ご懐妊!!」のような名前がある)。
     static let leadingSeparators = TextRules.trailingTrim.union(.whitespaces).union(CharacterSet(charactersIn: "!?！？】」』》〉)）]］>"))
 
+    /// 読み手を優先の順に試し、最初に読めたものを採る(規則で止めた読み手は飛ばす)。
     public static func extract(fromRemainder remainder: String) -> Volume? {
         let s = remainder.precomposedNFKC
             .trimmingCharacters(in: leadingSeparators)
         guard !s.isEmpty else { return nil }
         let ns = s as NSString
         let range = NSRange(location: 0, length: ns.length)
-        // 「第」が付いていれば、数字の後ろの単位は何でもよい(「第1幕」「第三部」「第2夜」)。
-        if let m = ordinal.firstMatch(in: s, range: range) {
-            let text = ns.substring(with: m.range(at: 1))
-            let number = Double(text) ?? kanjiNumber(text).map(Double.init)
-            if let number {
-                // 「第04-1章」: 後ろが前以下なら分冊(4.1、4.2 …)。前より大きければ合併(「第1-2巻」。数は最初)。
-                if m.range(at: 2).location != NSNotFound, let sub = Int(ns.substring(with: m.range(at: 2))) {
-                    let range = "\(text)-\(ns.substring(with: m.range(at: 2)))"
-                    if Double(sub) <= number, sub > 0 {
-                        return Volume(text: range, number: number + Double(sub) / (sub < 10 ? 10 : 100))
-                    }
-                    return Volume(text: range, number: number)
-                }
-                return Volume(text: text, number: number)
-            }
+        for reader in rules.readers {
+            if let volume = read(reader, s, ns, range) { return volume }
         }
-        if let m = numeric.firstMatch(in: s, range: range) {
+        return nil
+    }
+
+    private static func read(_ reader: SeriesRules.Reader, _ s: String, _ ns: NSString, _ range: NSRange) -> Volume? {
+        switch reader {
+        case .ordinal:
+            // 「第」が付いていれば、数字の後ろの単位は何でもよい(「第1幕」「第三部」「第2夜」)。
+            guard let m = ordinal.firstMatch(in: s, range: range) else { return nil }
+            let text = ns.substring(with: m.range(at: 1))
+            guard let number = Double(text) ?? kanjiNumber(text).map(Double.init) else { return nil }
+            // 「第04-1章」: 後ろが前以下なら分冊(4.1、4.2 …)。前より大きければ合併(「第1-2巻」。数は最初)。
+            if m.range(at: 2).location != NSNotFound, let sub = Int(ns.substring(with: m.range(at: 2))) {
+                let range = "\(text)-\(ns.substring(with: m.range(at: 2)))"
+                if Double(sub) <= number, sub > 0 {
+                    return Volume(text: range, number: number + Double(sub) / (sub < 10 ? 10 : 100))
+                }
+                return Volume(text: range, number: number)
+            }
+            return Volume(text: text, number: number)
+        case .number:
+            guard let m = numeric.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
             // 合併号(「36-37号」)。表記は範囲のまま、数は最初の号。範囲として読めなければ最初の数だけ。
             if m.range(at: 2).location != NSNotFound, let upper = Int(ns.substring(with: m.range(at: 2))),
@@ -66,24 +77,23 @@ public enum VolumeExtractor {
                 return Volume(text: "\(text)-\(ns.substring(with: m.range(at: 2)))", number: Double(text))
             }
             return Volume(text: text, number: Double(text))
-        }
-        if let m = kanji.firstMatch(in: s, range: range) {
+        case .kanji:
+            guard let m = kanji.firstMatch(in: s, range: range) else { return nil }
             let r = m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2)
             let text = ns.substring(with: r)
             return Volume(text: text, number: kanjiNumber(text).map(Double.init))
-        }
-        if let m = greek.firstMatch(in: s, range: range) {
+        case .greek:
+            guard let m = greek.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
-            if let n = greekNumber(text) { return Volume(text: text, number: Double(n)) }
-        }
-        if let m = roman.firstMatch(in: s, range: range) {
+            return greekNumber(text).map { Volume(text: text, number: Double($0)) }
+        case .roman:
+            guard let m = roman.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
-            if let n = romanNumber(text) { return Volume(text: text, number: Double(n)) }
-        }
-        if let m = position.firstMatch(in: s, range: range) {
+            return romanNumber(text).map { Volume(text: text, number: Double($0)) }
+        case .position:
+            guard let m = position.firstMatch(in: s, range: range) else { return nil }
             return Volume(text: ns.substring(with: m.range(at: 1)), number: nil)
         }
-        return nil
     }
 
     /// 「第」+ 数字 + 任意の漢字 1 字の単位。
@@ -122,7 +132,7 @@ public enum VolumeExtractor {
         let ns = s as NSString
         let range = NSRange(location: 0, length: ns.length)
         // 「第」付き(分冊の「第04-1章」を含む)は先に見る。下の範囲の判定は合併号のためのもので、分冊には当てない。
-        if wholeOrdinal.firstMatch(in: s, range: range) != nil { return true }
+        if rules.reads(.ordinal), wholeOrdinal.firstMatch(in: s, range: range) != nil { return true }
         if wholeVolume.firstMatch(in: s, range: range) != nil {
             // 範囲(「36-37」)は合併号として読めるときだけ。「2021-01」は範囲ではない(年と月)。
             if let r = s.range(of: #"(\d+)[-‐~〜](\d+)"#, options: .regularExpression) {
@@ -131,18 +141,25 @@ public enum VolumeExtractor {
             }
             return true
         }
-        if wholeOrdinal.firstMatch(in: s, range: range) != nil { return true }
         // ローマ数字だけ(「II」)。
-        if let m = roman.firstMatch(in: s, range: range), m.range.length == ns.length || m.range(at: 1).length == ns.length {
+        if rules.reads(.roman), let m = roman.firstMatch(in: s, range: range), m.range.length == ns.length || m.range(at: 1).length == ns.length {
             return romanNumber(ns.substring(with: m.range(at: 1))) != nil
         }
         return false
     }
 
-    private static let wholeVolume = try! NSRegularExpression(
-        pattern: #"^(?:(?:"# + rules.prefixPattern + #")\s*)?(?:\d+(?:\.\d+)?(?:[-‐~〜]\d+)?|["# + kanjiDigits + #"]+|[α-ω])\s*(?:"#
-            + rules.alternation(rules.counters + rules.wholeOnlyCounters) + #")?$|^(?:"# + rules.positionPattern + #")(?:\s*\d{1,2})?$"#,
-        options: [.caseInsensitive])
+    /// 巻だけでできている形。止めた読み手の形は含めない。
+    private static let wholeVolume: NSRegularExpression = {
+        let values = [
+            rules.reads(.number) ? #"\d+(?:\.\d+)?(?:[-‐~〜]\d+)?"# : nil,
+            rules.reads(.kanji) ? "[" + kanjiDigits + "]+" : nil,
+            rules.reads(.greek) ? "[α-ω]" : nil,
+        ].compactMap { $0 }
+        let counted = #"^(?:(?:"# + nonEmpty(rules.prefixPattern) + #")\s*)?(?:"# + nonEmpty(values.joined(separator: "|"))
+            + #")\s*(?:"# + nonEmpty(rules.alternation(rules.counters + rules.wholeOnlyCounters)) + #")?$"#
+        let position = #"^(?:"# + nonEmpty(rules.reads(.position) ? rules.positionPattern : "") + #")(?:\s*\d{1,2})?$"#
+        return try! NSRegularExpression(pattern: counted + "|" + position, options: [.caseInsensitive])
+    }()
 
     /// 漢数字を数にする。大字(壱弐参…)・百・千・〇にも対応する(StackNest の NumeralNormalizer(MIT)の表に倣った)。
     static func kanjiNumber(_ s: String) -> Int? {
@@ -225,9 +242,9 @@ public enum ProposalFinalizer {
                 document.books[i].volumeNumber = volume.number
             }
         }
-        readLeadingKanjiNumerals(&document)
+        if VolumeExtractor.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document) }
         numberPositionWords(&document)
-        inferFirstVolumes(&document)
+        if VolumeExtractor.rules.inferFirstVolume { inferFirstVolumes(&document) }
     }
 
     /// 「上」「中」「下」(「前編」「中編」「後編」)を数にする。**組の中に「中」があるかで決める**:
@@ -281,7 +298,8 @@ public enum ProposalFinalizer {
                 guard !digits.isEmpty, let n = VolumeExtractor.kanjiNumber(digits) else { continue }
                 found.append((i, digits, n))
             }
-            guard found.count >= 2, Set(found.map(\.number)).count == found.count else { continue }
+            guard found.count >= VolumeExtractor.rules.sharedLeadingKanjiMinBooks, Set(found.map(\.number)).count == found.count
+            else { continue }
             for f in found {
                 document.books[f.index].volumeText = f.text
                 document.books[f.index].volumeNumber = Double(f.number)

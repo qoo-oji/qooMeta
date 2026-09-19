@@ -14,7 +14,7 @@ import Testing
         }
     }
 
-    static func load(_ json: String) -> Result<ExampleFile, RuleIssues> {
+    static func load(_ json: String) -> Result<ExampleFile, RulesIssues> {
         ExampleFile.load(Data(json.utf8))
     }
 
@@ -41,7 +41,7 @@ import Testing
     @Test func brokenJSONIsReported() {
         guard case .failure(let failure) = Self.load("{ \"kind\": ") else { Issue.record("壊れた JSON を読めてしまった"); return }
         #expect(failure.issues.count == 1)
-        #expect(failure.issues[0].message.contains("JSON"))
+        #expect(failure.issues[0].code == .malformedJSON)
     }
 
     @Test func otherKindsAndNewerVersionsAreRejected() {
