@@ -25,6 +25,8 @@ let usage = """
       StackNest が取り込める Stackroom XML、または qooViewer の保存データ JSON を書く
   qoometa series-list --in <提案.json> --out <一覧.csv> [--rules-only] [--exclude-from <以前の一覧.csv>]
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
+  qoometa formats --in <提案.json>
+      同梱のファイル名フォーマット(新しい書き方)で名前を読み、型ごとの一致冊数と合わなかった冊数を出す(名前は出さない)
   qoometa bench --in <提案.json>
       一括の提案と、1 冊の追加・変更にかかる時間を測る(名前は出さない)
   qoometa evaluate --corpus <正解付き.jsonl> [--examples N]
@@ -212,6 +214,10 @@ func run() async throws {
         let written = inSeries.filter { !excluded.contains(($0.id as NSString).lastPathComponent.precomposedStringWithCanonicalMapping) }
         print("シリーズの一覧を書きました: \(Set(written.compactMap(\.seriesID)).count) シリーズ / \(written.count) 冊"
               + (excluded.isEmpty ? "" : "(以前の一覧の \(excluded.count) 件の名前と一致した \(inSeries.count - written.count) 冊を除いた)"))
+
+    case "formats":
+        let doc = try ScanDocument.load(try args.require("in"))
+        FormatReport.lines(doc.files.map(\.baseName), formats: .preset).forEach { print($0) }
 
     case "bench":
         let doc = try ScanDocument.load(try args.require("in"))

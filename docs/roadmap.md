@@ -62,9 +62,10 @@
    - 終わりの条件: 指紋が段階 1 と **1 文字も変わらない**。`swift test` と `qoometa rules test` が通る。
 3. **欄**(済み。2026-09-19。`Sources/QooMetaKit/BookMetadata.swift`): `BookMetadata`(タイトル、著者・ジャンル・関連・キーワード A〜C の並び、種類、メモ、シリーズ、巻 = 表記と数)。
    - 終わりの条件: 型とテスト(合成した値)。
-4. **ファイル名フォーマット**: 予約語 `@title @author @genre @source @keywordA @keywordB @keywordC @type @ignore`、型の並び
+4. **ファイル名フォーマット**(済み。2026-09-19。`Sources/QooMetaKit/FilenameFormat.swift`、集計は `qoometa formats`): 予約語 `@title @author @genre @source @keywordA @keywordB @keywordC @type @ignore`、型の並び
    (上から、名前全体に一致した最初のもの)、並びの欄の区切り(既定は括弧・`,`・`、`。設定で足せる)、最も近い型、同梱の型の並び(filename-format.md の 5)。フォルダ名は読まない。
-   照合は qooMeta で書く(QooFormat は使わない)。filename-formats.json と規則の検証の予約語(`@event` `@circle` …)もここで直す。
+   照合は qooMeta で書く(QooFormat は使わない)。filename-formats.json と規則の検証の予約語(`@event` `@circle` …)は、今の前段が読んで
+   いて指紋の確かめに要るので、前段と一緒に段階 6 で直す(同梱の並びは、それまでコードの `FilenameFormats.presetTexts` に持つ)。
    - 終わりの条件: filename-format.md の 1・2・5 の書き方それぞれに合成した名前のテスト(`[@author (@author)]`、最後の ` - ` で分ける、
      全角の括弧、合わない名前で最も近い型が出る)。手元の蔵書で、型ごとの一致冊数と、どの型にも合わなかった冊数を報告する。
 5. **画面の骨組み**(架空のデータ `-demo` だけ): 値の列(冊数・「(空)」)、1 冊 1 行の一覧、詳細(ファイル名の色分け・一致した型)、
@@ -76,6 +77,7 @@
    - 終わりの条件: `import QooFormat` がどこにも無く、Package.swift・README・LICENSE から QooFormat の記述が消えている。
      組み込みの規則が新しい検査で読み込める。例のファイルが通る。手元の蔵書で、段階 1 との違いを**原因別の集計**で報告する(単位が変わった冊数 = 書き手・ジャンルの
      読みの違い、比べるタイトルが変わった冊数、シリーズ・巻が変わった冊数)。書き手が空の単位の冊数と、`qoometa bench` の速さも報告する。本ごとの記録はソルト付きのハッシュでリポジトリの外へ。
+     filename-formats.json を新しい形に直し(同梱の並びをそこへ移す)、規則の検証の予約語を新しいものにする。
 7. **修正と確定**: 欄ごとの「提案 / 直した値」、まとめて編集(ジャンル・著者の先頭・関連・タイトルを直したら、関わる単位のシリーズを
    組み直す。大量に直したときは 1 冊ずつではなく一括で計算し直す)、シリーズの操作(1 つにする・外す・巻を確かめる)、変更の索引、取り消し。
    - 終わりの条件: 合成した一覧で「全選択してジャンルを書き換える → 割れていたシリーズが 1 つになる」テストと、

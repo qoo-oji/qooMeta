@@ -84,6 +84,53 @@ enum StatsReport {
     }
 }
 
+/// ファイル名フォーマットの集計(名前を含まない)。型は同梱のもの(名前ではない)なので、そのまま出す。
+enum FormatReport {
+    static func lines(_ names: [String], formats: FilenameFormats) -> [String] {
+        let readings = names.map(formats.read)
+        var matched = [Int](repeating: 0, count: formats.formats.count)
+        var nearest = [Int](repeating: 0, count: formats.formats.count)
+        var unmatched = 0
+        for r in readings {
+            if let i = r.formatIndex { matched[i] += 1 } else {
+                unmatched += 1
+                if let n = r.nearest { nearest[n.formatIndex] += 1 }
+            }
+        }
+        var lines = ["本: \(names.count)、型に合った: \(names.count - unmatched)、どの型にも合わなかった: \(unmatched)"]
+        for (i, format) in formats.formats.enumerated() where matched[i] > 0 || nearest[i] > 0 {
+            lines.append(String(format: "  %2d  %6d 冊", i + 1, matched[i])
+                         + (nearest[i] > 0 ? "(合わなかった名前で最も近い: \(nearest[i]))" : "") + "  \(format.text)")
+        }
+        let shapes = zip(names, readings).filter { $0.1.formatIndex == nil }.map { NameShape.of($0.0) }
+        if !shapes.isEmpty {
+            lines.append("  合わなかった名前の形(多い順、W = 文字の続き、9 = 数字の続き):")
+            for (shape, count) in Dictionary(grouping: shapes, by: { $0 }).mapValues(\.count)
+                .sorted(by: { ($1.value, $0.key) < ($0.value, $1.key) }).prefix(12) {
+                lines.append(String(format: "    %6d  ", count) + shape)
+            }
+        }
+        let authors = readings.filter { $0.formatIndex != nil }.map { $0.metadata.authors.count }
+        lines.append("  型に合った本の著者の数: " + Dictionary(grouping: authors, by: { $0 }).mapValues(\.count)
+            .sorted { $0.key < $1.key }.map { "\($0.key) 人 \($0.value) 冊" }.joined(separator: "、"))
+        return lines
+    }
+}
+
+/// 名前の「形」: 文字の続きを W、数字の続きを 9 に置き換え、空白を除いたもの(括弧・記号は残す)。名前そのものは出せないので、
+/// 型に合わない理由を見るときはこれを見る。
+enum NameShape {
+    static func of(_ name: String) -> String {
+        var out = ""
+        for c in name where !c.isWhitespace {
+            let s: Character = c.isNumber ? "9" : (c.isLetter ? "W" : c)
+            if (s == "W" || s == "9"), out.last == s { continue }
+            out.append(s)
+        }
+        return out
+    }
+}
+
 /// 結果の指紋。規則や処理を「結果を変えないつもりで」移し替えるとき、前後で本と組の中身が 1 冊も変わっていないことを、
 /// 名前を出さずに確かめる(docs/roadmap.md「進め方の約束」)。出力するのはハッシュだけ。
 ///
