@@ -9,12 +9,12 @@ import Foundation
 ///
 /// どちらの印も、シリーズを組むときはタイトルから除いて比べる。印を除いて同じタイトルになる本は同じ作品の 1 冊と
 /// 数え、版違い・入手経路違いだけの組はシリーズにしない(SeriesGrouper)。
-public final class EditionMarkers: Sendable {
-    public struct Split: Equatable, Sendable {
+final class EditionMarkers: Sendable {
+    struct Split: Equatable, Sendable {
         /// 印を除いたタイトル(比べる・巻を読むのに使う)。
-        public var base: String
-        public var editions: [String]
-        public var sources: [String]
+        var base: String
+        var editions: [String]
+        var sources: [String]
     }
 
     /// 印の正規表現。前後の括弧ごと取り除く。長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
@@ -41,13 +41,17 @@ public final class EditionMarkers: Sendable {
                 + (source.isEmpty ? "(?!)" : source) + #"))\s*[\]］】)）]?"#)
     }
 
-    public func split(_ title: String) -> Split {
+    func split(_ title: String) -> Split {
         guard let pattern else { return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: []) }
         let ns = title as NSString
         var editions: [String] = [], sources: [String] = []
         var base = ""
         var last = 0
-        for m in pattern.matches(in: title, range: NSRange(location: 0, length: ns.length)) {
+        // 印の正規表現は利用者が書き足せるので、照合に時間の上限を設ける(越えたら印は無いものとして扱う)。
+        guard let matches = BudgetedRegex.matches(pattern, in: title, budget: BudgetedRegex.defaultBudget) else {
+            return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: [])
+        }
+        for m in matches {
             base += ns.substring(with: NSRange(location: last, length: m.range.location - last))
             last = m.range.location + m.range.length
             let e = m.range(withName: "edition"), s = m.range(withName: "source")
@@ -66,7 +70,7 @@ public final class EditionMarkers: Sendable {
 }
 
 /// 総集編の語と、収録範囲の並べ替え。
-public final class Compilation: Sendable {
+final class Compilation: Sendable {
     /// 「総集編」(「総集篇」とも書く)。series-rules.json の grouping.compilation.words。
     let keyword: NSRegularExpression
     let text: TextRules
@@ -88,7 +92,7 @@ public final class Compilation: Sendable {
         pattern: #"\s*(?:第\s*)?(\d+(?:\s*[~〜\-‐]\s*\d+)?(?:\s*[+＋]\s*[α-ωA-Za-zぁ-んァ-ン]+)?)\s*(?:巻)?\s*$"#)
 
     /// 「X1~4総集編」を「X 総集編 1~4」に並べ替える(シリーズ名は「X 総集編」、範囲はその巻)。当てはまらなければ nil。
-    public func normalizedTitle(_ title: String) -> String? {
+    func normalizedTitle(_ title: String) -> String? {
         guard let r = keywordRange(in: title), r.lowerBound > title.startIndex else { return nil }
         let head = String(title[..<r.lowerBound])
         let ns = head as NSString
@@ -99,5 +103,31 @@ public final class Compilation: Sendable {
         let range = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: " ", with: "")
         let rest = String(title[r.upperBound...]).trimmingCharacters(in: .whitespaces)
         return "\(main) \(title[r]) \(range)" + (rest.isEmpty ? "" : " \(rest)")
+    }
+}
+
+/// 時間の上限つきの照合(QooFormat の SafeRegex と同じ仕組み。規則の正規表現による計算の暴走を止める)。
+enum BudgetedRegex {
+    /// 1 回の照合の上限(QooFormat の AppLimits.Format.regexMatchBudget と同じ)。
+    static let defaultBudget: TimeInterval = 0.02
+
+    /// すべての一致。上限を越えたら nil。
+    static func matches(_ regex: NSRegularExpression, in text: String, budget: TimeInterval) -> [NSTextCheckingResult]? {
+        let started = DispatchTime.now().uptimeNanoseconds
+        let limit = UInt64(max(budget, 0) * 1_000_000_000)
+        var found: [NSTextCheckingResult] = []
+        var abandoned = false
+        regex.enumerateMatches(in: text, options: [.reportProgress],
+                               range: NSRange(location: 0, length: (text as NSString).length)) { result, flags, stop in
+            if flags.contains(.progress) {
+                if DispatchTime.now().uptimeNanoseconds &- started > limit {
+                    abandoned = true
+                    stop.pointee = true
+                }
+                return
+            }
+            if let result { found.append(result) }
+        }
+        return abandoned ? nil : found
     }
 }

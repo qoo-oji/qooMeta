@@ -115,7 +115,7 @@ public actor ProposalIndex {
                 s.unitResults[key] = nil
                 s.unitMembers[key] = nil
             } else {
-                s.unitResults[key] = engine.computeUnit(members)
+                s.unitResults[key] = engine.computeUnit(members, explain: options.explanations)
             }
         }
         if Task.isCancelled { throw CancellationError() }

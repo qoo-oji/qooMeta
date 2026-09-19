@@ -102,9 +102,14 @@ public struct InputIssue: Sendable, Hashable {
 }
 
 public struct ProposalOptions: Sendable, Hashable {
+    /// 説明(Explanation)を作る。費用がかかるので既定は無し。
+    public var explanations = false
     public var limits: InputLimits = .default
 
-    public init(limits: InputLimits = .default) { self.limits = limits }
+    public init(explanations: Bool = false, limits: InputLimits = .default) {
+        self.explanations = explanations
+        self.limits = limits
+    }
     public static let `default` = ProposalOptions()
 }
 
@@ -164,6 +169,8 @@ public struct BookProposal: Sendable, Hashable {
     }
 
     public let id: String
+    /// 入力の名前(並べ替え「ファイル名順」に使う)。
+    public let name: String
     public let parsed: ParsedName
     public let seriesID: SeriesID?
     public let volume: Volume?
@@ -203,12 +210,16 @@ public struct ProposalSet: Sendable {
 
     let indexByID: [String: Int]
     let seriesByID: [SeriesID: Int]
+    /// 本の ID → 説明(ProposalOptions.explanations のときだけ)。
+    let explanations: [String: Explanation]
 
-    init(proposals: [BookProposal], series: [SeriesProposal], rulesHash: String, rejected: [InputIssue]) {
+    init(proposals: [BookProposal], series: [SeriesProposal], rulesHash: String, rejected: [InputIssue],
+         explanations: [String: Explanation] = [:]) {
         self.proposals = proposals
         self.series = series
         self.rulesHash = rulesHash
         self.rejected = rejected
+        self.explanations = explanations
         indexByID = Dictionary(proposals.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
         seriesByID = Dictionary(series.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
     }

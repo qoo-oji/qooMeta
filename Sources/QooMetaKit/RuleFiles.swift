@@ -42,8 +42,8 @@ public struct CompiledRules: Sendable {
     /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
     public static let engineLevel = 1
 
-    public let series: SeriesRules
-    public let formats: FilenameFormatRules
+    let series: SeriesRules
+    let formats: FilenameFormatRules
     /// 重ねた結果(`rules show` 用)。
     public let mergedSeriesRules: JSONValue
     public let mergedFilenameFormats: JSONValue
@@ -51,6 +51,9 @@ public struct CompiledRules: Sendable {
     public let changedPaths: [String]
     /// 内容から計算したハッシュ(キャッシュの判定用。`revision` には依らない)。
     public let contentHash: String
+    /// 既定値(利用者の変更を重ねる前。規則のカタログで、変えたかどうかを見るのに使う)。
+    public let defaultSeriesRules: JSONValue
+    public let defaultFilenameFormats: JSONValue
 
     /// - Parameter dictionaries: 利用側が渡せる辞書の名前。規則が指す辞書が無ければ、その条件は働かず警告になる。
     public static func compile(_ sources: RuleSources, dictionaries: Set<String> = ["english"]) -> RulesCompilation {
@@ -84,6 +87,7 @@ public struct CompiledRules: Sendable {
             return RulesCompilation(rules: nil, errors: issues.filter { !$0.isWarning }, warnings: issues.filter(\.isWarning))
         }
 
+        let defaults = (series: seriesRoot!, formats: formatsRoot!)
         var changed: [String] = []
         if let data = sources.userChanges {
             var user = RuleLoader(source: "user", engineLevel: engineLevel)
@@ -135,7 +139,8 @@ public struct CompiledRules: Sendable {
         let hashed = Data((stripped(seriesRoot!).rendered() + "\n" + stripped(formatsRoot!).rendered()).utf8)
         let hash = SHA256.hash(data: hashed).prefix(12).map { String(format: "%02x", $0) }.joined()
         let rules = CompiledRules(series: series, formats: formats, mergedSeriesRules: seriesRoot!,
-                                  mergedFilenameFormats: formatsRoot!, changedPaths: changed.sorted(), contentHash: hash)
+                                  mergedFilenameFormats: formatsRoot!, changedPaths: changed.sorted(), contentHash: hash,
+                                  defaultSeriesRules: defaults.series, defaultFilenameFormats: defaults.formats)
         return RulesCompilation(rules: rules, errors: [], warnings: issues.filter(\.isWarning))
     }
 
@@ -149,7 +154,15 @@ public struct CompiledRules: Sendable {
         series["policies"] = .object(current)
         let builtIn = BuiltInRules(seriesRules: Data(JSONValue.object(series).rendered().utf8),
                                    filenameFormats: Data(mergedFilenameFormats.rendered().utf8))
-        return CompiledRules.compile(RuleSources(builtIn: builtIn), dictionaries: dictionaries)
+        let compilation = CompiledRules.compile(RuleSources(builtIn: builtIn), dictionaries: dictionaries)
+        // 既定値は元のまま(方針を変えたことが、規則のカタログで「変えた」と見えるように)。
+        guard let rules = compilation.rules else { return compilation }
+        return RulesCompilation(rules: CompiledRules(
+            series: rules.series, formats: rules.formats, mergedSeriesRules: rules.mergedSeriesRules,
+            mergedFilenameFormats: rules.mergedFilenameFormats,
+            changedPaths: Set(changedPaths + policies.keys.map { "policies.\($0)" }).sorted(), contentHash: rules.contentHash,
+            defaultSeriesRules: defaultSeriesRules, defaultFilenameFormats: defaultFilenameFormats),
+            errors: compilation.errors, warnings: compilation.warnings)
     }
 
     /// 処理に関係しない包みのキー(`$schema`・`revision`)を除く。内容のハッシュがそれらに左右されないように。
@@ -302,146 +315,146 @@ struct RuleCompiler {
 }
 
 /// エンジンが使う形のファイル名のフォーマット。
-public struct FilenameFormatRules: Sendable {
-    public struct ReservedWord: Sendable {
+struct FilenameFormatRules: Sendable {
+    struct ReservedWord: Sendable {
         /// 照合の処理(QooFormat)での予約語。
-        public var engine: String
+        var engine: String
         /// qooMeta の欄(genre / event / circle / authors / title / relation / keyword)。
-        public var field: String
+        var field: String
     }
 
-    public struct Profile: Sendable {
-        public var id: String
+    struct Profile: Sendable {
+        var id: String
         /// 区切りに使う括弧の組(開き, 閉じ)。
-        public var delimiters: [[String]]
+        var delimiters: [[String]]
         /// 上から順に照合し、最初に一致したものを採る。
-        public var formats: [String]
+        var formats: [String]
         /// 1 かたまりとして扱う文字列(正規表現)。「(2019)」のような年や「(完結)」を、末尾の丸括弧と取り違えないため。
-        public var protectedTokens: [String]
+        var protectedTokens: [String]
     }
 
     /// Stackroom 式の予約語 → 照合の処理の予約語と、qooMeta の欄。
-    public var reservedWords: [String: ReservedWord]
+    var reservedWords: [String: ReservedWord]
     /// 作者が複数のときの区切り文字。
-    public var authorSeparators: String
+    var authorSeparators: String
     /// 上から試し、どれかのフォーマットが一致した最初のプロファイルを採る。
-    public var profiles: [Profile]
+    var profiles: [Profile]
     /// どのフォーマットにも一致しない名前を、括弧の位置だけで読むか(NameParser)。止めるとタイトルだけになる。
-    public var simpleBracketsEnabled: Bool
+    var simpleBracketsEnabled: Bool
 }
 
 /// エンジンが使う形のシリーズの規則。方針(`policies`)は、ここでは今の扱いのフラグに写してある。
-public struct SeriesRules: Sendable {
-    public struct Compare: Sendable {
+struct SeriesRules: Sendable {
+    struct Compare: Sendable {
         /// 比べるときに無視する文字(空白と、タイトルの飾りによく使われる記号)。
-        public var ignoredCharacters: String
+        var ignoredCharacters: String
         /// 比べるときに同じ字とみなす異体字(左 → 右)。
-        public var variantKanji: [String: String]
+        var variantKanji: [String: String]
         /// 語の切れ目とみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。
-        public var boundaryCharacters: String
+        var boundaryCharacters: String
     }
 
-    public struct Grouping: Sendable {
+    struct Grouping: Sendable {
         /// 語の途中で切れる共通部分は、この文字数以上のときだけ組にする。
-        public var minPrefix: Int
+        var minPrefix: Int
         /// 片方のタイトル全体がもう片方の前半と一致する場合の下限。
-        public var minWholeTitle: Int
+        var minWholeTitle: Int
         /// 方針 `subtitled`。
-        public var attachSubtitled: Bool
+        var attachSubtitled: Bool
         /// 方針 `differentRelation`(ネタが違う本を分ける)。
-        public var splitByGenre: Bool
+        var splitByGenre: Bool
         /// 方針 `differentGenre`(本の種別が違う本を分ける)。
-        public var splitByMediaType: Bool
-        public var volumeHeadEnabled: Bool
-        public var sharedPrefixEnabled: Bool
-        public var rejectHiraganaEndings: Bool
-        public var rejectSingleWordPrefixes: Bool
-        public var rejectCommonEnglishTitles: Bool
+        var splitByMediaType: Bool
+        var volumeHeadEnabled: Bool
+        var sharedPrefixEnabled: Bool
+        var rejectHiraganaEndings: Bool
+        var rejectSingleWordPrefixes: Bool
+        var rejectCommonEnglishTitles: Bool
         /// 一般的な英語だけのタイトルでも、後ろに巻があれば組にする。
-        public var commonEnglishUnlessVolume: Bool
+        var commonEnglishUnlessVolume: Bool
         /// 本編のシリーズがあれば、総集編が 1 冊でもシリーズにする。
-        public var compilationSingleWhenMainExists: Bool
+        var compilationSingleWhenMainExists: Bool
     }
 
-    public struct Naming: Sendable {
+    struct Naming: Sendable {
         /// シリーズ名の末尾から落とす文字(巻の前の区切りとしても使う)。
-        public var trimTrailing: String
-        public var trimTrailingEnabled: Bool
+        var trimTrailing: String
+        var trimTrailingEnabled: Bool
         /// 共通部分の直後にあれば、名前に含める文字(止めていれば空)。
-        public var keepFollowing: String
+        var keepFollowing: String
         /// 閉じ括弧 → 開き括弧。開いたままの括弧があれば、直後の閉じ括弧まで名前に含める(止めていれば空)。
-        public var brackets: [String: String]
+        var brackets: [String: String]
         /// 名前の末尾に残ったら外す語(止めていれば空)。
-        public var labelIntroducers: [String]
+        var labelIntroducers: [String]
     }
 
-    public struct Editions: Sendable {
+    struct Editions: Sendable {
         /// 印の語と正規表現(規則を止めたとき、方針 `ignore` のときは空)。
-        public var edition: [String]
-        public var editionPatterns: [String]
-        public var source: [String]
-        public var sourcePatterns: [String]
+        var edition: [String]
+        var editionPatterns: [String]
+        var source: [String]
+        var sourcePatterns: [String]
         /// 比べるタイトルから印を除くか(方針 `sameWork`)。`separateBooks` なら印を見分けて付けるが、除かずに比べる。
-        public var stripsEditions: Bool
-        public var stripsSources: Bool
+        var stripsEditions: Bool
+        var stripsSources: Bool
     }
 
-    public struct Compilation: Sendable {
-        public enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
-        public var keywords: [String]
+    struct Compilation: Sendable {
+        enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
+        var keywords: [String]
         /// 方針 `compilations`。
-        public var placement: Placement
+        var placement: Placement
         /// 方針 `compilationVolume` が `afterRange`(本編の中での巻を、収録範囲の最後の巻の直後にする)。
-        public var volumeAfterRange: Bool
+        var volumeAfterRange: Bool
     }
 
     /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。
-    public enum Reader: String, Sendable {
+    enum Reader: String, Sendable {
         case ordinal, number, kanji, greek, roman, position
     }
 
-    public struct Volume: Sendable {
-        public struct PositionWords: Sendable {
-            public var first: [String]
-            public var middle: [String]
-            public var last: [String]
+    struct Volume: Sendable {
+        struct PositionWords: Sendable {
+            var first: [String]
+            var middle: [String]
+            var last: [String]
         }
 
         /// 働いている読み手(優先の順)。
-        public var readers: [Reader]
+        var readers: [Reader]
         /// 巻の番号の前に付く語(`vol` `第` `その` …)。英字の語は後ろの「.」も受け付ける。
-        public var prefixes: [String]
+        var prefixes: [String]
         /// 巻の番号の後ろに付く単位。
-        public var counters: [String]
+        var counters: [String]
         /// 巻だけでできているかを見るときにだけ使う単位。
-        public var wholeOnlyCounters: [String]
+        var wholeOnlyCounters: [String]
         /// 漢数字の前に付く語(英字・記号の語は使わない)。
-        public var kanjiPrefixes: [String]
+        var kanjiPrefixes: [String]
         /// 漢数字の後ろに付く単位。
-        public var kanjiCounters: [String]
-        public var positionWords: PositionWords
+        var kanjiCounters: [String]
+        var positionWords: PositionWords
         /// 「36-37」を合併号とみなす、前後の差の上限。
-        public var mergedIssueMaxSpan: Int
-        public var sharedLeadingKanjiEnabled: Bool
-        public var sharedLeadingKanjiMinBooks: Int
+        var mergedIssueMaxSpan: Int
+        var sharedLeadingKanjiEnabled: Bool
+        var sharedLeadingKanjiMinBooks: Int
         /// 方針 `unnumberedFirst`。
-        public var inferFirstVolume: Bool
+        var inferFirstVolume: Bool
         /// 方針 `magazines` が `whole`(雑誌全体で 1 つのシリーズにし、年と号を巻として読む)。
-        public var magazinesWhole: Bool
+        var magazinesWhole: Bool
         /// シリーズ名より後ろにこの語があれば、1 巻の推定の候補にしない。
-        public var notFirstMarkers: [String]
+        var notFirstMarkers: [String]
         /// シリーズ名の直後にこの語が付けば、1 巻の推定の候補にしない。
-        public var notFirstPrefixes: [String]
+        var notFirstPrefixes: [String]
 
-        public func reads(_ reader: Reader) -> Bool { readers.contains(reader) }
+        func reads(_ reader: Reader) -> Bool { readers.contains(reader) }
     }
 
-    public var compare: Compare
-    public var grouping: Grouping
-    public var naming: Naming
-    public var editions: Editions
-    public var compilation: Compilation
-    public var volume: Volume
+    var compare: Compare
+    var grouping: Grouping
+    var naming: Naming
+    var editions: Editions
+    var compilation: Compilation
+    var volume: Volume
 }
 
 extension SeriesRules.Volume {

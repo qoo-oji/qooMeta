@@ -17,7 +17,7 @@ public func proposeSync(_ books: [BookInput], rules: CompiledRules, vocabulary: 
                         options: ProposalOptions = .default) -> ProposalSet {
     let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
     let prepared = engine.prepare(books, limits: options.limits)
-    let results = prepared.units.mapValues { engine.computeUnit($0) }
+    let results = prepared.units.mapValues { engine.computeUnit($0, explain: options.explanations) }
     return engine.assemble(prepared, results)
 }
 
@@ -62,7 +62,7 @@ public func propose(_ books: [BookInput], rules: CompiledRules, vocabulary: Voca
             for chunk in chunks {
                 group.addTask {
                     try Task.checkCancellation()
-                    return chunk.map { ($0, engine.computeUnit(prepared.units[$0]!)) }
+                    return chunk.map { ($0, engine.computeUnit(prepared.units[$0]!, explain: options.explanations)) }
                 }
             }
             for try await part in group {
@@ -117,6 +117,7 @@ struct UnitResult: Sendable {
         var seriesKey: String?
         var volume: ReadVolume?
         var isCompilation: Bool
+        var explanation: Explanation?
     }
 
     var books: [String: Book]
@@ -237,15 +238,37 @@ extension RuleEngine {
     // MARK: - 単位ごとの計算
 
     /// 1 つの単位の本(入力の順)から、組・確定した内容・巻を決める。
-    func computeUnit(_ members: [PreparedBook]) -> UnitResult {
+    func computeUnit(_ members: [PreparedBook], explain: Bool = false) -> UnitResult {
         let sorted = members.sorted { $0.order < $1.order }
         var doc = WorkingDocument(books: sorted.enumerated().map { i, book in
             WorkingBook(id: i + 1, inputID: book.input.id, parsed: book.parts, circleKey: book.circleKey,
                         confirmation: book.input.confirmation, volumeHead: .some(book.volumeHead))
         }, groups: [])
-        doc.groups = SeriesGrouper(engine: self).group(doc.books)
+        var grouper = SeriesGrouper(engine: self)
+        let log = explain ? ExplanationLog() : nil
+        grouper.log = log
+        doc.groups = grouper.group(doc.books)
         applyConfirmations(&doc)
-        ProposalFinalizer.finalize(&doc, engine: self)
+        ProposalFinalizer.finalize(&doc, engine: self, log: log)
+        if let log {
+            // 組になった本には、組になった理由の規則を。
+            for group in doc.groups {
+                let rule: String? = switch group.evidence {
+                case .volumeHead: "volumeHead"
+                case .sharedPrefix: "sharedPrefix"
+                case .compilation: "compilation"
+                case .confirmed: nil
+                }
+                for id in group.memberIDs where doc.books.first(where: { $0.id == id })?.groupID == group.id {
+                    if let rule { log.apply(rule, to: id) }
+                }
+            }
+            for book in doc.books {
+                if book.parsed.editions != nil { log.apply("edition", to: book.id) }
+                if book.parsed.sources != nil { log.apply("source", to: book.id) }
+            }
+        }
+        let explanations = log?.explanations(inputIDs: Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, $0.inputID) }))
 
         let byID = Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, $0) })
         var series: [UnitSeries] = []
@@ -274,7 +297,8 @@ extension RuleEngine {
                 fromMagazineIssue: rules.series.volume.magazinesWhole && (book.volumeNumber ?? 0) >= 190_000)
             books[book.inputID] = UnitResult.Book(
                 seriesKey: book.groupID.flatMap { seriesKeyByGroup[$0] }, volume: volume,
-                isCompilation: compilation.keywordRange(in: book.parsed.baseTitle) != nil)
+                isCompilation: compilation.keywordRange(in: book.parsed.baseTitle) != nil,
+                explanation: explanations?[book.inputID])
         }
         return UnitResult(books: books, series: series)
     }
@@ -398,13 +422,16 @@ extension RuleEngine {
         if r?.isCompilation == true { flags.insert(.compilation) }
         if series?.kind == .magazineYear || (series != nil && r?.volume?.fromMagazineIssue == true) { flags.insert(.magazineIssue) }
         if book.input.confirmation != .none { flags.insert(.confirmed) }
-        return BookProposal(id: book.input.id, parsed: book.parsed, seriesID: key.map { seriesID(book.unitKey, $0) },
+        return BookProposal(id: book.input.id, name: book.input.name, parsed: book.parsed, seriesID: key.map { seriesID(book.unitKey, $0) },
                             volume: r?.volume?.volume, flags: flags)
     }
 
     func assemble(_ prepared: Prepared, _ results: [String: UnitResult]) -> ProposalSet {
         let series = results.flatMap { seriesProposals(unitKey: $0.key, $0.value) }.sorted(by: Self.seriesOrder)
         let proposals = prepared.books.map { bookProposal($0, results[$0.unitKey]) }
-        return ProposalSet(proposals: proposals, series: series, rulesHash: rules.contentHash, rejected: prepared.rejected)
+        var explanations: [String: Explanation] = [:]
+        for result in results.values { for (id, book) in result.books { if let e = book.explanation { explanations[id] = e } } }
+        return ProposalSet(proposals: proposals, series: series, rulesHash: rules.contentHash, rejected: prepared.rejected,
+                           explanations: explanations)
     }
 }

@@ -181,6 +181,6 @@ enum RuleSchema {
 }
 
 /// 例の `covers` に書ける規則の ID。
-public enum KnownRuleIDs {
-    public static var all: [String] { RuleSchema.ruleIDs }
+enum KnownRuleIDs {
+    static var all: [String] { RuleSchema.ruleIDs }
 }

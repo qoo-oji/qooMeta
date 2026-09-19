@@ -61,11 +61,15 @@ struct ScanDocument: Codable {
 struct Proposer {
     let rules: CompiledRules
     let vocabulary: Vocabulary
+    /// 説明(組になりかけた相手など)も作るか(見直し表のため)。
+    var explanations = false
 
     /// 規則だけの提案と、端末内モデルの判定を反映した提案。
     func proposals(_ doc: ScanDocument, useAI: Bool) -> (rulesOnly: ProposalSet, final: ProposalSet) {
-        let rulesOnly = proposeSync(doc.inputs(useAI: false), rules: rules, vocabulary: vocabulary)
+        let options = ProposalOptions(explanations: explanations)
+        let rulesOnly = proposeSync(doc.inputs(useAI: false), rules: rules, vocabulary: vocabulary, options: options)
         guard useAI, doc.judgements.contains(where: { $0.verdict != nil }) else { return (rulesOnly, rulesOnly) }
-        return (rulesOnly, proposeSync(doc.inputs(useAI: true, rulesOnly: rulesOnly), rules: rules, vocabulary: vocabulary))
+        return (rulesOnly, proposeSync(doc.inputs(useAI: true, rulesOnly: rulesOnly), rules: rules, vocabulary: vocabulary,
+                                       options: options))
     }
 }

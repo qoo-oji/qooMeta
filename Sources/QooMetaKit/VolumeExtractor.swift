@@ -12,10 +12,12 @@ import Foundation
 /// - ギリシャ文字の小文字 1 字(`α` = 1)
 /// - 雑誌の号・月号(`36号` `03月号`)と合併号(`36-37号`。表記は範囲、数は最初の号)。年はシリーズ名の側に残す
 ///   (「週刊〇〇 2025年」を 1 年ぶんのシリーズにする。利用者の判断)
-public final class VolumeExtractor: Sendable {
-    public struct Volume: Equatable, Sendable {
-        public var text: String
-        public var number: Double?
+final class VolumeExtractor: Sendable {
+    struct Volume: Equatable, Sendable {
+        var text: String
+        var number: Double?
+        /// 読んだ読み手の ID(説明に使う)。
+        var reader = ""
     }
 
     /// 巻の読み方の語の一覧は series-rules.json の volume.readers(prefixes / counters / …)。
@@ -66,15 +68,21 @@ public final class VolumeExtractor: Sendable {
     }
 
     /// 読み手を優先の順に試し、最初に読めたものを採る(規則で止めた読み手は飛ばす)。
-    public func extract(fromRemainder remainder: String) -> Volume? {
+    func extract(fromRemainder remainder: String) -> Volume? {
         let s = remainder.precomposedNFKC
             .trimmingCharacters(in: leadingSeparators)
         guard !s.isEmpty else { return nil }
         let ns = s as NSString
         let range = NSRange(location: 0, length: ns.length)
-        if rules.magazinesWhole, let volume = readMagazineIssue(s, ns, range) { return volume }
+        if rules.magazinesWhole, var volume = readMagazineIssue(s, ns, range) {
+            volume.reader = "magazines"
+            return volume
+        }
         for reader in rules.readers {
-            if let volume = read(reader, s, ns, range) { return volume }
+            if var volume = read(reader, s, ns, range) {
+                volume.reader = reader.rawValue
+                return volume
+            }
         }
         return nil
     }
@@ -157,7 +165,7 @@ public final class VolumeExtractor: Sendable {
     }
 
     /// 残りの部分が**巻だけ**でできているか(「21」「第3巻」「Vol.5」「上」。「#4 おまけ」は違う)。
-    public func isWholeVolume(_ remainder: String) -> Bool {
+    func isWholeVolume(_ remainder: String) -> Bool {
         // 巻の後ろの括弧書き(「Vol.01 [注記]」「3 (完)」)は除いて見る。
         var t = remainder.precomposedNFKC
         while let r = t.range(of: #"\s*[\[(【][^\[\]()【】]*[\])】]\s*$"#, options: .regularExpression), r.lowerBound > t.startIndex {
@@ -217,7 +225,7 @@ public final class VolumeExtractor: Sendable {
     }
 
     /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧がネタか巻かの判定に使う。
-    public static func isNumeralOnly(_ s: String) -> Bool {
+    static func isNumeralOnly(_ s: String) -> Bool {
         let t = s.precomposedNFKC.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return false }
         return Double(t) != nil || kanjiNumber(t) != nil
@@ -234,7 +242,7 @@ public final class VolumeExtractor: Sendable {
 /// 候補の判定を本ごとの値へ反映する。
 enum ProposalFinalizer {
     /// 組を本ごとの値(シリーズ名・巻)へ反映する。
-    static func finalize(_ document: inout WorkingDocument, engine: RuleEngine) {
+    static func finalize(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog? = nil) {
         var seriesByBook: [Int: String] = [:]
         var groupByBook: [Int: Int] = [:]
         for group in document.groups {
@@ -265,20 +273,22 @@ enum ProposalFinalizer {
             if let volume = engine.volumes.extract(fromRemainder: remainder) {
                 document.books[i].volumeText = volume.text
                 document.books[i].volumeNumber = volume.number
+                log?.apply(volume.reader, to: document.books[i].id)
             }
         }
         if engine.rules.series.compilation.placement == .inMainSeries, engine.rules.series.compilation.volumeAfterRange {
-            placeCompilationsAfterRange(&document, engine: engine)
+            placeCompilationsAfterRange(&document, engine: engine, log: log)
         }
-        if engine.volumes.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document, engine: engine) }
+        if engine.volumes.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document, engine: engine, log: log) }
         numberPositionWords(&document, engine: engine)
-        if engine.volumes.rules.inferFirstVolume { inferFirstVolumes(&document, engine: engine) }
+        if engine.volumes.rules.inferFirstVolume { inferFirstVolumes(&document, engine: engine, log: log) }
     }
 
     /// 本編に含めた総集編(方針 compilations = inMainSeries)の巻を、収録範囲の最後の巻の直後にする
     /// (方針 compilationVolume = afterRange。「X 総集編 1~4」は 4.5)。範囲が読めなければ巻を付けない(並びは末尾)。
-    static func placeCompilationsAfterRange(_ document: inout WorkingDocument, engine: RuleEngine) {
-        for i in document.books.indices where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty {
+    static func placeCompilationsAfterRange(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
+        for i in document.books.indices
+        where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
             let title = engine.text.comparable(document.books[i].parsed.baseTitle)
             let name = engine.text.comparable(document.books[i].series).key
             guard title.key.starts(with: name) else { continue }
@@ -291,6 +301,7 @@ enum ProposalFinalizer {
             else { continue }
             document.books[i].volumeText = remainder
             document.books[i].volumeNumber = Double(last) + 0.5
+            log?.apply("compilationVolume", to: document.books[i].id)
         }
     }
 
@@ -331,11 +342,11 @@ enum ProposalFinalizer {
     /// 漢数字の直後に「巻」「話」などが無い形は、1 冊だけ見ると「X 三人の夜」「X 十字架」のような普通の言葉と
     /// 区別できない。**同じシリーズの中で、巻の読めない本が 2 冊以上、互いに違う漢数字で始まっているときだけ**読む
     /// (利用者の指摘。番号を言葉遊びに埋め込んだ同人誌のシリーズ)。
-    static func readLeadingKanjiNumerals(_ document: inout WorkingDocument, engine: RuleEngine) {
+    static func readLeadingKanjiNumerals(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
         for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
             var found: [(index: Int, text: String, number: Int)] = []
-            for i in indices where document.books[i].volumeText.isEmpty {
+            for i in indices where document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
                 let title = engine.text.comparable(document.books[i].parsed.baseTitle)
                 let name = engine.text.comparable(document.books[i].series).key
                 guard title.key.starts(with: name) else { continue }
@@ -350,6 +361,7 @@ enum ProposalFinalizer {
             for f in found {
                 document.books[f.index].volumeText = f.text
                 document.books[f.index].volumeNumber = Double(f.number)
+                log?.apply("sharedLeadingKanji", to: document.books[f.index].id)
             }
         }
     }
@@ -362,7 +374,7 @@ enum ProposalFinalizer {
     /// 推定した巻には `volumeInferred` を付け、一覧・見直し表で区別できるようにする。
     /// シリーズ名の直後に付くと「1 冊目ではない」ことを示す英字(「Xex」「X SP」)。途中に含まれるだけでは見ない。
     /// (語の一覧は volume.inference.firstVolume の excludePrefixes と excludeMarkers)
-    static func inferFirstVolumes(_ document: inout WorkingDocument, engine: RuleEngine) {
+    static func inferFirstVolumes(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
         let notFirstVolumePrefixes = engine.volumes.rules.notFirstPrefixes
         let notFirstVolumeMarkers = engine.volumes.rules.notFirstMarkers
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
@@ -370,7 +382,8 @@ enum ProposalFinalizer {
         let bySeries = Dictionary(grouping: seriesBooks) { document.books[$0].groupID ?? -1 }
         for (_, indices) in bySeries {
             let numbers = indices.compactMap { document.books[$0].volumeNumber }
-            let unread = indices.filter { document.books[$0].volumeText.isEmpty }
+            // 利用者が確定させた巻(「巻は無い」と確定したものを含む)は、読めた巻として扱う。
+            let unread = indices.filter { document.books[$0].volumeText.isEmpty && !document.books[$0].volumeConfirmed }
             guard numbers.contains(where: { $0 >= 2 }), !numbers.contains(1), !unread.isEmpty else { continue }
             // 「1 冊目ではない」語は、シリーズ名より後ろの部分だけで探す(シリーズ名そのものに「総集編」が
             // 含まれることがある。「X 総集編」「X 総集編 02」…の番号の無い 1 冊は 1 巻)。
@@ -404,6 +417,7 @@ enum ProposalFinalizer {
             document.books[i].volumeText = usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1"
             document.books[i].volumeNumber = 1
             document.books[i].volumeInferred = true
+            log?.apply("firstVolume", to: document.books[i].id)
         }
     }
 }

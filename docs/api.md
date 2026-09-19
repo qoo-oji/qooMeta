@@ -406,11 +406,7 @@ public enum Exporter {
 
 ## 実装の状況と、案から変えたところ(2026-09-19)
 
-できているもの: モジュールの分割、`CompiledRules`・`RuleSources`・`RulesCompilation`・`RulesIssue`、`Vocabulary`・`WordSet`、
-`BookInput`・`Confirmation`、`parseName`・`proposeSync`・`propose`、`ProposalSet` と出力の型、`ProposalIndex`(`preview`・`update`)、
-`InputLimits`、`Exporter`(Stackroom XML・qooViewer JSON・ComicInfo)、`SystemDictionaries`(QooMetaRules)。
-まだのもの: `Explanation`・`NearMiss`、`BulkEdit`、`RuleCatalog`・`RuleChanges`、`makeFeedbackExample`、`prefixCommonness(of:)`、
-`ProposalOptions.explanations`、照合の時間の上限。
+この文書の型と関数は、すべて実装した(`QooMetaKit` の公開面は、ここに挙げたものと、例のファイル・採点の道具だけ)。
 
 案から変えたところ:
 
@@ -422,6 +418,18 @@ public enum Exporter {
 - 例のファイルの確認は `ExampleRunner.run(_:rules:dictionaries:)`(本体)。例ごとの方針は `CompiledRules.applying(policies:)`。
 - ComicInfo は、サークルを `Publisher`、作者を `Writer`、ネタを `Tags`、本の種別を `Genre`、版を `Notes` に入れる。
 - 入力の制御文字と書式文字(Cc・Cf)は、名前を読む前に落とす。
+- `BookProposal` に入力の名前(`name`)を足した(`BulkEdit.sorted(by: .name)` のため)。
+- `BulkEdit` の関数は、今の確定した内容(`current`)も受け取る(変えない欄・巻を保つため)。`Numbering`・`Order` は `BulkEdit` の中に置いた。
+  巻を消す(`clearVolumes`)は「巻は無い」と確定する(`.series(name:volume: "")`。1 巻の推定もしない)。
+- `RuleChanges` は本体に置いた(規則の形を知っている必要があるため)。`resetPolicy`・`resetList`・`setReaderOrder` を足した。
+  知らない規則の ID には何もせず false を返す。値の正しさは組み立てのときに確かめる。
+- `RuleCatalog.Entry` に段階(`stage`、JSON の中の道筋)と、止められるか(`canDisable`)を足した。
+- `FeedbackExample` は `data`(例のファイル 1 件)・`isFaithful`・`satisfiedByPolicy`(`PolicyChoice`)。
+- `prefixCommonness(of:rules:)` は規則を受け取る(比べる形が規則で決まるため)。
+- `Explanation.appliedRules` に入る ID: 組の作り方(`volumeHead`・`sharedPrefix`・`compilation`)、`subtitled`、`splitByRelation`、
+  印(`edition`・`source`)、巻の読み手(`ordinal`・`number` …、`magazines`)、推定(`firstVolume`・`sharedLeadingKanji`・`compilationVolume`)。
+  `NearMiss.rejectedBy` は組にしない条件の ID か、`splitByRelation`・`rejectSameWork`、共通部分が条件を満たさないときの `sharedPrefix`。
+- 印の正規表現(利用者が書き足せる)の照合には、1 回 0.02 秒の上限を設けた(越えたら印は無いものとして扱う)。
 
 ## 決まったこと(2026-09-19)
 

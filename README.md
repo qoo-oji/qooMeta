@@ -70,7 +70,7 @@ Q=.build/release/qoometa
 OUT=~/Library/Application\ Support/qooMeta-dev/runs
 
 $Q scan <蔵書のフォルダ> --out "$OUT/proposals.json"          # 走査・名前の解析・シリーズの組
-$Q stats --in "$OUT/proposals.json"                            # 集計(名前は出さない)
+$Q stats --in "$OUT/proposals.json" [--explain]                # 集計(名前は出さない。--explain は組にしなかった規則も数える)
 $Q series-list --in "$OUT/proposals.json" --out "$OUT/series-list.csv" [--exclude-from <以前の一覧.csv>]
 $Q report --in "$OUT/proposals.json" --out "$OUT/review.html"
 $Q export --in "$OUT/proposals.json" --format stackroom --out "$OUT/Library.xml"

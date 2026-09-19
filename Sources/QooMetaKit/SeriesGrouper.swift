@@ -48,6 +48,9 @@ struct SeriesGrouper: Sendable {
     /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
     var rejectsSingleWordPrefixes: Bool
 
+    /// 説明の材料を書き留める先(説明を作るときだけ)。
+    var log: ExplanationLog?
+
     /// 比べ方・巻の読み方・辞書(規則から作ったもの)。
     let engine: RuleEngine
     var text: TextRules { engine.text }
@@ -118,6 +121,14 @@ struct SeriesGrouper: Sendable {
             guard byGenre.count >= 2 else { result.append(group); continue }
             let unlabeled = group.memberIDs.filter { (genreByID[$0] ?? "").isEmpty }
             let largest = byGenre.max { a, b in a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key }!.key
+            if let log {
+                // ネタの違う本どうしは、組になりかけて分けられた。
+                let keyByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, text.comparable($0.parsed.baseTitle).key) })
+                for (x, xs) in byGenre { for (y, ys) in byGenre where x < y { for a in xs { for b in ys {
+                    log.miss(a, b, length: Self.commonPrefixLength(keyByID[a] ?? [], keyByID[b] ?? []), rule: "splitByRelation")
+                } } } }
+                for id in group.memberIDs { log.apply("splitByRelation", to: id) }
+            }
             for (genre, ids) in byGenre.sorted(by: { $0.key < $1.key }) {
                 let members = (genre == largest ? ids + unlabeled : ids).sorted()
                 guard members.count >= 2 else { continue }
@@ -151,7 +162,13 @@ struct SeriesGrouper: Sendable {
     func dissolveSameWorkOnly(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
         let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.baseTitle).key)) })
         return groups.filter { g in
-            g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
+            let keep = g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
+            if !keep, let log {
+                for a in g.memberIDs { for b in g.memberIDs where a < b {
+                    log.miss(a, b, length: baseByID[a]?.count ?? 0, rule: "rejectSameWork")
+                } }
+            }
+            return keep
         }
     }
 
@@ -229,6 +246,7 @@ struct SeriesGrouper: Sendable {
                     guard let h = heads.first(where: { key.hasPrefix(headGroups[$0].key)
                         && Self.isCleanCut(item.text, at: headGroups[$0].key.count) }) else { return false }
                     headGroups[h].members.append((item.id, item.text, headGroups[h].key.count))
+                    log?.apply("subtitled", to: item.id)
                     return true
                 }
             }
@@ -352,6 +370,17 @@ struct SeriesGrouper: Sendable {
                 run.append(Member(item: item, prefixLength: l))
                 for i in run.indices { run[i].prefixLength = l }
             } else {
+                if let log, l >= 1 {
+                    // どの条件で組にしなかったか(説明のため)。
+                    let englishOnly = l >= 1 && Self.isCleanCut(last.item.text, at: l) && Self.isCleanCut(item.text, at: l)
+                        && !cleanOnBothSides
+                    let rule = run.count > 1 || l < minPrefix ? (englishOnly ? "reject-common-english" : "sharedPrefix")
+                        : englishOnly ? "reject-common-english"
+                        : rejectsHiraganaEndings && Self.isHiragana(item.text.key[l - 1]) ? "reject-hiragana-ending"
+                        : rejectsSingleWordPrefixes && Self.isSingleScriptRun(Array(item.text.key.prefix(l))) ? "reject-single-script"
+                        : "sharedPrefix"
+                    log.miss(last.item.id, item.id, length: l, rule: rule)
+                }
                 result.append(run)
                 run = [Member(item: item, prefixLength: item.text.key.count)]
                 runPrefix = item.text.key.count

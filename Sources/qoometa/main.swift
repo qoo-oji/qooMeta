@@ -17,8 +17,8 @@ let usage = """
       (ファイル名は同人誌のフォーマットで読む。本の種別の語彙は config.json の mediaTypes)
   qoometa judge --in <提案.json> [--out <提案.json>] [--limit N]
       規則のシリーズを端末内モデル(Apple Intelligence)で判定する(macOS 26 以降)
-  qoometa stats --in <提案.json> [--rules-only]
-      集計を表示する(名前は出さない)
+  qoometa stats --in <提案.json> [--rules-only] [--explain]
+      集計を表示する(名前は出さない)。--explain はシリーズにならなかった本を組にしなかった規則も数える
   qoometa report --in <提案.json> --out <見直し表.html> [--rules-only]
       手元で開く見直し表を書く(名前を含む)
   qoometa export --in <提案.json> --format stackroom|qooviewer --out <ファイル> [--book-type N] [--rules-only]
@@ -51,7 +51,7 @@ struct Arguments {
             let a = raw[i]
             if a.hasPrefix("--") {
                 let name = String(a.dropFirst(2))
-                if ["rules-only", "allow-in-repo", "verbose"].contains(name) {
+                if ["rules-only", "allow-in-repo", "verbose", "explain"].contains(name) {
                     flags.insert(name)
                 } else if i + 1 < raw.count {
                     options[name] = raw[i + 1]
@@ -160,11 +160,15 @@ func run() async throws {
 
     case "stats":
         let doc = try ScanDocument.load(try args.require("in"))
-        StatsReport.lines(try makeProposer(rules).proposals(doc, useAI: useAI).final, doc: doc).forEach { print($0) }
+        var proposer = try makeProposer(rules)
+        proposer.explanations = args.flags.contains("explain")
+        StatsReport.lines(proposer.proposals(doc, useAI: useAI).final, doc: doc).forEach { print($0) }
 
     case "report":
         let doc = try ScanDocument.load(try args.require("in"))
-        let (rulesOnly, set) = try makeProposer(rules).proposals(doc, useAI: useAI)
+        var proposer = try makeProposer(rules)
+        proposer.explanations = true
+        let (rulesOnly, set) = proposer.proposals(doc, useAI: useAI)
         let out = try checkedOutputURL(try args.require("out"), args)
         try ReviewReport.html(set, doc: doc, rulesOnly: rulesOnly).write(to: out, atomically: true, encoding: .utf8)
         print("見直し表を書きました(\(set.series.count) 組)")

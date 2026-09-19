@@ -8,19 +8,19 @@ import Foundation
 ///
 /// `originalEnd` は「比較用の i 文字目までが、元の文字列のどこまでに当たるか」。
 /// 比較用の形で求めた共通部分の長さを、元の表記のシリーズ名へ戻すのに使う。
-public struct ComparableText: Sendable, Equatable {
-    public let original: String
-    public let key: [Character]
+struct ComparableText: Sendable, Equatable {
+    let original: String
+    let key: [Character]
     /// key[i] の元になった文字の、original での終わりの位置(Character 単位のオフセット)。
-    public let originalEnd: [Int]
+    let originalEnd: [Int]
     /// 比べ方と名前の整え方(規則から作ったもの)。
     let rules: TextRules
 
-    public static func == (a: ComparableText, b: ComparableText) -> Bool {
+    static func == (a: ComparableText, b: ComparableText) -> Bool {
         a.original == b.original && a.key == b.key && a.originalEnd == b.originalEnd
     }
 
-    public init(_ original: String, rules: TextRules) {
+    init(_ original: String, rules: TextRules) {
         self.original = original
         self.rules = rules
         var key: [Character] = []
@@ -41,7 +41,7 @@ public struct ComparableText: Sendable, Equatable {
     ///
     /// 閉じ括弧は比較用の形では飛ばすので、そのままだと「【X】…」の共通部分が「【X」で切れる(利用者の指摘)。
     /// 開いたままの括弧があれば、直後に続く対応する閉じ括弧までを含める。
-    public func originalPrefix(keyLength length: Int) -> String {
+    func originalPrefix(keyLength length: Int) -> String {
         guard length > 0 else { return "" }
         let end = originalEnd[min(length, originalEnd.count) - 1]
         let chars = Array(original)
@@ -62,7 +62,7 @@ public struct ComparableText: Sendable, Equatable {
     }
 
     /// 比較用の先頭 `length` 文字より後ろの元の文字列。
-    public func originalRemainder(afterKeyLength length: Int) -> String {
+    func originalRemainder(afterKeyLength length: Int) -> String {
         guard length > 0 else { return original }
         let end = originalEnd[min(length, originalEnd.count) - 1]
         return String(original.dropFirst(end))
@@ -70,7 +70,7 @@ public struct ComparableText: Sendable, Equatable {
 }
 
 /// 比べ方と、シリーズ名の整え方(series-rules.json の compare と naming から作る)。作ったあとは変わらない。
-public final class TextRules: Sendable {
+final class TextRules: Sendable {
     /// 比較のときに無視する文字(空白と、タイトルの飾りによく使われる記号)。compare.ignored。
     let ignoredInComparison: Set<Character>
     /// 比較のときに同じ字とみなす異体字(左 → 右)。NFKC では揃わない。表記ゆれでシリーズが割れた実例
@@ -110,7 +110,7 @@ public final class TextRules: Sendable {
     }
 
     /// 比べるための形。
-    public func comparable(_ s: String) -> ComparableText { ComparableText(s, rules: self) }
+    func comparable(_ s: String) -> ComparableText { ComparableText(s, rules: self) }
 
     /// 比べるための形の文字列(キー)。
     func key(_ s: String) -> String { String(comparable(s).key) }
@@ -128,7 +128,7 @@ public final class TextRules: Sendable {
 
     /// 表示用の整え方。**元の表記(全角・半角)は変えない**(書き出す値は利用者のファイル名の表記に従う)。
     /// 空白の連続を 1 つにし、前後の空白を落とし、合成済みの形(NFC)に揃えるだけ。規則には依らない。
-    public static func normalizeDisplay(_ s: String) -> String {
+    static func normalizeDisplay(_ s: String) -> String {
         let n = s.precomposedStringWithCanonicalMapping
         let collapsed = n.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         return collapsed.trimmingCharacters(in: .whitespaces)

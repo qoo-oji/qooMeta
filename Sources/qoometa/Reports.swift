@@ -42,6 +42,13 @@ enum StatsReport {
                 String(format: "  所要時間: 合計 %.0f 秒、1 組あたり %.1f 秒", seconds, judged.isEmpty ? 0 : seconds / Double(judged.count)),
             ]
         }
+        // 説明を作ったとき: シリーズにならなかった本の、組になりかけた相手を組にしなかった規則(いちばん長く一致した相手)。
+        let missRules = books.filter { $0.seriesID == nil }.compactMap { set.explanation(for: $0.id)?.nearMisses.first?.rejectedBy }
+        if !missRules.isEmpty {
+            lines.append("  シリーズにならなかった本の、組にしなかった規則: "
+                         + Dictionary(grouping: missRules, by: { $0 }).mapValues(\.count).sorted { $0.key < $1.key }
+                            .map { "\($0.key) \($0.value)" }.joined(separator: "、"))
+        }
         lines += [
             "最終: シリーズ付き \(withSeries.count) 冊(\(ratio(withSeries.count, books.count)))、巻あり \(withVolume.count) 冊(数値 \(withVolume.filter { $0.volume?.sortKey != nil }.count)、うち 1 巻と推定 \(books.filter { $0.volume?.inferred == true }.count))",
             "結果の指紋: \(ResultFingerprint.of(set))",
@@ -103,6 +110,13 @@ enum ReviewReport {
                     + "<td>\(esc(b.parsed.relation ?? ""))</td></tr>\n"
             }
         }
+        // シリーズにならなかった本のうち、組になりかけた相手がいるもの(なぜ組にならなかったか)。
+        var misses = ""
+        for book in set.proposals where book.seriesID == nil {
+            guard let miss = set.explanation(for: book.id)?.nearMisses.first, let other = set[miss.otherID] else { continue }
+            misses += "<tr><td>\(esc(book.parsed.circle ?? ""))</td><td>\(esc(book.parsed.title))</td>"
+                + "<td>\(esc(other.parsed.title))</td><td>\(esc(miss.rejectedBy))(共通 \(miss.sharedPrefixLength) 文字)</td></tr>\n"
+        }
         return """
         <!doctype html><meta charset="utf-8"><title>qooMeta 見直し表</title>
         <style>
@@ -114,6 +128,9 @@ enum ReviewReport {
         <h1>シリーズの見直し表</h1>
         <p>\(set.series.count) 組。列: サークル / タイトル / シリーズ / 巻 / ネタ</p>
         <table>\(rows)</table>
+        <h2>シリーズにならなかった本と、組になりかけた相手</h2>
+        <p>列: サークル / タイトル / 組になりかけた本 / 組にしなかった規則</p>
+        <table>\(misses)</table>
         """
     }
 
