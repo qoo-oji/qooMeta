@@ -49,11 +49,38 @@ enum StatsReport {
                          + Dictionary(grouping: missRules, by: { $0 }).mapValues(\.count).sorted { $0.key < $1.key }
                             .map { "\($0.key) \($0.value)" }.joined(separator: "、"))
         }
+        lines += relationLines(set)
         lines += [
             "最終: シリーズ付き \(withSeries.count) 冊(\(ratio(withSeries.count, books.count)))、巻あり \(withVolume.count) 冊(数値 \(withVolume.filter { $0.volume?.sortKey != nil }.count)、うち 1 巻と推定 \(books.filter { $0.volume?.inferred == true }.count))",
             "結果の指紋: \(ResultFingerprint.of(set))",
         ]
         return lines
+    }
+
+    /// 関連(末尾の丸括弧)の集計。関連の値が違うと組にしない方針が、どれだけシリーズを割っているかを知るため
+    /// (商業の本では末尾の丸括弧が出版社などになりやすく、原則 1 の弱点が出るならここに出る)。
+    /// 割れた組は、関連の違いで組にしなかった相手どうしをつないだかたまりの数(説明を作ったときだけ)。
+    static func relationLines(_ set: ProposalSet) -> [String] {
+        let withRelation = set.proposals.compactMap { p in p.parsed.relation.flatMap { $0.isEmpty ? nil : $0 } }
+        var line = "関連を持つ本: \(withRelation.count) 冊(値 \(Set(withRelation).count) 通り)"
+        var parent: [String: String] = [:]
+        func root(_ id: String) -> String {
+            var r = id
+            while let p = parent[r], p != r { r = p }
+            parent[id] = r
+            return r
+        }
+        for p in set.proposals where p.seriesID == nil {
+            for miss in set.explanation(for: p.id)?.nearMisses ?? [] where miss.rejectedBy == "splitByRelation" {
+                parent[p.id] = parent[p.id] ?? p.id
+                parent[miss.otherID] = parent[miss.otherID] ?? miss.otherID
+                parent[root(p.id)] = root(miss.otherID)
+            }
+        }
+        if !parent.isEmpty {
+            line += "、関連の違いで割れたかたまり: \(Set(parent.keys.map(root)).count)(\(parent.count) 冊)"
+        }
+        return ["  " + line]
     }
 }
 
