@@ -15,16 +15,18 @@ import QooFormat
 /// 利用者の設定(リポジトリの外の config.json の `mediaTypes`)から渡す。
 ///
 /// どのフォーマットにも一致しない名前は nil を返し、呼び出し側が qooMeta 自身の NameParser へ戻す。
-public struct QooLibraryNameParser: Sendable {
+struct QooLibraryNameParser: Sendable {
     /// プロファイルごとの照合の設定(上から試す)。
     let settings: [LibrarySettingsSnapshot]
     let parser = FilenameParser()
     /// qooMeta の欄 → 照合の処理のフィールド。
     let fieldRefs: [String: FieldRef]
     let authorSeparators: Set<Character>
+    /// 照合の処理のフォーマットの ID → プロファイルの ID と、その中の番号。
+    let formatPositions: [UUID: (profile: String, index: Int)]
 
     /// フォーマットの予約語の読み替えと、意味のある予約語へのフィールドの番号。
-    struct Vocabulary {
+    struct FormatVocabulary {
         var bindings: [SemanticKeyword: Int] = [:]
         var refs: [String: FieldRef] = [:]
         let engineWord: [String: String]
@@ -69,15 +71,16 @@ public struct QooLibraryNameParser: Sendable {
     /// フォーマット 1 つを組み立てる(規則の検証にも使う)。
     static func compile(_ format: String, profile: FilenameFormatRules.Profile, rules: FilenameFormatRules,
                         mediaTypes: [String], priority: Int = 0) throws -> CompiledFormat {
-        let vocabulary = Vocabulary(rules)
+        let vocabulary = FormatVocabulary(rules)
         let context = FormatCompilationContext(delimiters: delimiters(profile), mediaTypeVocabulary: mediaTypes,
                                                semanticBindings: vocabulary.bindings)
         return try FormatCompiler.compile(vocabulary.translate(format), context: context, priority: priority)
     }
 
     /// - Parameter mediaTypes: 本の種別の語彙(利用者の設定から)。空なら先頭の丸括弧はすべてイベントとして読む。
-    public init(mediaTypes: [String], rules: FilenameFormatRules = CompiledRules.builtin.formats) throws {
-        let vocabulary = Vocabulary(rules)
+    init(mediaTypes: [String], rules: FilenameFormatRules) throws {
+        let vocabulary = FormatVocabulary(rules)
+        var positions: [UUID: (profile: String, index: Int)] = [:]
         settings = try rules.profiles.map { profile in
             let delimiters = Self.delimiters(profile)
             let context = FormatCompilationContext(delimiters: delimiters, mediaTypeVocabulary: mediaTypes,
@@ -85,6 +88,7 @@ public struct QooLibraryNameParser: Sendable {
             let compiled = try profile.formats.enumerated().map {
                 try FormatCompiler.compile(vocabulary.translate($0.element), context: context, priority: $0.offset)
             }
+            for (i, format) in compiled.enumerated() { positions[format.id] = (profile.id, i) }
             return LibrarySettingsSnapshot(
                 mediaTypeVocabulary: mediaTypes,
                 delimiters: delimiters,
@@ -94,9 +98,10 @@ public struct QooLibraryNameParser: Sendable {
         }
         fieldRefs = vocabulary.refs
         authorSeparators = Set(rules.authorSeparators)
+        formatPositions = positions
     }
 
-    public func parse(baseName: String) -> ParsedName? {
+    func parse(baseName: String) -> NameParts? {
         let name = TextRules.normalizeDisplay(baseName)
         guard let result = settings.lazy.compactMap({ parser.parse(name, settings: $0) }).first else { return nil }
         func value(_ field: String) -> String {
@@ -119,7 +124,7 @@ public struct QooLibraryNameParser: Sendable {
             fullTitle = "\(title) (\(relation))"
             relation = ""
         }
-        return ParsedName(
+        var parts = NameParts(
             leading: genre.isEmpty ? event : genre,
             circle: circle.isEmpty ? (authors.first ?? "") : circle,
             authors: authors,
@@ -129,5 +134,9 @@ public struct QooLibraryNameParser: Sendable {
             mediaType: genre,
             event: event,
             keyword: value("keyword"))
+        if let position = formatPositions[result.matchedFormatID] {
+            parts.format = .format(profile: position.profile, index: position.index)
+        }
+        return parts
     }
 }

@@ -1,0 +1,255 @@
+import Foundation
+import Testing
+@testable import QooMetaKit
+import QooMetaRules
+
+// 公開する API(docs/api.md)の約束。名前はすべて架空のもの。
+
+func inputs(_ names: [String]) -> [BookInput] {
+    names.enumerated().map { BookInput(id: String(format: "%03d", $0.offset), name: $0.element) }
+}
+
+func seriesName(_ set: ProposalSet, _ id: String) -> String? {
+    set[id]?.seriesID.flatMap { set.series($0)?.name }
+}
+
+let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: SystemDictionaries.all)
+
+@Suite struct ParseNameTests {
+    @Test func fieldsAndFormat() {
+        let p = parseName("(種別A) [架空工房 (山田太郎)] 月の庭 第3巻 (作品A) [DL版]", rules: .builtin, vocabulary: genreVocabulary)
+        #expect(p.genre == "種別A")
+        #expect(p.event == nil)
+        #expect(p.circle == "架空工房")
+        #expect(p.authors == ["山田太郎"])
+        #expect(p.title == "月の庭 第3巻")
+        #expect(p.relation == "作品A")
+        #expect(p.keyword == "DL版")
+        #expect(p.format == .format(profile: "doujinshi", index: 0))
+        #expect(p.standaloneVolume == Volume(text: "3", sortKey: 3))
+    }
+
+    @Test func fallbacks() {
+        #expect(parseName("ただのファイル名", rules: .builtin, vocabulary: Vocabulary()).format == .fallback("wholeName"))
+        let p = parseName("[架空工房 月の庭", rules: .builtin, vocabulary: Vocabulary())
+        #expect(p.title.isEmpty == false)
+        #expect(p.standaloneVolume == nil)
+    }
+}
+
+@Suite struct ProposeSyncTests {
+    @Test func rejectedInputs() {
+        var limits = InputLimits()
+        limits.maxNameLength = 20
+        limits.maxFolders = 2
+        let set = proposeSync([
+            BookInput(id: "a", name: "[架空工房] 月の庭 1"),
+            BookInput(id: "a", name: "[架空工房] 月の庭 2"),
+            BookInput(id: "b", name: "   "),
+            BookInput(id: "c", name: String(repeating: "月", count: 21)),
+            BookInput(id: "d", name: "月の庭", folders: ["x", "y", "z"]),
+        ], rules: .builtin, vocabulary: Vocabulary(), options: ProposalOptions(limits: limits))
+        #expect(set.proposals.map(\.id) == ["a"])
+        #expect(set.rejected.map(\.reason) == [.duplicateID, .emptyName, .nameTooLong, .tooManyFolders])
+    }
+
+    /// 見えない文字(書式文字)で組が割れない。
+    @Test func formatCharactersAreDropped() {
+        let set = proposeSync(inputs(["[架空工房] 月の\u{200B}庭 1", "[架空工房] 月の庭 2"]), rules: .builtin, vocabulary: Vocabulary())
+        #expect(seriesName(set, "000") == "月の庭")
+        #expect(seriesName(set, "001") == "月の庭")
+    }
+
+    /// 同じ入力なら同じ結果(ID も)。入力の並びを変えても、シリーズの中身と順は変わらない。
+    @Test func deterministicOrderAndIDs() {
+        let names = ["[架空工房] 月の庭 2", "[幻想舎] 風の港 1", "[架空工房] 月の庭 1", "[幻想舎] 風の港 2", "[架空工房] 星の歌 1",
+                     "[架空工房] 星の歌 2"]
+        let a = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
+        let b = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
+        #expect(a.series == b.series)
+        #expect(a.proposals == b.proposals)
+        #expect(a.series.map(\.name) == ["風の港", "星の歌", "月の庭"])  // 書き手(比べる形)→ 名前の順
+        let shuffled = inputs(names).reversed()
+        let c = proposeSync(Array(shuffled), rules: .builtin, vocabulary: Vocabulary())
+        #expect(c.series.map(\.name) == a.series.map(\.name))
+        #expect(c.series.map(\.memberIDs) == a.series.map(\.memberIDs))
+        #expect(a.series.first { $0.name == "月の庭" }?.memberIDs == ["002", "000"])  // 巻の順
+    }
+
+    @Test func flagsAndKinds() {
+        let set = proposeSync(inputs([
+            "[架空工房] 月の庭", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 3【フルカラー版】",
+            "[架空工房] 週刊架空 2025年35号", "[架空工房] 週刊架空 2025年36号",
+        ]), rules: .builtin, vocabulary: Vocabulary())
+        #expect(set["000"]?.flags == [.inferredVolume])
+        #expect(set["002"]?.flags == [.compilation])
+        #expect(set["003"]?.flags == [.edition])
+        #expect(set["004"]?.flags == [.magazineIssue])
+        #expect(Set(set.series.map(\.kind)) == [.series, .compilation, .magazineYear])
+    }
+
+    @Test func asyncMatchesSyncAndReportsProgress() async throws {
+        let names = (1...40).flatMap { i in ["[架空工房\(i % 7)] 月の庭 \(i)", "[幻想舎\(i % 5)] 風の港 \(i) 夜"] }
+        let sync = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
+        let progress = ProgressLog()
+        let async = try await propose(inputs(names), rules: .builtin, vocabulary: Vocabulary()) { progress.add($0) }
+        #expect(async.proposals == sync.proposals)
+        #expect(async.series == sync.series)
+        #expect(progress.last?.completedUnits == progress.last?.totalUnits)
+    }
+
+    @Test func cancellation() async {
+        let names = (1...200).map { "[架空工房\($0)] 月の庭 \($0)" }
+        let task = Task { try await propose(inputs(names), rules: .builtin, vocabulary: Vocabulary()) }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+    }
+}
+
+final class ProgressLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [ProposalProgress] = []
+    func add(_ p: ProposalProgress) { lock.withLock { items.append(p) } }
+    var last: ProposalProgress? { lock.withLock { items.last } }
+}
+
+@Suite struct ConfirmationTests {
+    static func propose(_ items: [(String, QooMetaKit.Confirmation)]) -> ProposalSet {
+        proposeSync(items.enumerated().map { BookInput(id: String(format: "%03d", $0.offset), name: $0.element.0,
+                                                        confirmation: $0.element.1) },
+                    rules: .builtin, vocabulary: genreVocabulary)
+    }
+
+    /// 確定した名前は錨になり、規則が同じ組にした未確定の本もその名前に入る。
+    @Test func anchorNamesTheWholeGroup() {
+        let set = Self.propose([("[架空工房] 月の庭 1", .series(name: "月の庭シリーズ", volume: nil)),
+                                ("[架空工房] 月の庭 2", .none), ("[架空工房] 月の庭 3", .none)])
+        #expect(["000", "001", "002"].map { seriesName(set, $0) } == Array(repeating: "月の庭シリーズ", count: 3))
+        #expect(set.series.first?.evidence == .confirmed)
+        #expect(set["000"]?.flags == [.confirmed])
+    }
+
+    /// 1 つの組に確定した名前が 2 つあれば割る。未確定の本は、タイトルの先頭がいちばん長く一致する名前へ。
+    @Test func twoAnchorsSplitTheGroup() {
+        let set = Self.propose([("[架空工房] 星の庭 春の章", .series(name: "星の庭 春", volume: nil)),
+                                ("[架空工房] 星の庭 夏の章", .series(name: "星の庭 夏", volume: nil)),
+                                ("[架空工房] 星の庭 春の章 続", .none), ("[架空工房] 星の庭 夏の章 続", .none)])
+        #expect(["000", "001", "002", "003"].map { seriesName(set, $0) } == ["星の庭 春", "星の庭 夏", "星の庭 春", "星の庭 夏"])
+    }
+
+    /// シリーズではないと確定した本は入れない。残りが 2 冊に満たなければシリーズにしない。
+    @Test func notInSeries() {
+        let three = Self.propose([("[架空工房] 月の庭 1", .notInSeries()), ("[架空工房] 月の庭 2", .none),
+                                  ("[架空工房] 月の庭 3", .none)])
+        #expect(["000", "001", "002"].map { seriesName(three, $0) } == [nil, "月の庭", "月の庭"])
+        let two = Self.propose([("[架空工房] 月の庭 1", .notInSeries()), ("[架空工房] 月の庭 2", .none)])
+        #expect(two.series.isEmpty)
+    }
+
+    /// 同じ名前に確定した本は、規則が別の組にしていても(組にしていなくても)同じシリーズ。
+    @Test func sameConfirmedNameJoins() {
+        let set = Self.propose([("[架空工房] 月の庭", .series(name: "庭の本", volume: "1")),
+                                ("[架空工房] 風の港", .series(name: "庭の本", volume: "2"))])
+        #expect(seriesName(set, "000") == "庭の本")
+        #expect(set.series.count == 1)
+        #expect(set.series[0].memberIDs == ["000", "001"])
+        #expect(set["001"]?.volume == Volume(text: "2", sortKey: 2))
+    }
+
+    /// 確定した巻はそのまま使い、推定は確定した巻を読めた巻として扱う。
+    @Test func confirmedVolumes() {
+        let set = Self.propose([("[架空工房] 月の庭", .none), ("[架空工房] 月の庭 おまけ", .series(name: "月の庭", volume: "上")),
+                                ("[架空工房] 月の庭 2", .none)])
+        #expect(set["001"]?.volume?.text == "上")
+        #expect(set["001"]?.volume?.sortKey == 1)
+        #expect(set["000"]?.volume == nil)  // 確定した「上」が 1 巻に当たるので、番号の無い本を 1 巻とは推定しない
+    }
+
+    /// 確定した欄は解析の結果より優先し、比べる単位も確定した値で決まる。
+    @Test func confirmedFieldsDecideTheUnit() {
+        let set = Self.propose([("(種別A) [架空工房] 月の庭 1", .none), ("(種別A) [架空工房] 月の庭 2", .none),
+                                ("(種別A) [架空工房] 月の庭 3", .fields(ConfirmedFields(genre: "種別B")))])
+        #expect(["000", "001", "002"].map { seriesName(set, $0) } == ["月の庭", "月の庭", nil])
+        #expect(set["002"]?.parsed.genre == "種別B")
+    }
+}
+
+@Suite struct ProposalIndexTests {
+    static let names = [
+        "[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 3", "[架空工房] 風の港", "[架空工房] 風の港 2",
+        "[幻想舎] 星の歌 上", "[幻想舎] 星の歌 下", "[幻想舎] 星の歌 総集編", "[白紙堂] 雨の窓 春の章", "[白紙堂] 雨の窓 夏の章",
+        "[白紙堂] 雨の窓", "[白紙堂] 雪の町 1", "[白紙堂] 雪の町 2",
+    ]
+
+    /// 足す・変える・消すを繰り返しても、索引の結果は同じ一覧を一括で計算した結果と同じ。
+    @Test func indexMatchesBatch() async throws {
+        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        var current: [BookInput] = []
+        var generator = SplitMix(seed: 7)
+        for step in 0..<120 {
+            let pick = Self.names[Int(generator.next() % UInt64(Self.names.count))]
+            let id = "b\(generator.next() % 20)"
+            let change: BookChange
+            if generator.next() % 4 == 0 {
+                change = .remove(id: id)
+                current.removeAll { $0.id == id }
+            } else {
+                let confirmation: QooMetaKit.Confirmation = generator.next() % 6 == 0 ? .notInSeries() : .none
+                let input = BookInput(id: id, name: pick, confirmation: confirmation)
+                change = .upsert(input)
+                if let i = current.firstIndex(where: { $0.id == id }) { current[i] = input } else { current.append(input) }
+            }
+            try await index.apply([change])
+            if step % 10 == 9 {
+                let batch = proposeSync(current, rules: .builtin, vocabulary: Vocabulary())
+                let snapshot = await index.snapshot()
+                #expect(snapshot.proposals == batch.proposals, "step \(step)")
+                #expect(snapshot.series == batch.series, "step \(step)")
+            }
+        }
+    }
+
+    @Test func previewDoesNotChangeTheState() async throws {
+        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        try await index.apply(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]).map { .upsert($0) })
+        let before = await index.snapshot()
+        let delta = try await index.preview([.upsert(BookInput(id: "x", name: "[架空工房] 月の庭 3"))])
+        #expect(delta.changed.map(\.id) == ["x"])
+        #expect(delta.changedSeries.first?.memberIDs == ["000", "001", "x"])
+        #expect(await index.snapshot().proposals == before.proposals)
+        #expect(await index.proposal(for: "x") == nil)
+    }
+
+    @Test func deltaReportsRemovedSeries() async throws {
+        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        try await index.apply(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]).map { .upsert($0) })
+        let seriesID = try #require(await index.proposal(for: "000")?.seriesID)
+        let delta = try await index.apply([.remove(id: "001")])
+        #expect(delta.removedBooks == ["001"])
+        #expect(delta.removedSeries == [seriesID])
+        #expect(delta.changed.map(\.id) == ["000"])
+    }
+
+    @Test func updateRulesMatchesBatch() async throws {
+        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        try await index.apply(inputs(Self.names).map { .upsert($0) })
+        let leaveEmpty = try #require(CompiledRules.builtin.applying(policies: ["unnumberedFirst": "leaveEmpty"]).rules)
+        let delta = try await index.update(rules: leaveEmpty, vocabulary: Vocabulary())
+        let batch = proposeSync(inputs(Self.names), rules: leaveEmpty, vocabulary: Vocabulary())
+        #expect(await index.snapshot().proposals == batch.proposals)
+        #expect(!delta.changed.isEmpty)
+    }
+}
+
+/// 再現できる擬似乱数(テストの操作の列を毎回同じにする)。
+struct SplitMix {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}

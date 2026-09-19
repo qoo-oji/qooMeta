@@ -1,6 +1,9 @@
 import Foundation
 import QooMetaAI
-import QooMetaCore
+import QooMetaExport
+import QooMetaRules
+import QooMetaScan
+import QooMetaKit
 
 // qoometa — ファイル名の一覧から蔵書のメタデータを提案する。
 //
@@ -9,22 +12,23 @@ import QooMetaCore
 
 let usage = """
 使い方:
-  qoometa scan <フォルダ> --out <提案.json> [--min-prefix N]
-      (ファイル名は qooLibrary の同人誌のフォーマットで読む。本の種別の語彙は config.json の mediaTypes。
-       本の種別が違う本は同じシリーズにしない)
-      書庫ファイルを集め、名前を解析し、規則でシリーズ候補を作る
+  qoometa scan <フォルダ> --out <提案.json>
+      書庫ファイルを集め、名前を解析し、規則でシリーズを提案する(集計を出す)
+      (ファイル名は同人誌のフォーマットで読む。本の種別の語彙は config.json の mediaTypes)
   qoometa judge --in <提案.json> [--out <提案.json>] [--limit N]
-      シリーズ候補を端末内モデル(Apple Intelligence)で判定する
+      規則のシリーズを端末内モデル(Apple Intelligence)で判定する(macOS 26 以降)
   qoometa stats --in <提案.json> [--rules-only]
       集計を表示する(名前は出さない)
-  qoometa report --in <提案.json> --out <見直し表.html>
+  qoometa report --in <提案.json> --out <見直し表.html> [--rules-only]
       手元で開く見直し表を書く(名前を含む)
   qoometa export --in <提案.json> --format stackroom|qooviewer --out <ファイル> [--book-type N] [--rules-only]
       StackNest が取り込める Stackroom XML、または qooViewer の保存データ JSON を書く
   qoometa series-list --in <提案.json> --out <一覧.csv> [--rules-only] [--exclude-from <以前の一覧.csv>]
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
-  qoometa evaluate --corpus <正解付き.jsonl>
-      正解付きのデータ(author / title / series)で候補づくりを採点する
+  qoometa bench --in <提案.json>
+      一括の提案と、1 冊の追加・変更にかかる時間を測る(名前は出さない)
+  qoometa evaluate --corpus <正解付き.jsonl> [--examples N]
+      正解付きのデータ(author / title / series)で提案を採点する
   qoometa rules test [<例.json> …] [--only <例の ID>] [--verbose]
       例のファイル(架空の名前)を今の規則で処理し、期待値と比べる。ファイルを省くと同梱の例
   qoometa rules validate <規則.json>
@@ -33,6 +37,7 @@ let usage = """
       既定値に利用者の変更を重ねた結果と、変更が効いている所を出す
 
 どのコマンドにも --rules <変更.json> を付けられる(既定値に重ねる利用者の変更。差分か rules-bundle)。
+--rules-only は端末内モデルの判定を使わず、規則だけで提案する。
 """
 
 struct Arguments {
@@ -99,165 +104,140 @@ struct Config: Decodable {
     }
 }
 
-func load(_ path: String) throws -> ProposalDocument {
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    return try decoder.decode(ProposalDocument.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
-}
-
-func save(_ doc: ProposalDocument, _ url: URL) throws {
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    try encoder.encode(doc).write(to: url, options: .atomic)
-}
-
 func run() async throws {
     let raw = Array(CommandLine.arguments.dropFirst())
     guard let command = raw.first else { print(usage); return }
     let args = Arguments(Array(raw.dropFirst()))
-    // 規則: 同梱の既定値に、利用者の変更(--rules)を重ねたもの。処理の各所へ値で渡す。
-    var engine = RuleEngine.builtin
+    // 規則: 同梱の既定値に、利用者の変更(--rules)を重ねたもの。
+    var rules = CompiledRules.builtin
     if let path = args.options["rules"] {
-        engine = RuleEngine(rules: try compileRules(userChanges: Data(contentsOf: URL(fileURLWithPath: path))),
-                            englishWords: .system)
+        rules = try compileRules(userChanges: Data(contentsOf: URL(fileURLWithPath: path)))
     }
+    let useAI = !args.flags.contains("rules-only")
 
     switch command {
     case "scan":
         guard let root = args.positional.first else { throw CLIError("フォルダを指定してください") }
         let out = try checkedOutputURL(try args.require("out"), args)
-        let minPrefix = Int(args.options["min-prefix"] ?? "") ?? 4
-        let files = try BookScanner.scan(root: URL(fileURLWithPath: root))
-        // ファイル名は qooLibrary のフォーマット処理(同人誌のプリセット)で読む。一致しなければ qooMeta 自身の解析へ戻す。
-        // 本の種別の語彙は利用者の設定から(リポジトリに置けない語なので)。
-        let config = try Config.load()
-        if config.mediaTypes?.isEmpty ?? true {
-            FileHandle.standardError.write(Data("注意: 本の種別の語彙が設定に無いので、先頭の丸括弧はイベントとして読みます(\(Config.url.path) の mediaTypes)\n".utf8))
-        }
-        let books = BookScanner.proposals(
-            from: files, qooLibrary: try QooLibraryNameParser(mediaTypes: config.mediaTypes ?? [], rules: engine.rules.formats),
-            engine: engine)
-        print("qooLibrary のフォーマットで読めた: \(books.filter { $0.parsed.mediaType != nil }.count) 冊(本の種別あり \(books.filter { !($0.parsed.mediaType ?? "").isEmpty }.count))")
-        let groups = SeriesGrouper(engine: engine, minPrefix: minPrefix).group(books)
-        var doc = ProposalDocument(rootPath: URL(fileURLWithPath: root).standardizedFileURL.path,
-                                   minPrefix: minPrefix, books: books, groups: groups)
-        ProposalFinalizer.finalize(&doc, engine: engine)
-        try save(doc, out)
-        StatsReport.lines(doc, engine: engine).forEach { print($0) }
+        let proposer = try makeProposer(rules)
+        let files = try FolderScanner.scan(root: URL(fileURLWithPath: root))
+        let doc = ScanDocument(createdAt: Date(), rootPath: URL(fileURLWithPath: root).standardizedFileURL.path, files: files)
+        try doc.save(out)
+        StatsReport.lines(proposer.proposals(doc, useAI: false).final, doc: doc).forEach { print($0) }
 
     case "judge":
         let input = try args.require("in")
         let out = try checkedOutputURL(args.options["out"] ?? input, args)
+        guard #available(macOS 26.0, *) else { throw CLIError("端末内モデルは macOS 26 以降で使えます") }
         guard SeriesJudge.isAvailable else {
             throw CLIError("端末内モデルを使えません: \(SeriesJudge.availability)")
         }
-        var doc = try load(input)
+        var doc = try ScanDocument.load(input)
+        let proposer = try makeProposer(rules)
+        let set = proposer.proposals(doc, useAI: false).rulesOnly
         let limit = Int(args.options["limit"] ?? "") ?? Int.max
-        let titles = Dictionary(uniqueKeysWithValues: doc.books.map { ($0.id, $0.parsed.title) })
+        let titles = Dictionary(set.proposals.map { ($0.id, $0.parsed.title) }, uniquingKeysWith: { a, _ in a })
+        let done = Set(doc.judgements.filter { $0.verdict != nil }.map(\.memberIDs))
         let judge = SeriesJudge()
-        var done = 0
-        for i in doc.groups.indices where doc.groups[i].aiVerdict == nil && done < limit {
+        var count = 0
+        for series in set.series where !done.contains(series.memberIDs.sorted()) && count < limit {
+            var judgement = ScanDocument.Judgement(memberIDs: series.memberIDs.sorted(), ruleName: series.name)
             do {
-                doc.groups[i].aiVerdict = try await judge.judge(group: doc.groups[i], titlesByID: titles)
-                doc.groups[i].aiError = nil
+                judgement.verdict = try await judge.judge(series: series, titlesByID: titles)
             } catch {
-                doc.groups[i].aiError = SeriesJudge.describe(error)
+                judgement.error = SeriesJudge.describe(error)
             }
-            done += 1
-            if done % 20 == 0 {
-                FileHandle.standardError.write(Data("  \(done) 組を判定\n".utf8))
-                try save(doc, out)  // 途中で止めても、そこまでの判定は残す
+            doc.judgements.removeAll { $0.memberIDs == judgement.memberIDs }
+            doc.judgements.append(judgement)
+            count += 1
+            if count % 20 == 0 {
+                FileHandle.standardError.write(Data("  \(count) 組を判定\n".utf8))
+                try doc.save(out)  // 途中で止めても、そこまでの判定は残す
             }
         }
-        ProposalFinalizer.finalize(&doc, engine: engine)
-        try save(doc, out)
-        StatsReport.lines(doc, engine: engine).forEach { print($0) }
+        try doc.save(out)
+        StatsReport.lines(proposer.proposals(doc, useAI: true).final, doc: doc).forEach { print($0) }
 
     case "stats":
-        var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
-        StatsReport.lines(doc, engine: engine).forEach { print($0) }
+        let doc = try ScanDocument.load(try args.require("in"))
+        StatsReport.lines(try makeProposer(rules).proposals(doc, useAI: useAI).final, doc: doc).forEach { print($0) }
 
     case "report":
-        var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, engine: engine)
+        let doc = try ScanDocument.load(try args.require("in"))
+        let (rulesOnly, set) = try makeProposer(rules).proposals(doc, useAI: useAI)
         let out = try checkedOutputURL(try args.require("out"), args)
-        try ReviewReport.html(doc).write(to: out, atomically: true, encoding: .utf8)
-        print("見直し表を書きました(\(doc.groups.count) 組)")
+        try ReviewReport.html(set, doc: doc, rulesOnly: rulesOnly).write(to: out, atomically: true, encoding: .utf8)
+        print("見直し表を書きました(\(set.series.count) 組)")
 
     case "export":
-        var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
+        let doc = try ScanDocument.load(try args.require("in"))
+        let set = try makeProposer(rules).proposals(doc, useAI: useAI).final
         let out = try checkedOutputURL(try args.require("out"), args)
+        let data: Data
         switch try args.require("format") {
         case "stackroom":
-            let bookType = Int(args.options["book-type"] ?? "") ?? 0
-            try StackroomExporter.write(doc, to: out, options: .init(bookType: bookType))
+            let files = Dictionary(doc.files.map { f in
+                (f.relativePath, Exporter.FileFacts(path: f.path, fileExtension: f.fileExtension, dateAdded: f.created ?? f.modified))
+            }, uniquingKeysWith: { a, _ in a })
+            data = try Exporter.stackroomXML(set, files: files, options: .init(
+                bookType: Int(args.options["book-type"] ?? "") ?? 0, defaultDateAdded: doc.createdAt))
         case "qooviewer":
-            try QooViewerExporter.write(doc, to: out)
+            let identities = Dictionary(doc.files.map { f in
+                (f.relativePath, Exporter.FileIdentity(path: f.path, inodeNumber: f.inodeNumber,
+                                                       volumeDeviceNumber: f.volumeDeviceNumber, volumeUUID: f.volumeUUID))
+            }, uniquingKeysWith: { a, _ in a })
+            data = try Exporter.qooViewerJSON(set, identities: identities)
         default:
             throw CLIError("--format は stackroom か qooviewer")
         }
-        print("書き出しました: \(doc.books.count) 冊(シリーズ付き \(doc.books.filter { !$0.series.isEmpty }.count))")
+        try data.write(to: out, options: .atomic)
+        print("書き出しました: \(set.proposals.count) 冊(シリーズ付き \(set.proposals.filter { $0.seriesID != nil }.count))")
 
     case "series-list":
-        var doc = try load(try args.require("in"))
-        ProposalFinalizer.finalize(&doc, useAI: !args.flags.contains("rules-only"), engine: engine)
+        let doc = try ScanDocument.load(try args.require("in"))
+        let set = try makeProposer(rules).proposals(doc, useAI: useAI).final
         let out = try checkedOutputURL(try args.require("out"), args)
         // --exclude-from <以前の一覧.csv>: そこに載っているファイル名の本は出さない。
         var excluded = Set<String>()
         if let previous = args.options["exclude-from"] {
-            excluded = SeriesListExporter.fileNames(inList: try String(contentsOfFile: previous, encoding: .utf8))
+            excluded = SeriesListCSV.fileNames(inList: try String(contentsOfFile: previous, encoding: .utf8))
         }
-        let csv = SeriesListExporter.csv(doc, excludingFileNames: excluded)
-        try csv.write(to: out, atomically: true, encoding: .utf8)
-        let written = doc.books.filter {
-            !$0.series.isEmpty && !excluded.contains(($0.file.relativePath as NSString).lastPathComponent.precomposedStringWithCanonicalMapping)
-        }
-        print("シリーズの一覧を書きました: \(Set(written.compactMap(\.groupID)).count) シリーズ / \(written.count) 冊"
-              + (excluded.isEmpty ? "" : "(以前の一覧の \(excluded.count) 件の名前と一致した \(doc.books.filter { !$0.series.isEmpty }.count - written.count) 冊を除いた)"))
+        let files = Dictionary(doc.files.map { ($0.relativePath, $0) }, uniquingKeysWith: { a, _ in a })
+        try SeriesListCSV.csv(set, files: files, excluding: excluded).write(to: out, atomically: true, encoding: .utf8)
+        let inSeries = set.proposals.filter { $0.seriesID != nil }
+        let written = inSeries.filter { !excluded.contains(($0.id as NSString).lastPathComponent.precomposedStringWithCanonicalMapping) }
+        print("シリーズの一覧を書きました: \(Set(written.compactMap(\.seriesID)).count) シリーズ / \(written.count) 冊"
+              + (excluded.isEmpty ? "" : "(以前の一覧の \(excluded.count) 件の名前と一致した \(inSeries.count - written.count) 冊を除いた)"))
+
+    case "bench":
+        let doc = try ScanDocument.load(try args.require("in"))
+        try await bench(doc, proposer: try makeProposer(rules))
 
     case "evaluate":
-        // 正解付きのデータ(1 行 1 冊の JSON)で候補づくりを採点する。出すのは集計だけ。
-        let labeled = try Evaluator.load(URL(fileURLWithPath: try args.require("corpus")))
-        let namings: [(String, (SeriesGroup) -> String)] = [
-            ("共通部分そのまま", { $0.ruleName }),
-            ("最初の区切りで切る", { SeriesNaming.firstCut($0.ruleName, engine: engine) }),
-        ]
+        // 正解付きのデータ(1 行 1 冊の JSON)で提案を採点する。出すのは集計だけ。
+        let labeled = Evaluator.parse(try String(contentsOfFile: try args.require("corpus"), encoding: .utf8))
+        let vocabulary = Vocabulary(dictionaries: SystemDictionaries.all)
         print("本 \(labeled.count) 冊")
+        let s = Evaluator.score(labeled, rules: rules, vocabulary: vocabulary, examples: Int(args.options["examples"] ?? "") ?? 0)
         // --examples N: 誤りの例を出す。**公開データの分析専用**(蔵書から作ったデータには使わない)。
-        if let ex = Int(args.options["examples"] ?? "") {
-            let s = Evaluator.score(labeled, grouper: SeriesGrouper(engine: engine, minPrefix: 4), examples: ex)
+        if args.options["examples"] != nil {
             print("--- 誤って同じ組にした例")
             for (a, b) in s.falsePairs { print("[\(a.author)] \(a.title)〔\(a.series)〕 / \(b.title)〔\(b.series)〕") }
             print("--- 取りこぼした例")
             for (a, b) in s.missedPairs { print("[\(a.author)] \(a.title)〔\(a.series)〕 / \(b.title)〔\(b.series)〕") }
-            return
         }
-        for single in [true, false] {
-          for n in [4] {
-            for (label, naming) in namings.prefix(1) {
-                var grouper = SeriesGrouper(engine: engine, minPrefix: n)
-                grouper.rejectsCommonEnglishTitles = single
-                let s = Evaluator.score(labeled, grouper: grouper, nameFor: naming)
-                print(String(format: "一般英語だけのタイトルを%@ n=%d %@: 適合率 %.3f 再現率 %.3f(正解の組 %d、候補の組 %d)名前一致 %d/%d",
-                             single ? "除く" : "許す", n, label, s.precision, s.recall, s.truePairs, s.predictedPairs,
-                             s.nameMatches, s.namedBooks))
-            }
-          }
-        }
+        print(String(format: "適合率 %.3f 再現率 %.3f(正解の組 %d、候補の組 %d)名前一致 %d/%d",
+                     s.precision, s.recall, s.truePairs, s.predictedPairs, s.nameMatches, s.namedBooks))
 
     case "rules":
         switch args.positional.first {
         case "test":
             try testExamples(paths: Array(args.positional.dropFirst()), only: args.options["only"],
-                             verbose: args.flags.contains("verbose"), engine: engine)
+                             verbose: args.flags.contains("verbose"), rules: rules)
         case "validate":
             guard let path = args.positional.dropFirst().first else { throw CLIError("確かめる規則ファイルを指定してください") }
             try validateRules(Data(contentsOf: URL(fileURLWithPath: path)))
         case "show":
-            let rules = engine.rules
             print("// シリーズの規則(qoometa.series-rules)")
             print(rules.mergedSeriesRules.rendered())
             print("// ファイル名のフォーマット(qoometa.filename-formats)")
@@ -278,8 +258,50 @@ func run() async throws {
     }
 }
 
+/// 規則と、利用者の設定の語彙(本の種別)・システムの辞書で、提案の道具を作る。
+func makeProposer(_ rules: CompiledRules) throws -> Proposer {
+    // 本の種別の語彙は利用者の設定から(リポジトリに置けない語なので)。
+    let config = try Config.load()
+    if config.mediaTypes?.isEmpty ?? true {
+        FileHandle.standardError.write(Data("注意: 本の種別の語彙が設定に無いので、先頭の丸括弧はイベントとして読みます(\(Config.url.path) の mediaTypes)\n".utf8))
+    }
+    return Proposer(rules: rules, vocabulary: Vocabulary(genres: config.mediaTypes ?? [], dictionaries: SystemDictionaries.all))
+}
+
+/// 一括の提案と、1 冊の追加・変更にかかる時間(docs/api.md「性能」の目安を確かめる)。
+func bench(_ doc: ScanDocument, proposer: Proposer) async throws {
+    let inputs = doc.inputs(useAI: false)
+    func seconds(_ body: () throws -> Void) rethrows -> Double {
+        let start = Date()
+        try body()
+        return Date().timeIntervalSince(start)
+    }
+    var set: ProposalSet?
+    let sync = seconds { set = proposeSync(inputs, rules: proposer.rules, vocabulary: proposer.vocabulary) }
+    let start = Date()
+    _ = try await propose(inputs, rules: proposer.rules, vocabulary: proposer.vocabulary)
+    let parallel = Date().timeIntervalSince(start)
+    let index = ProposalIndex(rules: proposer.rules, vocabulary: proposer.vocabulary)
+    let fill = Date()
+    try await index.apply(inputs.map { .upsert($0) })
+    let filled = Date().timeIntervalSince(fill)
+    // 1 冊の変更: 既にある本を、同じ名前のまま入れ直す(単位 1 つの計算し直し)。
+    var single: [Double] = []
+    for input in inputs.prefix(200) {
+        let t = Date()
+        try await index.apply([.upsert(input)])
+        single.append(Date().timeIntervalSince(t))
+    }
+    let same = await index.snapshot().proposals == set?.proposals
+    single.sort()
+    print(String(format: "本 %d 冊: 一括(同期)%.2f 秒、一括(並列)%.2f 秒、索引への投入 %.2f 秒", inputs.count, sync, parallel, filled))
+    print(String(format: "1 冊の変更(%d 回): 中央値 %.1f ミリ秒、最大 %.1f ミリ秒", single.count,
+                 (single.isEmpty ? 0 : single[single.count / 2]) * 1000, (single.last ?? 0) * 1000))
+    print("索引と一括の結果が同じ: \(same ? "はい" : "いいえ")")
+}
+
 /// 渡せる辞書(規則は辞書を名前で指す。ここでは macOS の英単語の一覧だけ)。
-func availableDictionaries() -> Set<String> { EnglishWords.isAvailable ? ["english"] : [] }
+func availableDictionaries() -> Set<String> { Set(SystemDictionaries.all.keys) }
 
 func printIssues(_ issues: [RulesIssue]) {
     for issue in issues { FileHandle.standardError.write(Data("\(issue)\n".utf8)) }
@@ -320,7 +342,7 @@ func validateRules(_ data: Data) throws {
 
 /// 例のファイルを走らせる。例は架空の名前だけなので、食い違いは名前ごと表示する。
 /// 1 つでも通らなければ(読めない例のファイルを含む)終了コード 1。
-func testExamples(paths: [String], only: String?, verbose: Bool, engine: RuleEngine) throws {
+func testExamples(paths: [String], only: String?, verbose: Bool, rules: CompiledRules) throws {
     var files: [(label: String, file: ExampleFile)] = []
     var broken = 0
     if paths.isEmpty {
@@ -338,7 +360,7 @@ func testExamples(paths: [String], only: String?, verbose: Bool, engine: RuleEng
     var passed = 0, failed = 0
     for (label, var file) in files {
         if let only { file.examples = file.examples.filter { $0.id == only } }
-        for outcome in try ExampleRunner.run(file, engine: engine) {
+        for outcome in ExampleRunner.run(file, rules: rules, dictionaries: SystemDictionaries.all) {
             if outcome.passed {
                 passed += 1
                 if verbose { print("ok    \(outcome.id)") }

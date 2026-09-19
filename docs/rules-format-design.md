@@ -353,7 +353,7 @@
 
 ## 最初の実装で決めた細部(2026-09-19)
 
-実装(`Sources/QooMetaCore/RuleSchema.swift`・`RuleLoader.swift`・`RuleFiles.swift`・`RuleEngine.swift`)で決めたこと。説明は docs/rules.md。
+実装(`Sources/QooMetaKit/RuleSchema.swift`・`RuleLoader.swift`・`RuleFiles.swift`・`RuleEngine.swift`)で決めたこと。説明は docs/rules.md。
 
 - 語の切れ目の記号は、1 段目(`volumeHead`)と 2 段目(`sharedPrefix`)の両方が使うので、`compare.boundaries` に置いた。
 - 既定値では、`enabled` を持つ規則(方針が働きを決める `compilation`・`splitByRelation`・`rejectSameWork`・`firstVolume` 以外)は

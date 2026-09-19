@@ -21,15 +21,41 @@
 
 ## 動作環境
 
-- macOS 26 以降(開発は macOS 27 / Xcode 27、Swift 6.4)
-- 端末内モデルでの判定(`judge`)を使うときだけ、Apple Intelligence が有効な Apple Silicon の Mac
+- macOS 15 以降(ライブラリ・CLI。Swift 6.2 以降。開発は macOS 27 / Xcode 27、Swift 6.4)
+- 端末内モデルでの判定(`judge`)を使うときだけ、macOS 26 以降で Apple Intelligence が有効な Apple Silicon の Mac
+
+## 構成
+
+| モジュール | 役割 |
+|---|---|
+| `QooMetaKit` | 本体。名前の解析・シリーズ・巻・版、規則の組み立てと検証。純粋な計算(ファイル・通信・ログに触れない)。macOS 15 以降 |
+| `QooMetaRules` | 同梱の既定値(規則・例のファイル)と、システムの辞書の読み込み |
+| `QooMetaExport` | Stackroom XML・qooViewer JSON・ComicInfo(`Data` を返す) |
+| `QooMetaScan` | フォルダの走査(名前と属性だけ) |
+| `QooMetaAI` | 端末内モデルでの判定(任意、macOS 26 以降) |
+| `qoometa` | CLI |
+
+ライブラリとしての使い方は [docs/api.md](docs/api.md) です。
+
+```swift
+import QooMetaKit
+import QooMetaRules
+
+let vocabulary = Vocabulary(genres: ["<本の種別>"], dictionaries: SystemDictionaries.all)
+let set = proposeSync(books.map { BookInput(id: $0.id, name: $0.name, folders: $0.folders) },
+                      rules: .builtin, vocabulary: vocabulary)
+for book in set.proposals {
+    let series = book.seriesID.flatMap { set.series($0) }
+    print(series?.name ?? "-", book.volume?.text ?? "")
+}
+```
 
 ## ビルドとテスト
 
 ```bash
 swift build -c release
 swift test
-swift run qoometa rules test     # 例のファイル(Sources/QooMetaCore/Resources/examples.json)
+swift run qoometa rules test     # 例のファイル(Sources/QooMetaRules/Resources/examples.json)
 scripts/ci/check-all.sh          # リポジトリの約束事(CI でも走る)
 ```
 
@@ -51,6 +77,7 @@ $Q export --in "$OUT/proposals.json" --format stackroom --out "$OUT/Library.xml"
 $Q export --in "$OUT/proposals.json" --format qooviewer --out "$OUT/qooviewer.json"
 $Q judge --in "$OUT/proposals.json"                            # 任意: 端末内モデルでシリーズの組を判定
 $Q evaluate --corpus <正解付き.jsonl>                           # 公開データで規則を採点
+$Q bench --in "$OUT/proposals.json"                            # 一括の提案と 1 冊の変更にかかる時間
 $Q rules test [<例.json> …]                                    # 例のファイル(架空の名前)で規則を確かめる
 $Q rules validate <変更.json>                                  # 規則の変更(差分)を確かめる
 $Q rules show --rules <変更.json>                              # 既定値に変更を重ねた結果

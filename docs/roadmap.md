@@ -64,6 +64,13 @@ qooMeta
 
 ## 段階 1: ライブラリとして使える形にする(api.md)
 
+進み具合(2026-09-19): 1〜5・9〜11 は済み。モジュールを分け(本体は macOS 15 以降)、本体の静的検査を CI に足した。
+`BookInput`・`Confirmation`・`parseName`・`proposeSync`・`propose`・`ProposalIndex`(`preview` を含む)・`ProposalSet` などを
+api.md のとおりに作り、CLI をその上に作り直した。索引と一括が同じ結果になることは、乱数で作った操作の列のテストで確かめている。
+目安(手元の蔵書 11,269 冊、`qoometa bench`): 一括 2.8 秒(並列 0.9 秒)、1 冊の変更 中央値 2.9 ミリ秒。
+残り: 6(説明 `Explanation`・`NearMiss`、まとめて編集 `BulkEdit`)、7(`RuleCatalog`・`RuleChanges`)、8(フィードバックの例)、
+正規表現の照合の時間の上限、ありふれた言葉の問い合わせ(`prefixCommonness`)、`public` の見直し。
+
 1. モジュールを分ける(QooMetaKit / QooMetaRules / QooMetaExport / QooMetaScan / QooMetaAI)。本体は macOS 15 以降、Swift 6.2 以降。
 2. 本体を純粋な計算にする: 規則・語彙・辞書を値で受け取る(規則と辞書は `RuleEngine` で渡す形にした。段階 0 で前倒し)。
    残りは、同梱の既定値と英単語の辞書のファイルの読み込みを本体の外(QooMetaRules)へ出すこと。

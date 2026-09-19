@@ -1,12 +1,17 @@
 import Foundation
 import Testing
-@testable import QooMetaCore
+@testable import QooMetaKit
+@testable import QooMetaExport
+import QooMetaRules
 
 // テストの名前はすべて合成したもの(実在の本・サークルの名前は使わない。CLAUDE.md)。
 //
-// ファイル名からシリーズ・巻までを通して確かめる形は、例のファイル(Sources/QooMetaCore/Resources/examples.json)に
+// ファイル名からシリーズ・巻までを通して確かめる形は、例のファイル(Sources/QooMetaRules/Resources/examples.json)に
 // 書く(ExamplesTests が走らせる)。ここに置くのは、例では書けない途中の値(組の性質、端末内モデルの判定の反映、
 // 書き出しの形)と、部品ごとの確認。
+
+/// 同梱の既定値と、macOS の英単語の一覧で作った道具。
+let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionaries: SystemDictionaries.all))
 
 @Suite struct NameParserTests {
     @Test func fullPattern() {
@@ -42,12 +47,13 @@ import Testing
 }
 
 @Suite struct SeriesGrouperTests {
-    static func books(_ items: [(circle: String, title: String)]) -> [BookProposal] {
-        let files = items.enumerated().map { i, item in
-            BookFile(path: "/nowhere/\(i).cbz", relativePath: "\(item.circle)/\(i).cbz",
-                     baseName: "[\(item.circle)] \(item.title)", fileExtension: "cbz")
+    static func books(_ items: [(circle: String, title: String)]) -> [WorkingBook] {
+        let inputs = items.enumerated().map { i, item in
+            BookInput(id: "\(i)", name: "[\(item.circle)] \(item.title)", folders: [item.circle])
         }
-        return BookScanner.proposals(from: files)
+        return builtinEngine.prepare(inputs, limits: .default).books.enumerated().map { i, b in
+            WorkingBook(id: i + 1, inputID: b.input.id, parsed: b.parts, circleKey: b.circleKey)
+        }
     }
 
     @Test func unnumberedSeriesWithinOneCircle() {
@@ -57,7 +63,7 @@ import Testing
             ("架空工房", "星降る夜の喫茶店~おかわり~"),
             ("架空工房", "月の裏側"),
         ])
-        let groups = SeriesGrouper().group(b)
+        let groups = SeriesGrouper(engine: builtinEngine).group(b)
         #expect(groups.count == 1)
         #expect(groups[0].memberIDs.count == 3)
         #expect(groups[0].ruleName == "星降る夜の喫茶店")
@@ -69,7 +75,7 @@ import Testing
             ("架空工房", "魔法少女リナ 休日"), ("架空工房", "魔法少女リナ 夏休み"),
             ("幻想舎", "魔法少女リナは眠らない"), ("白紙堂", "魔法少女リナと猫"),
         ])
-        let groups = SeriesGrouper().group(b)
+        let groups = SeriesGrouper(engine: builtinEngine).group(b)
         #expect(groups.count == 1)
         #expect(groups[0].circlesSharingPrefix == 3)
     }
@@ -82,86 +88,57 @@ import Testing
         ("第1幕", "1", 1.0), ("第弐巻", "弐", 2.0), ("第百二十巻", "百二十", 120.0), (" β", "β", 2.0), (" (12)", "12", 12.0), ("第三部 完結", "三", 3.0), (" II", "II", 2.0), (" Ⅳ", "IV", 4.0), (" IX 完結編", "IX", 9.0), (" 2つめ", "2", 2.0), ("第3弾", "3", 3.0), (" 4冊目", "4", 4.0),
     ])
     func numbers(remainder: String, text: String, number: Double) {
-        let v = RuleEngine.builtin.volumes.extract(fromRemainder: remainder)
+        let v = builtinEngine.volumes.extract(fromRemainder: remainder)
         #expect(v?.text == text)
         #expect(v?.number == number)
     }
 
     @Test func positionWordsAreReadAsText() {
         // 1 冊だけでは数にしない(数はシリーズの中の文脈で決める)。
-        let v = RuleEngine.builtin.volumes.extract(fromRemainder: " 後編")
+        let v = builtinEngine.volumes.extract(fromRemainder: " 後編")
         #expect(v?.text == "後編")
         #expect(v?.number == nil)
     }
 
     @Test(arguments: [" 2人の夜", " 冬の章", ""])
     func notVolumes(remainder: String) {
-        #expect(RuleEngine.builtin.volumes.extract(fromRemainder: remainder) == nil)
-    }
-}
-
-@Suite struct FinalizerTests {
-    @Test func aiRejectionAndExclusion() {
-        let b = SeriesGrouperTests.books([
-            ("架空工房", "星降る夜の喫茶店 1"), ("架空工房", "星降る夜の喫茶店 2"), ("架空工房", "星降る夜の喫茶店 3"),
-        ])
-        var doc = ProposalDocument(rootPath: "/nowhere", minPrefix: 4, books: b, groups: SeriesGrouper().group(b))
-        doc.groups[0].aiVerdict = AIVerdict(isSeries: true, seriesName: "星降る夜の喫茶店", excludedIDs: [3],
-                                            confidence: .high, seconds: 0)
-        ProposalFinalizer.finalize(&doc)
-        #expect(doc.books.map(\.series) == ["星降る夜の喫茶店", "星降る夜の喫茶店", ""])
-        #expect(doc.books.map(\.volumeNumber) == [1, 2, nil])
-
-        doc.groups[0].aiVerdict?.isSeries = false
-        ProposalFinalizer.finalize(&doc)
-        #expect(doc.books.allSatisfy { $0.series.isEmpty })
-
-        ProposalFinalizer.finalize(&doc, useAI: false)
-        #expect(doc.books.allSatisfy { $0.series == "星降る夜の喫茶店" })
+        #expect(builtinEngine.volumes.extract(fromRemainder: remainder) == nil)
     }
 }
 
 @Suite struct EditionAndCompilationTests {
     @Test func editionMarkersAreSplit() {
-        let a = RuleEngine.builtin.markers.split("月の庭【フルカラー版】")
+        let a = builtinEngine.markers.split("月の庭【フルカラー版】")
         #expect(a.base == "月の庭")
         #expect(a.editions == ["フルカラー版"])
-        let b = RuleEngine.builtin.markers.split("月の庭 3 DL版")
+        let b = builtinEngine.markers.split("月の庭 3 DL版")
         #expect(b.base == "月の庭 3")
         #expect(b.sources == ["DL版"])
-        let c = RuleEngine.builtin.markers.split("月の庭 (英語版) [特装版]")
+        let c = builtinEngine.markers.split("月の庭 (英語版) [特装版]")
         #expect(c.base == "月の庭")
         #expect(c.editions == ["英語版"])
         #expect(c.sources == ["特装版"])
     }
 
     @Test func rangeBeforeCompilationIsMovedAfterIt() {
-        #expect(RuleEngine.builtin.compilation.normalizedTitle("月の庭1~4総集編") == "月の庭 総集編 1~4")
-        #expect(RuleEngine.builtin.compilation.normalizedTitle("月の庭 9~11+α総集篇") == "月の庭 総集篇 9~11+α")
+        #expect(builtinEngine.compilation.normalizedTitle("月の庭1~4総集編") == "月の庭 総集編 1~4")
+        #expect(builtinEngine.compilation.normalizedTitle("月の庭 9~11+α総集篇") == "月の庭 総集篇 9~11+α")
     }
 }
 
 @Suite struct ExporterTests {
-    static func document() -> ProposalDocument {
-        var files = [
-            BookFile(path: "/nowhere/a.cbz", relativePath: "a.cbz",
-                     baseName: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 1 (オリジナル)", fileExtension: "cbz",
-                     created: Date(timeIntervalSince1970: 1_700_000_000), inodeNumber: 11, volumeDeviceNumber: 1,
-                     volumeUUID: "00000000-0000-0000-0000-000000000000"),
-            BookFile(path: "/nowhere/b.cbr", relativePath: "b.cbr",
-                     baseName: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 上 (オリジナル)", fileExtension: "cbr"),
-        ]
-        files[1].inodeNumber = 12
-        let books = BookScanner.proposals(from: files)
-        var doc = ProposalDocument(rootPath: "/nowhere", minPrefix: 4, books: books, groups: SeriesGrouper().group(books))
-        ProposalFinalizer.finalize(&doc)
-        return doc
+    static func proposals() -> ProposalSet {
+        proposeSync([
+            BookInput(id: "a.cbz", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 1 (オリジナル)"),
+            BookInput(id: "b.cbr", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 上 (オリジナル) <&>"),
+        ], rules: .builtin, vocabulary: Vocabulary())
     }
 
     @Test func stackroomPlistRoundTrip() throws {
-        let doc = Self.document()
-        let data = try PropertyListSerialization.data(
-            fromPropertyList: StackroomExporter.makeDocument(doc), format: .xml, options: 0)
+        let data = try Exporter.stackroomXML(Self.proposals(), files: [
+            "a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz", dateAdded: Date(timeIntervalSince1970: 1_700_000_000)),
+            "b.cbr": .init(path: "/nowhere/b.cbr", fileExtension: "cbr"),
+        ])
         let root = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
         let books = try #require(root["Books"] as? [String: [String: Any]])
         let first = try #require(books["1"])
@@ -178,17 +155,10 @@ import Testing
         #expect(second["Volume"] as? Double == 1)  // 「上」はシリーズの文脈で数にする(中が無いので 1)
     }
 
-    @Test func seriesListExcludesNamesFromAPreviousList() {
-        let doc = Self.document()
-        let first = SeriesListExporter.csv(doc)
-        let names = SeriesListExporter.fileNames(inList: first)
-        #expect(names == ["a.cbz", "b.cbr"])
-        let second = SeriesListExporter.csv(doc, excludingFileNames: ["a.cbz"])
-        #expect(second.split(whereSeparator: \.isNewline).count == 2)  // 見出し + 1 冊
-    }
-
     @Test func qooViewerJSONShape() throws {
-        let data = try QooViewerExporter.makeData(Self.document())
+        let data = try Exporter.qooViewerJSON(Self.proposals(), identities: [
+            "a.cbz": .init(path: "/nowhere/a.cbz", inodeNumber: 11), "b.cbr": .init(path: "/nowhere/b.cbr", inodeNumber: 12),
+        ])
         let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(root["formatVersion"] as? Int == 4)
         let entries = try #require(root["metadata"] as? [[String: Any]])
@@ -197,5 +167,16 @@ import Testing
         #expect(entries[0]["seriesIndex"] as? String == "1")
         #expect(entries[1]["seriesIndex"] as? String == "上")
         #expect(entries[0]["inodeNumber"] as? Int == 11)
+    }
+
+    @Test func comicInfoIsEscaped() throws {
+        let set = Self.proposals()
+        let book = try #require(set["b.cbr"])
+        let xml = String(decoding: Exporter.comicInfoXML(book, series: book.seriesID.flatMap { set.series($0) }), as: UTF8.self)
+        #expect(xml.contains("<Series>星降る夜の喫茶店</Series>"))
+        #expect(xml.contains("<Number>上</Number>"))
+        #expect(!xml.contains("<&>"))
+        #expect(xml.contains("&lt;&amp;&gt;"))
+        #expect(Exporter.xmlEscape("a\u{1}b") == "ab")
     }
 }

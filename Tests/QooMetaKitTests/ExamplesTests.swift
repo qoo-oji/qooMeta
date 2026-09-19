@@ -1,6 +1,8 @@
 import Foundation
 import Testing
-@testable import QooMetaCore
+@testable import QooMetaKit
+import QooMetaExport
+import QooMetaRules
 
 // 例のファイルの読み込みと、同梱の例の実行。名前はすべて架空のもの。
 
@@ -9,7 +11,7 @@ import Testing
     @Test func bundledExamplesPass() throws {
         let file = try ExampleFile.bundled()
         #expect(file.examples.count > 0)
-        for outcome in try ExampleRunner.run(file) {
+        for outcome in ExampleRunner.run(file, rules: .builtin, dictionaries: SystemDictionaries.all) {
             #expect(outcome.passed, "\(outcome.id): \(outcome.mismatches.joined(separator: " / "))")
         }
     }
@@ -71,7 +73,7 @@ import Testing
           { "id": "unchecked-series", "files": ["[架空工房] 月の庭 2", "[架空工房] 月の庭 3"], "expect": [{}, {}] }
         ] }
         """).get()
-        let outcomes = try ExampleRunner.run(file)
+        let outcomes = ExampleRunner.run(file, rules: .builtin, dictionaries: SystemDictionaries.all)
         #expect(outcomes.map(\.passed) == [false, true])
         #expect(outcomes[0].mismatches.count == 1)
     }

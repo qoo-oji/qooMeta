@@ -10,50 +10,50 @@ import Foundation
 /// - 組に 3 冊目以降を加えて共通部分が短くなるときは、**語の切れ目で切れる場合だけ**加える
 ///   (「ABCD 1」「ABCD 2」に「ABCZ」が来て、共通部分が「ABC」へ縮むのを防ぐ)。
 /// - 本当にシリーズか・名前はどこまでか、の最終判断は規則ではしない(端末内モデルと利用者に任せる)。
-public struct SeriesGrouper: Sendable {
+struct SeriesGrouper: Sendable {
     /// 語の**途中**で切れる共通部分は、この文字数(比較用の形で)以上のときだけ候補にする。
     /// 語の切れ目で切れる共通部分には掛けない(1 文字のタイトルもある)。
-    public var minPrefix: Int
+    var minPrefix: Int
     /// 片方のタイトル全体がもう片方の前半と一致する場合は、この文字数まで短くても候補にする
     /// (短いシリーズ名の「X」と「X 2」)。
-    public var minWholeTitle: Int
+    var minWholeTitle: Int
 
     /// 副題付きの本(「X 〇〇編」)を、巻でまとめた「X」の組に入れるか。NDL の書誌では副題付きが別の作品として
     /// 記録されていることが多く(「X : 〇〇」)、入れると NDL を正解とした適合率は下がる。どちらが正しいかは
     /// 蔵書の整理の考え方次第(docs/design.md「公開データでの検討」)。
-    public var attachesSubtitledBooks: Bool
+    var attachesSubtitledBooks: Bool
 
     /// 語の途中で切れる共通部分が、ひらがなで終わるなら組にしない。
-    public var rejectsHiraganaEndings: Bool
+    var rejectsHiraganaEndings: Bool
 
     /// ネタ(`@genre`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)にはネタが無いので、そちらの採点には効かない。
-    public var splitsByGenre: Bool
+    var splitsByGenre: Bool
 
     /// 本の種別(`@mediatype`)が違う本を分けるか(方針 differentGenre)。
-    public var splitsByMediaType: Bool
+    var splitsByMediaType: Bool
 
     /// 1 段目(「タイトル + 巻」を頭でまとめる。規則 volumeHead)と 2 段目(共通する前半部分。規則 sharedPrefix)を使うか。
-    public var usesVolumeHeads: Bool
-    public var usesSharedPrefixes: Bool
+    var usesVolumeHeads: Bool
+    var usesSharedPrefixes: Bool
 
     /// 一般的な英語だけのタイトルでも、後ろに巻があれば組にする。
-    public var commonEnglishUnlessVolume: Bool
+    var commonEnglishUnlessVolume: Bool
 
     /// 本編のシリーズがあれば、総集編が 1 冊でもシリーズにする。
-    public var singleCompilationWithMain: Bool
+    var singleCompilationWithMain: Bool
 
     /// 語の切れ目で切れる共通部分でも、2 冊とも一般的な英単語だけのタイトルなら組にしない(EnglishWords)。
-    public var rejectsCommonEnglishTitles: Bool
+    var rejectsCommonEnglishTitles: Bool
 
     /// 語の途中で切れる共通部分が 1 語(文字種の 1 続き)なら組にしない。
-    public var rejectsSingleWordPrefixes: Bool
+    var rejectsSingleWordPrefixes: Bool
 
     /// 比べ方・巻の読み方・辞書(規則から作ったもの)。
-    public let engine: RuleEngine
+    let engine: RuleEngine
     var text: TextRules { engine.text }
 
     /// 既定値は規則の grouping と policies。`minPrefix` だけは、公開データでの比較のために直接渡せる。
-    public init(engine: RuleEngine = .builtin, minPrefix: Int? = nil) {
+    init(engine: RuleEngine, minPrefix: Int? = nil) {
         let g = engine.rules.series.grouping
         self.engine = engine
         self.minPrefix = minPrefix ?? g.minPrefix
@@ -109,10 +109,10 @@ public struct SeriesGrouper: Sendable {
 
     /// **ネタ(末尾の丸括弧、`@genre`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組をネタごとに分け、ネタの書かれていない本は
     /// いちばん大きい組へ入れる。分けた結果 2 冊に満たない組は捨てる。
-    func splitByGenre(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
+    func splitByGenre(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
         guard splitsByGenre else { return groups }
         let genreByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.trailing).key)) })
-        var result: [SeriesGroup] = []
+        var result: [CandidateGroup] = []
         for group in groups {
             let byGenre = Dictionary(grouping: group.memberIDs.filter { !(genreByID[$0] ?? "").isEmpty }) { genreByID[$0]! }
             guard byGenre.count >= 2 else { result.append(group); continue }
@@ -148,7 +148,7 @@ public struct SeriesGrouper: Sendable {
 
     /// 版違い・入手経路違いだけでできた組はシリーズにしない(同じ作品。利用者との取り決め)。
     /// 印(EditionMarkers)を除いたタイトルが 2 種類以上ある組だけを残す。1 冊でもよい組(本編のある総集編)は残す。
-    func dissolveSameWorkOnly(_ groups: [SeriesGroup], books: [BookProposal]) -> [SeriesGroup] {
+    func dissolveSameWorkOnly(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
         let baseByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.parsed.baseTitle).key)) })
         return groups.filter { g in
             g.allowsSingle == true || Set(g.memberIDs.compactMap { baseByID[$0] }).count >= 2
@@ -157,14 +157,14 @@ public struct SeriesGrouper: Sendable {
 
     /// 比べる単位。書き手 + 本の種別(qooLibrary の `@mediatype`)。**本の種別が違う本は同じシリーズにしない**
     /// (同人の本と商業の単行本のような発行形態の違い。利用者の指摘)。種別が読めなかった本は書き手だけで比べる。
-    func partitionKey(_ book: BookProposal) -> String {
+    func partitionKey(_ book: WorkingBook) -> String {
         let mediaType = splitsByMediaType ? String(text.comparable(book.parsed.mediaType ?? "").key) : ""
         return mediaType.isEmpty ? book.circleKey : "\(book.circleKey)\u{1}\(mediaType)"
     }
 
-    public func group(_ books: [BookProposal]) -> [SeriesGroup] {
+    func group(_ books: [WorkingBook]) -> [CandidateGroup] {
         let byCircle = Dictionary(grouping: books, by: partitionKey)
-        var groups: [SeriesGroup] = []
+        var groups: [CandidateGroup] = []
         for circleKey in byCircle.keys.sorted() {
             // 総集編は本編と分けて扱う(Self.compilation)。
             let compilations = byCircle[circleKey]!.compactMap { b in compilation(b.parsed.baseTitle).map { (b, $0) } }
@@ -180,9 +180,11 @@ public struct SeriesGrouper: Sendable {
             // ような別のタイトルが挟まり、組が切れる(NDL の書誌で測った取りこぼしの主因)。
             var byHead: [String: [(id: Int, text: ComparableText, headLength: Int)]] = [:]
             var rest: [(id: Int, text: ComparableText)] = []
+            let precomputedHeads = Dictionary(uniqueKeysWithValues: byCircle[circleKey]!.map { ($0.id, $0.volumeHead) })
             for item in items {
                 // 後ろが巻だけでできていることを求めるので、頭は 1 文字でもよい(「咲 18」)。
-                if usesVolumeHeads, let head = volumeHeadLength(item.text, minLength: 1) {
+                if usesVolumeHeads,
+                   let head = precomputedHeads[item.id].flatMap({ $0 }) ?? volumeHeadLength(item.text, minLength: 1) {
                     byHead[String(item.text.key.prefix(head)), default: []].append((item.id, item.text, head))
                 } else {
                     rest.append(item)
@@ -237,10 +239,12 @@ public struct SeriesGrouper: Sendable {
             headGroups.removeAll { $0.members.count < 2 }
             for (_, members) in headGroups.sorted(by: { $0.key < $1.key }) {
                 let first = members.min { $0.id < $1.id }!
-                groups.append(SeriesGroup(
+                var g = CandidateGroup(
                     id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0], memberIDs: members.map(\.id).sorted(),
                     ruleName: text.trimSeriesName(first.text.originalPrefix(keyLength: first.headLength)),
-                    cleanBoundary: true, circlesSharingPrefix: 0))
+                    cleanBoundary: true, circlesSharingPrefix: 0)
+                g.evidence = .volumeHead
+                groups.append(g)
             }
 
             // 2 段目: 残りを、共通する前半部分でまとめる。
@@ -248,14 +252,16 @@ public struct SeriesGrouper: Sendable {
             for run in (usesSharedPrefixes ? runs(sorted) : []) where run.count >= 2 {
                 let prefixLength = run.map(\.prefixLength).min()!
                 let first = run[0].item.text
-                groups.append(SeriesGroup(
+                var g = CandidateGroup(
                     id: 0,
                     circleKey: circleKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: run.map(\.item.id),
                     ruleName: text.trimSeriesName(first.originalPrefix(keyLength: prefixLength)),
                     cleanBoundary: run.allSatisfy { Self.isCleanCut($0.item.text, at: prefixLength) },
                     circlesSharingPrefix: 0
-                ))
+                )
+                g.evidence = .sharedPrefix(cleanCut: g.cleanBoundary)
+                groups.append(g)
             }
 
             // 総集編: 「X 総集編」ごとにまとめる。2 冊以上か、本編のシリーズ「X」がこの書き手にあれば(1 冊でも)シリーズ。
@@ -275,11 +281,13 @@ public struct SeriesGrouper: Sendable {
                     continue
                 }
                 guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
-                var g = SeriesGroup(
+                var g = CandidateGroup(
                     id: 0, circleKey: circleKey.components(separatedBy: "\u{1}")[0],
                     memberIDs: members.map(\.0.id).sorted(), ruleName: members.min { $0.0.id < $1.0.id }!.1.name,
                     cleanBoundary: true, circlesSharingPrefix: 0)
                 g.allowsSingle = hasMain && singleCompilationWithMain
+                g.evidence = .compilation
+                g.isCompilation = true
                 groups.append(g)
             }
         }

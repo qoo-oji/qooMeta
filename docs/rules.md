@@ -4,8 +4,8 @@ qooMeta の規則は、次の 2 つの JSON(形式の第 2 版)に書かれて�
 
 | ファイル | 役割 |
 |---|---|
-| [`Sources/QooMetaCore/Resources/filename-formats.json`](../Sources/QooMetaCore/Resources/filename-formats.json) | ファイル名を**どう区切り、どこが何の欄か**(サークル・作者・タイトル・ネタ …)を決める |
-| [`Sources/QooMetaCore/Resources/series-rules.json`](../Sources/QooMetaCore/Resources/series-rules.json) | 読み取ったタイトルから**シリーズ名と巻**を取り出す |
+| [`Sources/QooMetaRules/Resources/filename-formats.json`](../Sources/QooMetaRules/Resources/filename-formats.json) | ファイル名を**どう区切り、どこが何の欄か**(サークル・作者・タイトル・ネタ …)を決める |
+| [`Sources/QooMetaRules/Resources/series-rules.json`](../Sources/QooMetaRules/Resources/series-rules.json) | 読み取ったタイトルから**シリーズ名と巻**を取り出す |
 
 処理の順は「ファイル名 → (filename-formats.json)→ 欄 → (series-rules.json)→ シリーズと巻」です。
 形式の設計と、その理由は [rules-format-design.md](rules-format-design.md) にあります。
@@ -78,7 +78,7 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 - 語の一覧は、長い語から先に照合するよう自動で並べ替えます。書く順は気にしなくてかまいません
   (`formats` と巻の読み手だけは、並びが優先順位です)。
 - 変えたあとは、次で結果を確かめてください。
-  - `qoometa rules test` — 例のファイル(`Sources/QooMetaCore/Resources/examples.json`、架空の名前)。
+  - `qoometa rules test` — 例のファイル(`Sources/QooMetaRules/Resources/examples.json`、架空の名前)。
     規則を変える前に、確かめたい形をここへ足す(CONTRIBUTING.md)
   - `swift test` — 合成した名前での単体テスト(例のファイルも走る)
   - `qoometa scan …` → `qoometa stats …` — 手元の蔵書での集計(名前は出ません)。最後の行の「結果の指紋」は、

@@ -404,6 +404,25 @@ public enum Exporter {
 - **ShelfRow**: `parseName` でタイトル・作者・ジャンル・関連を埋める。
 - **GUI アプリ・CLI**: `QooMetaScan` → `propose` → 見直し(`BulkEdit` でまとめて直す)→ `QooMetaExport`。
 
+## 実装の状況と、案から変えたところ(2026-09-19)
+
+できているもの: モジュールの分割、`CompiledRules`・`RuleSources`・`RulesCompilation`・`RulesIssue`、`Vocabulary`・`WordSet`、
+`BookInput`・`Confirmation`、`parseName`・`proposeSync`・`propose`、`ProposalSet` と出力の型、`ProposalIndex`(`preview`・`update`)、
+`InputLimits`、`Exporter`(Stackroom XML・qooViewer JSON・ComicInfo)、`SystemDictionaries`(QooMetaRules)。
+まだのもの: `Explanation`・`NearMiss`、`BulkEdit`、`RuleCatalog`・`RuleChanges`、`makeFeedbackExample`、`prefixCommonness(of:)`、
+`ProposalOptions.explanations`、照合の時間の上限。
+
+案から変えたところ:
+
+- `BookChange` は `ProposalIndex` の外(トップレベル)に置いた。`ProposalDelta` に消えた本(`removedBooks`)を足した。
+- `SeriesProposal.Evidence` に総集編(`.compilation`)を足した。`FormatMatch.fallback` の ID は `simpleBrackets` と `wholeName`。
+- `RulesIssue` は `line`・`column` を持たない(位置は JSON の中の道筋。壊れた JSON は `detail` に行・列が入る)。
+  表示の言葉は `description`(CLI 用)で、利用側は `code` と `detail` から自分の言葉で出せる。
+- 同梱の既定値は `CompiledRules.builtin`(QooMetaRules)。辞書は `SystemDictionaries.all` を `Vocabulary.dictionaries` に渡す。
+- 例のファイルの確認は `ExampleRunner.run(_:rules:dictionaries:)`(本体)。例ごとの方針は `CompiledRules.applying(policies:)`。
+- ComicInfo は、サークルを `Publisher`、作者を `Writer`、ネタを `Tags`、本の種別を `Genre`、版を `Notes` に入れる。
+- 入力の制御文字と書式文字(Cc・Cf)は、名前を読む前に落とす。
+
 ## 決まったこと(2026-09-19)
 
 - モジュールの名前はこの案のとおり。安定版(1.0)にする時期と範囲は、状況を見て決める。

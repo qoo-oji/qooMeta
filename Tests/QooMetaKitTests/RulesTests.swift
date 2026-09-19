@@ -1,6 +1,8 @@
 import Foundation
 import Testing
-@testable import QooMetaCore
+@testable import QooMetaKit
+import QooMetaExport
+import QooMetaRules
 
 // 規則ファイル(第 2 版)の読み込み・検証・差分の重ね方。語はすべて一般的な語か架空のもの。
 
@@ -126,18 +128,14 @@ import Testing
     }
 
     /// 規則はグローバルな状態ではなく値なので、1 つのプロセスで別々の規則を並べて使える。
-    @Test func twoEnginesSideBySide() throws {
+    @Test func twoRuleSetsSideBySide() throws {
         let separate = try #require(CompiledRules.builtin.applying(policies: ["subtitled": "separate"]).rules)
-        let engines = [RuleEngine.builtin, RuleEngine(rules: separate, englishWords: .system)]
-        let names = ["[架空工房] 月影 はじまりの章", "[架空工房] 月影 2", "[架空工房] 月影 3"]
-        let files = names.enumerated().map { BookFile(path: "/nowhere/\($0.offset)", relativePath: "\($0.offset)",
-                                                      baseName: $0.element, fileExtension: "cbz") }
-        let firstBookSeries = engines.map { engine -> String in
-            let books = BookScanner.proposals(from: files, engine: engine)
-            var doc = ProposalDocument(rootPath: "/nowhere", minPrefix: 4, books: books,
-                                       groups: SeriesGrouper(engine: engine).group(books))
-            ProposalFinalizer.finalize(&doc, engine: engine)
-            return doc.books[0].series
+        let inputs = ["[架空工房] 月影 はじまりの章", "[架空工房] 月影 2", "[架空工房] 月影 3"].enumerated().map {
+            BookInput(id: "\($0.offset)", name: $0.element)
+        }
+        let firstBookSeries = [CompiledRules.builtin, separate].map { rules -> String in
+            let set = proposeSync(inputs, rules: rules, vocabulary: Vocabulary())
+            return set["0"]?.seriesID.flatMap { set.series($0)?.name } ?? ""
         }
         #expect(firstBookSeries == ["月影", ""])
     }

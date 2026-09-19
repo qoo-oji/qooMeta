@@ -24,5 +24,5 @@ qooLibrary(同じ作者のリポジトリ)の**ファイル名フォーマット
 ## 写していないもの
 
 プリセットの定義(`Resources/Templates/library-types.json`)。本の種別の名前を含み、それが蔵書のフォルダ名と
-同じ語なので、このリポジトリに置けない。フォーマットは `QooMetaCore/QooLibraryNameParser.swift` に写し、
+同じ語なので、このリポジトリに置けない。フォーマットは `QooMetaKit/QooLibraryNameParser.swift` に写し、
 本の種別の語彙は利用者の設定(リポジトリの外の `config.json`)から渡す。

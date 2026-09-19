@@ -24,8 +24,8 @@ qooViewer の保存データ JSON と、StackNest が取り込める Stackroom �
 ## ビルドとテスト
 
 ```bash
-swift build            # macOS 26 以降(FoundationModels)。開発機は macOS 27 / Xcode 27
-swift test             # QooMetaCore のテスト(合成した名前だけ。端末内モデルは使わない)
+swift build            # 対象は macOS 15 以降(端末内モデルだけ 26 以降)。開発機は macOS 27 / Xcode 27
+swift test             # QooMetaKit のテスト(合成した名前だけ。端末内モデルは使わない)
 swift build -c release && .build/release/qoometa        # 使い方が出る
 ```
 

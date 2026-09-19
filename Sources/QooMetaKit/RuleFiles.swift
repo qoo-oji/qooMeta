@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import QooFormat
 
-/// 同梱の既定値(パッケージに入れた 2 つの JSON)。
+/// 既定値の規則のデータ(同梱の 2 つの JSON。読み込むのは QooMetaRules)。
 ///
 /// - `filename-formats.json`: ファイル名をどう区切り、どこがサークル・作者・タイトル・ネタ(関連)かを決めるフォーマット。
 /// - `series-rules.json`: タイトルからシリーズ名と巻を取り出す規則。
@@ -15,17 +15,6 @@ public struct BuiltInRules: Sendable {
     public init(seriesRules: Data, filenameFormats: Data) {
         self.seriesRules = seriesRules
         self.filenameFormats = filenameFormats
-    }
-
-    public static func bundled() throws -> BuiltInRules {
-        func data(_ name: String) throws -> Data {
-            guard let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Resources")
-                ?? Bundle.module.url(forResource: name, withExtension: "json") else {
-                throw RulesIssue(.missingKey, source: "builtin", at: "", "\(name).json")
-            }
-            return try Data(contentsOf: url)
-        }
-        return BuiltInRules(seriesRules: try data("series-rules"), filenameFormats: try data("filename-formats"))
     }
 }
 
@@ -468,15 +457,4 @@ extension SeriesRules.Volume {
     /// 漢数字の前に付く語(英字・記号でないもの)。
     var kanjiPrefixPattern: String { alternation(kanjiPrefixes.filter { !$0.allSatisfy(\.isASCII) }) }
     var positionPattern: String { alternation(positionWords.first + positionWords.middle + positionWords.last) }
-}
-
-extension CompiledRules {
-    /// 同梱の既定値だけを組み立てたもの。同梱の規則は検証済みなので、組み立てられなければ作りの誤り。
-    public static let builtin: CompiledRules = {
-        let compilation = CompiledRules.compile(RuleSources(builtIn: try! BuiltInRules.bundled()))
-        guard let rules = compilation.rules else {
-            fatalError("同梱の規則を組み立てられない:\n" + compilation.errors.map(\.description).joined(separator: "\n"))
-        }
-        return rules
-    }()
 }

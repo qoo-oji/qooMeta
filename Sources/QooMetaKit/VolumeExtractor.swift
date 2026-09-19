@@ -232,24 +232,15 @@ public final class VolumeExtractor: Sendable {
 }
 
 /// 候補の判定を本ごとの値へ反映する。
-public enum ProposalFinalizer {
-    /// - Parameter useAI: false なら端末内モデルの判定を無視し、規則の候補だけで決める(比較用)。
-    public static func finalize(_ document: inout ProposalDocument, useAI: Bool = true, engine: RuleEngine = .builtin) {
+enum ProposalFinalizer {
+    /// 組を本ごとの値(シリーズ名・巻)へ反映する。
+    static func finalize(_ document: inout WorkingDocument, engine: RuleEngine) {
         var seriesByBook: [Int: String] = [:]
         var groupByBook: [Int: Int] = [:]
         for group in document.groups {
-            var name = group.ruleName
-            var excluded = Set<Int>()
-            if useAI, let verdict = group.aiVerdict {
-                guard verdict.isSeries else { continue }
-                if !verdict.seriesName.trimmingCharacters(in: .whitespaces).isEmpty {
-                    name = TextRules.normalizeDisplay(verdict.seriesName)
-                }
-                excluded = Set(verdict.excludedIDs)
-            }
-            let kept = group.memberIDs.filter { !excluded.contains($0) }
-            guard kept.count >= (group.allowsSingle == true ? 1 : 2), !name.isEmpty else { continue }
-            for id in kept { seriesByBook[id] = name; groupByBook[id] = group.id }
+            let name = group.ruleName
+            guard group.memberIDs.count >= (group.allowsSingle == true ? 1 : 2), !name.isEmpty else { continue }
+            for id in group.memberIDs { seriesByBook[id] = name; groupByBook[id] = group.id }
         }
         for i in document.books.indices {
             let series = seriesByBook[document.books[i].id] ?? ""
@@ -259,9 +250,16 @@ public enum ProposalFinalizer {
             document.books[i].volumeNumber = nil
             document.books[i].volumeInferred = nil
             guard !series.isEmpty else { continue }
+            // 利用者が確定させた巻はそのまま使う。並べ替え用の数は、表記を巻の読み手に通して決める(「上」は文脈で後から)。
+            if case .series(_, let volume?, _) = document.books[i].confirmation {
+                document.books[i].volumeText = volume
+                document.books[i].volumeNumber = engine.volumes.extract(fromRemainder: " " + volume)?.number
+                document.books[i].volumeConfirmed = true
+                continue
+            }
             let title = engine.text.comparable(document.books[i].parsed.baseTitle)
             let nameKey = engine.text.comparable(series).key
-            // シリーズ名がタイトルの前半に当たらない(モデルが言い換えた)ときは、巻を読まない。
+            // シリーズ名がタイトルの前半に当たらない(利用者が別の名前に確定した)ときは、巻を読まない。
             guard title.key.starts(with: nameKey) else { continue }
             let remainder = title.originalRemainder(afterKeyLength: nameKey.count)
             if let volume = engine.volumes.extract(fromRemainder: remainder) {
@@ -279,7 +277,7 @@ public enum ProposalFinalizer {
 
     /// 本編に含めた総集編(方針 compilations = inMainSeries)の巻を、収録範囲の最後の巻の直後にする
     /// (方針 compilationVolume = afterRange。「X 総集編 1~4」は 4.5)。範囲が読めなければ巻を付けない(並びは末尾)。
-    static func placeCompilationsAfterRange(_ document: inout ProposalDocument, engine: RuleEngine) {
+    static func placeCompilationsAfterRange(_ document: inout WorkingDocument, engine: RuleEngine) {
         for i in document.books.indices where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty {
             let title = engine.text.comparable(document.books[i].parsed.baseTitle)
             let name = engine.text.comparable(document.books[i].series).key
@@ -299,7 +297,7 @@ public enum ProposalFinalizer {
     /// 「上」「中」「下」(「前編」「中編」「後編」)を数にする。**組の中に「中」があるかで決める**:
     /// あれば 上=1・中=2・下=3、無ければ 上=1・下=2(StackNest の FilenameParser の文脈判定に倣った)。
     /// 巻の表記(volumeText)は文字のまま残し、数(volumeNumber)だけを入れる。
-    static func numberPositionWords(_ document: inout ProposalDocument, engine: RuleEngine) {
+    static func numberPositionWords(_ document: inout WorkingDocument, engine: RuleEngine) {
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
         for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
             // 位置の語の後ろの番号(「後編1」「後編2」)は分冊。数は位置 + 番号 / 10(後編1 = 3.1)。
@@ -333,7 +331,7 @@ public enum ProposalFinalizer {
     /// 漢数字の直後に「巻」「話」などが無い形は、1 冊だけ見ると「X 三人の夜」「X 十字架」のような普通の言葉と
     /// 区別できない。**同じシリーズの中で、巻の読めない本が 2 冊以上、互いに違う漢数字で始まっているときだけ**読む
     /// (利用者の指摘。番号を言葉遊びに埋め込んだ同人誌のシリーズ)。
-    static func readLeadingKanjiNumerals(_ document: inout ProposalDocument, engine: RuleEngine) {
+    static func readLeadingKanjiNumerals(_ document: inout WorkingDocument, engine: RuleEngine) {
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
         for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
             var found: [(index: Int, text: String, number: Int)] = []
@@ -364,7 +362,7 @@ public enum ProposalFinalizer {
     /// 推定した巻には `volumeInferred` を付け、一覧・見直し表で区別できるようにする。
     /// シリーズ名の直後に付くと「1 冊目ではない」ことを示す英字(「Xex」「X SP」)。途中に含まれるだけでは見ない。
     /// (語の一覧は volume.inference.firstVolume の excludePrefixes と excludeMarkers)
-    static func inferFirstVolumes(_ document: inout ProposalDocument, engine: RuleEngine) {
+    static func inferFirstVolumes(_ document: inout WorkingDocument, engine: RuleEngine) {
         let notFirstVolumePrefixes = engine.volumes.rules.notFirstPrefixes
         let notFirstVolumeMarkers = engine.volumes.rules.notFirstMarkers
         let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }

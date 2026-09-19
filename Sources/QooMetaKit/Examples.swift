@@ -12,15 +12,6 @@ public struct ExampleFile: Sendable {
     public var genres: [String]
     public var examples: [Example]
 
-    /// 同梱の例(Resources/examples.json)。
-    public static func bundled() throws -> ExampleFile {
-        guard let url = Bundle.module.url(forResource: "examples", withExtension: "json", subdirectory: "Resources")
-            ?? Bundle.module.url(forResource: "examples", withExtension: "json") else {
-            throw RulesIssue(.missingKey, source: "examples", at: "", "同梱の examples.json")
-        }
-        return try load(Data(contentsOf: url)).get()
-    }
-
     /// 読んで検証する。誤りは最初の 1 件で止めず、すべて集めて返す。
     public static func load(_ data: Data) -> Result<ExampleFile, RulesIssues> {
         let root: JSONValue
@@ -223,30 +214,34 @@ public enum ExampleRunner {
         public var passed: Bool { mismatches.isEmpty }
     }
 
-    /// - Parameter engine: 例を確かめる規則(既定値、または利用者の変更を重ねたもの)。例が方針を書いていれば、その上で置き換える。
-    public static func run(_ file: ExampleFile, engine: RuleEngine = .builtin) throws -> [Outcome] {
-        var engines: [[String: String]: RuleEngine] = [[:]: engine]
-        var parsers: [String: QooLibraryNameParser] = [:]
-        return try file.examples.map { example in
-            if engines[example.policies] == nil {
-                let compilation = engine.rules.applying(policies: example.policies)
-                guard let rules = compilation.rules else {
+    /// - Parameters:
+    ///   - rules: 例を確かめる規則(既定値、または利用者の変更を重ねたもの)。例が方針を書いていれば、その上で置き換える。
+    ///   - dictionaries: 規則が名前で指す辞書。本の種別の語彙は例のファイルに書いたもの。
+    public static func run(_ file: ExampleFile, rules: CompiledRules, dictionaries: [String: WordSet]) -> [Outcome] {
+        var rulesByPolicies: [[String: String]: CompiledRules] = [[:]: rules]
+        return file.examples.map { example in
+            if rulesByPolicies[example.policies] == nil {
+                let compilation = rules.applying(policies: example.policies)
+                guard let applied = compilation.rules else {
                     return Outcome(id: example.id, covers: example.covers,
                                    mismatches: compilation.errors.map { "方針を選べない: \($0)" })
                 }
-                engines[example.policies] = RuleEngine(rules: rules, englishWords: engine.english)
+                rulesByPolicies[example.policies] = applied
             }
-            let exampleEngine = engines[example.policies]!
-            let genres = example.genres ?? file.genres
-            let parserKey = genres.joined(separator: "\u{1}") + "\u{2}" + exampleEngine.rules.contentHash
-            if parsers[parserKey] == nil {
-                parsers[parserKey] = try QooLibraryNameParser(mediaTypes: genres, rules: exampleEngine.rules.formats)
+            let vocabulary = Vocabulary(genres: example.genres ?? file.genres, dictionaries: dictionaries)
+            // フォルダは例では外側から書くので、近い順に並べ替えて渡す。
+            let inputs = example.books.enumerated().map { i, book in
+                BookInput(id: String(format: "%04d", i + 1), name: book.name, folders: book.folders.reversed())
             }
-            let books = propose(example.books, parser: parsers[parserKey]!, engine: exampleEngine)
+            let set = proposeSync(inputs, rules: rulesByPolicies[example.policies]!, vocabulary: vocabulary)
             var mismatches: [String] = []
-            for (i, expectation) in example.expectations.enumerated() where i < books.count {
+            for (i, expectation) in example.expectations.enumerated() where i < inputs.count {
+                guard let book = set[inputs[i].id] else {
+                    mismatches.append("\(i + 1) 冊目「\(example.books[i].name)」を扱わなかった")
+                    continue
+                }
                 for (field, expected) in expectation.checks {
-                    let actual = value(of: field, in: books[i])
+                    let actual = value(of: field, in: book, set: set)
                     if !matches(actual, expected) {
                         mismatches.append("\(i + 1) 冊目「\(example.books[i].name)」の \(field.rawValue): "
                                           + "期待 \(show(expected))、結果 \(show(actual))")
@@ -257,35 +252,20 @@ public enum ExampleRunner {
         }
     }
 
-    /// CLI の scan と同じ流れ(ファイル名の解析 → 組 → 巻)を、規則だけで通す(端末内モデルは使わない)。
-    static func propose(_ books: [ExampleBook], parser: QooLibraryNameParser, engine: RuleEngine) -> [BookProposal] {
-        let files = books.enumerated().map { i, book in
-            let relative = (book.folders + [book.name + ".cbz"]).joined(separator: "/")
-            return BookFile(path: "/example/\(i + 1)/" + relative, relativePath: relative, baseName: book.name,
-                            fileExtension: "cbz")
-        }
-        let proposals = BookScanner.proposals(from: files, qooLibrary: parser, engine: engine)
-        let grouper = SeriesGrouper(engine: engine)
-        var doc = ProposalDocument(rootPath: "/example", minPrefix: grouper.minPrefix, books: proposals,
-                                   groups: grouper.group(proposals))
-        ProposalFinalizer.finalize(&doc, useAI: false, engine: engine)
-        return doc.books
-    }
-
     /// 結果の値を、期待値と同じ形(空は null)にする。
-    static func value(of field: Expectation.Field, in book: BookProposal) -> JSONValue {
+    static func value(of field: Expectation.Field, in book: BookProposal, set: ProposalSet) -> JSONValue {
         func text(_ s: String?) -> JSONValue { (s ?? "").isEmpty ? .null : .string(s!) }
         func list(_ a: [String]?) -> JSONValue { .array((a ?? []).map(JSONValue.string)) }
         switch field {
-        case .series: return text(book.series)
-        case .volume: return text(book.volumeText)
-        case .volumeSort: return book.volumeNumber.map(JSONValue.number) ?? .null
-        case .inferred: return .bool(book.volumeInferred == true)
+        case .series: return text(book.seriesID.flatMap { set.series($0)?.name })
+        case .volume: return text(book.volume?.text)
+        case .volumeSort: return book.volume?.sortKey.map(JSONValue.number) ?? .null
+        case .inferred: return .bool(book.volume?.inferred == true)
         case .circle: return text(book.parsed.circle)
         case .authors: return list(book.parsed.authors)
         case .title: return text(book.parsed.title)
-        case .relation: return text(book.parsed.trailing)
-        case .genre: return text(book.parsed.mediaType)
+        case .relation: return text(book.parsed.relation)
+        case .genre: return text(book.parsed.genre)
         case .event: return text(book.parsed.event)
         case .editions: return list(book.parsed.editions)
         case .sources: return list(book.parsed.sources)

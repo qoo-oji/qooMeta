@@ -16,8 +16,8 @@ qooMeta は蔵書のファイル名を扱いますが、**実在する本・サ�
 
 ## 規則を変えるとき
 
-規則(`Sources/QooMetaCore/Resources/*.json`)や処理を変える前に、確かめたい形を**例のファイル**
-(`Sources/QooMetaCore/Resources/examples.json`)に足します。形式は `docs/rules-format-design.md`「例のファイル」です。
+規則(`Sources/QooMetaRules/Resources/*.json`)や処理を変える前に、確かめたい形を**例のファイル**
+(`Sources/QooMetaRules/Resources/examples.json`)に足します。形式は `docs/rules-format-design.md`「例のファイル」です。
 
 ```json
 {

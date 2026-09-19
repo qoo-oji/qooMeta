@@ -32,30 +32,33 @@ public enum Evaluator {
         public var recall: Double { truePairs == 0 ? 0 : Double(correctPairs) / Double(truePairs) }
     }
 
-    public static func load(_ url: URL) throws -> [LabeledBook] {
+    /// 1 行 1 冊の JSON を読む(ファイルは利用側が読む)。
+    public static func parse(_ text: String) -> [LabeledBook] {
         let decoder = JSONDecoder()
-        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").compactMap {
+        return text.split(separator: "\n").compactMap {
             try? decoder.decode(LabeledBook.self, from: Data($0.utf8))
         }
     }
 
-    /// - Parameter nameFor: 候補の組からシリーズ名を決める(規則の名前、切り方を変えた名前など)。
-    public static func score(_ labeled: [LabeledBook], grouper: SeriesGrouper, examples: Int = 0,
-                             nameFor: (SeriesGroup) -> String = { $0.ruleName }) -> Score {
-        let files = labeled.enumerated().map { i, b in
-            BookFile(path: "/corpus/\(i)", relativePath: "\(i)", baseName: "[\(b.author)] \(b.title)", fileExtension: "cbz")
-        }
-        let books = BookScanner.proposals(from: files, engine: grouper.engine)
-        let groups = grouper.group(books)
-        var predicted: [Int: Int] = [:]  // 本の id → 組の id
+    /// 提案(規則だけ)で採点する。書き手は `[著者] タイトル` の形の名前から読む。
+    public static func score(_ labeled: [LabeledBook], rules: CompiledRules, vocabulary: Vocabulary,
+                             examples: Int = 0) -> Score {
+        let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
+        let inputs = labeled.enumerated().map { i, b in BookInput(id: String(i), name: "[\(b.author)] \(b.title)") }
+        let set = proposeSync(inputs, rules: rules, vocabulary: vocabulary)
+        struct Book { let id: Int; let circleKey: String }
+        let books = inputs.indices.map { i in Book(id: i, circleKey: engine.text.key(set[inputs[i].id]?.parsed.circle ?? "")) }
+        var predicted: [Int: SeriesID] = [:]  // 本の番号 → シリーズ
         var name: [Int: String] = [:]
-        for g in groups {
-            for id in g.memberIDs { predicted[id] = g.id; name[id] = nameFor(g) }
+        for (i, input) in inputs.enumerated() {
+            guard let id = set[input.id]?.seriesID else { continue }
+            predicted[i] = id
+            name[i] = set.series(id)?.name
         }
         var score = Score()
         score.books = labeled.count
         score.authors = Set(books.map(\.circleKey)).count
-        let norm: (String) -> [Character] = { grouper.engine.text.comparable($0).key }
+        let norm: (String) -> [Character] = { engine.text.comparable($0).key }
         let truthKey = labeled.map { norm($0.series) }
         let seriesSize = Dictionary(grouping: books.indices, by: { "\(books[$0].circleKey)\u{1}\(String(truthKey[$0]))" })
             .mapValues(\.count)
@@ -82,16 +85,5 @@ public enum Evaluator {
             if let n = name[books[i].id], norm(n) == truthKey[i] { score.nameMatches += 1 }
         }
         return score
-    }
-}
-
-/// シリーズ名の切り方の候補(比較のため)。
-public enum SeriesNaming {
-    /// 共通部分の最初の区切り(空白・記号・数字)の手前で切る。2 文字未満になるなら切らない。
-    public static func firstCut(_ name: String, minLength: Int = 2, engine: RuleEngine = .builtin) -> String {
-        for (i, ch) in name.enumerated() where i >= minLength && engine.text.isBoundary(ch) {
-            return engine.text.trimSeriesName(String(name.prefix(i)))
-        }
-        return name
     }
 }
