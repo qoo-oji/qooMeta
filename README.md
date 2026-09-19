@@ -83,6 +83,9 @@ scripts/ci/check-private-terms.sh --require-terms                   # 手で検�
 
 - [docs/rules.md](docs/rules.md) — 規則ファイル(`filename-formats.json` と `series-rules.json`)の説明書
 - [docs/design.md](docs/design.md) — 設計、規則の一覧、未決事項
+- [docs/rules-format-design.md](docs/rules-format-design.md) — 規則ファイルの形式を育てていくための設計(第 2 版の案)
+- [docs/api.md](docs/api.md) — ライブラリとしての API 仕様(案)
+- [docs/roadmap.md](docs/roadmap.md) — 実装計画(規則ファイルの第 2 版 → ライブラリ化 → GUI アプリ → qooViewer への組み込み)
 - [Sources/QooFormat/README.md](Sources/QooFormat/README.md) — qooLibrary から写したコードの出どころ
 
 ## ライセンス
