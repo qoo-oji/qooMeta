@@ -9,22 +9,22 @@ import Foundation
 
 /// 予約語。
 public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
-    case title, author, genre, source, keywordA, keywordB, keywordC, type, ignore
+    case title, author, genre, event, source, keywordA, keywordB, keywordC, ignore
 
     /// 書いたときの綴り(`@title`)。
     public var spelling: String { "@" + rawValue }
 
-    /// 入る欄(`@ignore` は捨てるので nil)。`@source` は関連(StackNest・ShelfRow の `@relation`)。
+    /// 入る欄(`@ignore` は捨てるので nil)。`@source` は原作(StackNest・ShelfRow の `@relation` にあたる)。
     public var field: BookMetadata.Field? {
         switch self {
         case .title: .title
         case .author: .authors
-        case .genre: .genres
-        case .source: .relations
-        case .keywordA: .keywordsA
-        case .keywordB: .keywordsB
-        case .keywordC: .keywordsC
-        case .type: .type
+        case .genre: .genre
+        case .event: .event
+        case .source: .source
+        case .keywordA: .keywordA
+        case .keywordB: .keywordB
+        case .keywordC: .keywordC
         case .ignore: nil
         }
     }
@@ -195,7 +195,7 @@ public struct FilenameFormat: Sendable, Hashable {
 /// 型の並びと、並びの欄の区切り(アプリの設定として 1 組)。
 public struct FilenameFormats: Sendable, Hashable {
     public var formats: [FilenameFormat]
-    /// 並びの欄(著者・ジャンル・関連・キーワード)の値を分ける文字列。既定は `,` と `、`(全角のカンマも `,` と同じ)。
+    /// 著者の値を分ける文字列(並びの欄は著者だけ)。既定は `,` と `、`(全角のカンマも `,` と同じ)。
     /// `×` `&` `・` は 1 つの名義の中にも現れ、取り違えると著者の先頭(中核の比べる単位)が壊れるので既定に入れない。
     public var separators: [String]
 
@@ -259,8 +259,8 @@ public struct FilenameFormats: Sendable, Hashable {
         return FormatReading(metadata: metadata, formatIndex: formatIndex, spans: spans, nearest: nil)
     }
 
-    /// 並びの欄の値を区切りで分ける(前後の空白を除き、空の値は捨てる)。
-    func split(_ value: String) -> [String] {
+    /// 著者の値を区切りで分ける(前後の空白を除き、空の値は捨てる)。
+    public func split(_ value: String) -> [String] {
         var parts = [value]
         for separator in separators where !separator.isEmpty {
             parts = parts.flatMap { $0.components(separatedBy: separator) }

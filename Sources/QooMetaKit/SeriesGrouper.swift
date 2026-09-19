@@ -26,7 +26,7 @@ struct SeriesGrouper: Sendable {
     /// 語の途中で切れる共通部分が、ひらがなで終わるなら組にしない。
     var rejectsHiraganaEndings: Bool
 
-    /// 関連(`@source`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)には関連が無いので、そちらの採点には効かない。
+    /// 原作(`@source`)が違う本を分けるか(方針 differentRelation)。公開データ(NDL)には原作が無いので、そちらの採点には効かない。
     var splitsByRelation: Bool
 
     /// ジャンル(`@genre`)が違う本を分けるか(方針 differentGenre)。
@@ -110,11 +110,11 @@ struct SeriesGrouper: Sendable {
         ch.unicodeScalars.allSatisfy { (0x3041...0x309F).contains($0.value) }
     }
 
-    /// **関連(`@source`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組を関連ごとに分け、関連の書かれていない本は
+    /// **原作(`@source`)が違う本は同じシリーズにしない**(利用者の指摘。先頭の 1 語が一致しただけの別作品)。組を原作ごとに分け、原作の書かれていない本は
     /// いちばん大きい組へ入れる。分けた結果 2 冊に満たない組は捨てる。
     func splitByRelation(_ groups: [CandidateGroup], books: [WorkingBook]) -> [CandidateGroup] {
         guard splitsByRelation else { return groups }
-        let relationByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.relation).key)) })
+        let relationByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, String(text.comparable($0.source).key)) })
         var result: [CandidateGroup] = []
         for group in groups {
             let byRelation = Dictionary(grouping: group.memberIDs.filter { !(relationByID[$0] ?? "").isEmpty }) { relationByID[$0]! }
@@ -122,7 +122,7 @@ struct SeriesGrouper: Sendable {
             let unlabeled = group.memberIDs.filter { (relationByID[$0] ?? "").isEmpty }
             let largest = byRelation.max { a, b in a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key }!.key
             if let log {
-                // 関連の違う本どうしは、組になりかけて分けられた。
+                // 原作の違う本どうしは、組になりかけて分けられた。
                 let keyByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, text.comparable($0.compareTitle).key) })
                 for (x, xs) in byRelation { for (y, ys) in byRelation where x < y { for a in xs { for b in ys {
                     log.miss(a, b, length: Self.commonPrefixLength(keyByID[a] ?? [], keyByID[b] ?? []), rule: "splitByRelation")

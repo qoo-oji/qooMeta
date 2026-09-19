@@ -13,7 +13,7 @@ struct WorkingBook: Sendable {
     var title: String
     /// 比べるタイトル(`CoreBook.compareTitle`)。組を作る・巻を読むのはこちら。
     var compareTitle: String
-    var relation: String = ""
+    var source: String = ""
     var genre: String = ""
     /// 版・入手経路の印があったか(説明に書くだけ)。
     var hasEditionMarks = false

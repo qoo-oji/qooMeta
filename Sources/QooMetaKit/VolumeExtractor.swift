@@ -224,7 +224,7 @@ final class VolumeExtractor: Sendable {
         return Double(upper) > lower && Double(upper) - lower <= Double(rules.mergedIssueMaxSpan)
     }
 
-    /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧が関連か巻かの判定に使う。
+    /// 数字だけの文字列か(算用数字・漢数字)。末尾の丸括弧が原作か巻かの判定に使う。
     static func isNumeralOnly(_ s: String) -> Bool {
         let t = s.precomposedNFKC.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return false }

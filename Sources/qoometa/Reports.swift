@@ -57,12 +57,12 @@ enum StatsReport {
         return lines
     }
 
-    /// 関連(末尾の丸括弧)の集計。関連の値が違うと組にしない方針が、どれだけシリーズを割っているかを知るため
+    /// 原作(末尾の丸括弧)の集計。原作の値が違うと組にしない方針が、どれだけシリーズを割っているかを知るため
     /// (商業の本では末尾の丸括弧が出版社などになりやすく、原則 1 の弱点が出るならここに出る)。
-    /// 割れた組は、関連の違いで組にしなかった相手どうしをつないだかたまりの数(説明を作ったときだけ)。
+    /// 割れた組は、原作の違いで組にしなかった相手どうしをつないだかたまりの数(説明を作ったときだけ)。
     static func relationLines(_ set: ProposalSet) -> [String] {
         let withRelation = set.proposals.compactMap { p in p.parsed.relation.flatMap { $0.isEmpty ? nil : $0 } }
-        var line = "関連を持つ本: \(withRelation.count) 冊(値 \(Set(withRelation).count) 通り)"
+        var line = "原作を持つ本: \(withRelation.count) 冊(値 \(Set(withRelation).count) 通り)"
         var parent: [String: String] = [:]
         func root(_ id: String) -> String {
             var r = id
@@ -78,7 +78,7 @@ enum StatsReport {
             }
         }
         if !parent.isEmpty {
-            line += "、関連の違いで割れたかたまり: \(Set(parent.keys.map(root)).count)(\(parent.count) 冊)"
+            line += "、原作の違いで割れたかたまり: \(Set(parent.keys.map(root)).count)(\(parent.count) 冊)"
         }
         return ["  " + line]
     }

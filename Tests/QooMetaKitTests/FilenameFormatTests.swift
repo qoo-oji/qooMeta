@@ -26,15 +26,15 @@ import Testing
     @Test func fullWidthBracketsAreTheSame() {
         let r = Self.read("（架空ジャンル）［架空工房（月見そば太郎）］星降る夜の喫茶店（架空の原作）")
         #expect(r.formatIndex == FilenameFormats.presetTexts.firstIndex(of: "(@genre) [@author (@author)] @title (@source)"))
-        #expect(r.metadata.genres == ["架空ジャンル"])
+        #expect(r.metadata.genre == "架空ジャンル")
         #expect(r.metadata.authors == ["架空工房", "月見そば太郎"])
         #expect(r.metadata.title == "星降る夜の喫茶店")
-        #expect(r.metadata.relations == ["架空の原作"])
+        #expect(r.metadata.source == "架空の原作")
     }
 
     @Test func spacesAreOptional() {
         let r = Self.read("(架空ジャンル)[架空工房]月の庭 2")
-        #expect(r.metadata.genres == ["架空ジャンル"])
+        #expect(r.metadata.genre == "架空ジャンル")
         #expect(r.metadata.authors == ["架空工房"])
         #expect(r.metadata.title == "月の庭 2")
     }
@@ -43,9 +43,9 @@ import Testing
         let r = Self.read("(架空ジャンル) [架空工房 (月見そば太郎)] 月の庭 3 (架空の原作) [付記]")
         #expect(r.formatIndex == 0)
         #expect(r.metadata.title == "月の庭 3")
-        #expect(r.metadata.relations == ["架空の原作"])
+        #expect(r.metadata.source == "架空の原作")
         // 末尾の角括弧は捨てる(@ignore)。
-        #expect(r.metadata.keywordsA.isEmpty && r.metadata.memo.isEmpty)
+        #expect(r.metadata.keywordA.isEmpty && r.metadata.memo.isEmpty)
         #expect(r.spans.map(\.word) == [.genre, .author, .author, .title, .source, .ignore])
     }
 
@@ -55,10 +55,19 @@ import Testing
         #expect(r.metadata.title == "月の庭")
     }
 
-    @Test func listValuesAreSplitBySeparators() {
+    @Test func eventInLeadingParentheses() {
+        // 同梱の型は先頭の丸括弧をジャンルとして読む。頒布会の名前を書く利用者は、型で @event にする。
+        let r = Self.read("(架空の催し12) [架空工房] 月の庭", ["(@event) [@author] @title"])
+        #expect(r.metadata.event == "架空の催し12")
+        #expect(r.metadata.genre.isEmpty)
+        #expect(Self.read("(架空の催し12) [架空工房] 月の庭").metadata.event.isEmpty)
+    }
+
+    @Test func authorsAreSplitBySeparators() {
         let r = Self.read("[架空工房 (甲, 乙、丙)] 月の庭 (原作一、原作二)")
         #expect(r.metadata.authors == ["架空工房", "甲", "乙", "丙"])
-        #expect(r.metadata.relations == ["原作一", "原作二"])
+        // 並びは著者だけ。原作は 1 つの値(区切りで分けない)。
+        #expect(r.metadata.source == "原作一、原作二")
     }
 
     @Test func separatorsCanBeAdded() {

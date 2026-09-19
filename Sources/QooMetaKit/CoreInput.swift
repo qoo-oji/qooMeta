@@ -17,8 +17,8 @@ struct CoreBook: Sendable {
     let writerKey: String
     /// ジャンル(方針 differentGenre で単位を分ける)。
     let genre: String
-    /// 関連(方針 differentRelation で組を分ける)。
-    let relation: String
+    /// 原作(方針 differentRelation で組を分ける。方針の名前は規則ファイルの互換のためそのまま)。
+    let source: String
     /// 版・入手経路の印があったか(説明に書くだけ。組には効かない)。
     let hasEditionMarks: Bool
     let hasSourceMarks: Bool

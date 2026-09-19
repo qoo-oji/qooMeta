@@ -53,7 +53,7 @@ let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionar
         }
         return builtinEngine.prepare(inputs, limits: .default).books.enumerated().map { i, b in
             WorkingBook(id: i + 1, inputID: b.core.id, title: b.core.title, compareTitle: b.core.compareTitle,
-                        relation: b.core.relation, genre: b.core.genre, writerKey: b.core.writerKey)
+                        source: b.core.source, genre: b.core.genre, writerKey: b.core.writerKey)
         }
     }
 

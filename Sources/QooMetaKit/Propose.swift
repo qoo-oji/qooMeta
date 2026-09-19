@@ -171,7 +171,7 @@ extension RuleEngine {
         let owner = parts.circle.isEmpty ? (input.folders.first.map(TextRules.normalizeDisplay) ?? "") : parts.circle
         let head = volumeHead(compareTitle: parts.baseTitle)
         let core = CoreBook(id: input.id, order: order, title: parts.title, compareTitle: parts.baseTitle,
-                            writerKey: text.key(owner), genre: parts.mediaType ?? "", relation: parts.trailing,
+                            writerKey: text.key(owner), genre: parts.mediaType ?? "", source: parts.trailing,
                             hasEditionMarks: parts.editions != nil, hasSourceMarks: parts.sources != nil,
                             confirmation: input.confirmation, volumeHead: head)
         return PreparedBook(input: input, core: core, parsed: publicName(parts, volumeHead: head), unitKey: unitKey(core))
@@ -229,7 +229,7 @@ extension RuleEngine {
         let sorted = members.sorted { $0.order < $1.order }
         var doc = WorkingDocument(books: sorted.enumerated().map { i, book in
             WorkingBook(id: i + 1, inputID: book.id, title: book.title, compareTitle: book.compareTitle,
-                        relation: book.relation, genre: book.genre, hasEditionMarks: book.hasEditionMarks,
+                        source: book.source, genre: book.genre, hasEditionMarks: book.hasEditionMarks,
                         hasSourceMarks: book.hasSourceMarks, writerKey: book.writerKey,
                         confirmation: book.confirmation, volumeHead: .some(book.volumeHead))
         }, groups: [])
