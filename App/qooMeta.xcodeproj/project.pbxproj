@@ -13,10 +13,12 @@
 		947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 74CE0620A1873D2F829A351F /* QooMetaKit */; };
 		A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934559B81EEEF1E3B3E9DA44 /* Workspace.swift */; };
 		A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */; };
+		CF2BA062F11138C7CF56C2E5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 026D669D5E2477C2E800ACEA /* Assets.xcassets */; };
 		FF17B661D9ED57B280285700 /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4760B3275FF3971B539296 /* DemoData.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		026D669D5E2477C2E800ACEA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0874B8EB5ABA307C2EF67551 /* qooMeta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qooMeta.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
 		3B18F5A13C7BB642774DDFB1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 		52F3FA6AB49D772CA6D91CD2 /* qooMeta */ = {
 			isa = PBXGroup;
 			children = (
+				026D669D5E2477C2E800ACEA /* Assets.xcassets */,
 				6F4760B3275FF3971B539296 /* DemoData.swift */,
 				3B18F5A13C7BB642774DDFB1 /* DetailView.swift */,
 				D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */,
@@ -84,6 +87,7 @@
 			buildConfigurationList = 40844859A4FF4F5DE0BC8B86 /* Build configuration list for PBXNativeTarget "qooMeta" */;
 			buildPhases = (
 				C4D82FA4F4925D47F269C2B7 /* Sources */,
+				A1D9D956D6A03C08D37EA97A /* Resources */,
 				BD491103165565414ED44FE8 /* Frameworks */,
 			);
 			buildRules = (
@@ -134,6 +138,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1D9D956D6A03C08D37EA97A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF2BA062F11138C7CF56C2E5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C4D82FA4F4925D47F269C2B7 /* Sources */ = {
