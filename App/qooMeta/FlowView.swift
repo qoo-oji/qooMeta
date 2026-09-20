@@ -171,6 +171,7 @@ private struct ChooseBooksStep: View {
 
 private struct ChoosePresetStep: View {
     @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -178,7 +179,7 @@ private struct ChoosePresetStep: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("How should the file names be read?").font(.title2.bold())
-                        Text("A preset is a list of name shapes. qooMeta tries them from the top and reads the name with the first shape that fits the whole of it. The count shows how many of your names each preset can read.")
+                        Text("A rule set is a list of name shapes. qooMeta tries them from the top and reads the name with the first shape that fits the whole of it. The count shows how many of your names each rule set can read.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if model.isFitting { ProgressView().controlSize(.small) }
@@ -186,14 +187,23 @@ private struct ChoosePresetStep: View {
                         PresetFitRow(fit: fit, total: model.picked?.files.count ?? 0,
                                      selected: model.chosenPreset == fit.id) { model.chosenPreset = fit.id }
                     }
-                    Text("Books that fit no shape keep their whole name as a provisional title; you can fix them in the next step, or add a shape under Rules.")
+                    Text("Books that fit no shape keep their whole name as a provisional title. You can fix them in the next step, or change how the names are read.")
                         .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button { openWindow(id: FileNameRulesView.windowID) } label: {
+                            Label("Look at and edit the rule sets…", systemImage: "textformat.abc")
+                        }
+                        Text("A rule set you save there appears here at once.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
                 .padding(24)
                 .containerRelativeFrame(.vertical, alignment: .center)
             }
+            // プリセットの窓で足した・直したものを、すぐこの並びに出す(数も取り直す)。
+            .onChange(of: model.settings.rules.contentHash) { Task { await model.computeFits() } }
             StepFooter(back: { model.go(to: .choose) }) {
                 Button("Next") { model.startReview() }
                     .keyboardShortcut(.defaultAction)

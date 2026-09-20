@@ -183,7 +183,7 @@ enum RuleSchema {
     static let plainNode = Node([optional("words", .strings), optional("patterns", .patterns)])
 
     /// 同梱のプリセットの名前(綴りの候補を出すのに使う。利用者は差分で別の名前のプリセットを足せる)。
-    static let presetNames = ["doujinshi", "doujinshi-event", "commercial"]
+    static let presetNames = ["commercial", "doujinshi", "doujinshi-event"]
 
     /// 1 つのプリセット。要るのは `formats` だけで、ほかは省ける(省いた区切りと既定は、ファイル全体のものを使う)。
     static let presetNode = Node([

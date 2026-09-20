@@ -45,6 +45,7 @@ schemes:
         qooMeta: all
     run:
       config: Debug
-      # 段階 5(画面の骨組み)は架空のデータだけで確かめる。実際の蔵書を画面に出さない。
+      # 架空のデータで確かめたいときだけ、Xcode の「引数」でこれを有効にする。
+      # 既定は切っておく(有効なままだと、流れの最初の段を飛ばしてしまう)。
       commandLineArguments:
-        "-demo": true
+        "-demo": false

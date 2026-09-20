@@ -16,6 +16,20 @@
     ]
   },
   "presets": {
+    "commercial": {
+      "formats": [
+        "(@genre) [@author] @title (@volume) [@info]",
+        "(@genre) [@author] @title (@volume)",
+        "(@genre) [@author] @title [@info]",
+        "(@genre) [@author] @title",
+        "[@author] @title (@volume) [@info]",
+        "[@author] @title (@volume)",
+        "[@author] @title [@info]",
+        "[@author] @title",
+        "@series (@volume) - @author [@info]",
+        "@series (@volume) - @author"
+      ]
+    },
     "doujinshi": {
       "formats": [
         "(@genre) [@author (@author)] @title (@source) [@info]",
@@ -57,20 +71,6 @@
         "[@author] @title (@source)",
         "[@author] @title [@info]",
         "[@author] @title"
-      ]
-    },
-    "commercial": {
-      "formats": [
-        "(@genre) [@author] @title (@volume) [@info]",
-        "(@genre) [@author] @title (@volume)",
-        "(@genre) [@author] @title [@info]",
-        "(@genre) [@author] @title",
-        "[@author] @title (@volume) [@info]",
-        "[@author] @title (@volume)",
-        "[@author] @title [@info]",
-        "[@author] @title",
-        "@series (@volume) - @author [@info]",
-        "@series (@volume) - @author"
       ]
     }
   }

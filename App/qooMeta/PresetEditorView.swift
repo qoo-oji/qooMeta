@@ -30,25 +30,25 @@ struct FormatsPane: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 List(selection: Binding(get: { selection }, set: { select($0) })) {
-                    Section("Bundled presets") {
+                    Section("Bundled rule sets") {
                         ForEach(catalog.entries.filter(\.isBuiltIn)) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
                     }
                     let mine = catalog.entries.filter { !$0.isBuiltIn }
-                    Section("Your presets") {
+                    Section("Your rule sets") {
                         if mine.isEmpty {
-                            Text("Change a preset and choose “Save As…” and it appears here.").font(.caption).foregroundStyle(.secondary)
+                            Text("Change a rule set and choose “Save As…” and it appears here.").font(.caption).foregroundStyle(.secondary)
                         }
                         ForEach(mine) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
                     }
                 }
                 Divider()
                 Form {
-                    Picker("Default preset", selection: Binding(get: { catalog.defaultPreset }, set: { name in
+                    Picker("Default rule set", selection: Binding(get: { catalog.defaultPreset }, set: { name in
                         editing.change { $0.setDefaultPreset(name, builtIn: catalog.builtInDefaultPreset) }
                     })) {
                         ForEach(catalog.entries) { Text(verbatim: $0.preset.displayName).tag($0.id) }
                     }
-                    .help("Books in folders with no preset assigned are read with this one")
+                    .help("Books in folders with no rule set assigned are read with this one")
                     LabeledContent("Author separators") {
                         HStack(spacing: 8) {
                             ValueChips(items: catalog.separators.map(RuleLabels.visible))
@@ -56,8 +56,8 @@ struct FormatsPane: View {
                         }
                         .popover(isPresented: $showsSeparators, arrowEdge: .trailing) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("The characters that split the authors, shared by every preset").font(.headline)
-                                    Text("Write separators on a preset or a format and those win outright there.").font(.caption).foregroundStyle(.secondary)
+                                    Text("The characters that split the authors, shared by every rule set").font(.headline)
+                                    Text("Write separators on a rule set or a format and those win outright there.").font(.caption).foregroundStyle(.secondary)
                                     InlineArrayEditor(items: catalog.separators, placeholder: "Separator") { items in
                                         editing.change { $0.setSeparators(items, builtIn: catalog.builtInSeparators) }
                                     }
@@ -71,7 +71,7 @@ struct FormatsPane: View {
                         Button(catalog.plain.isEmpty ? "None".ui : "%lld items".ui(catalog.plain.words.count + catalog.plain.patterns.count)) { showsPlain = true }
                             .popover(isPresented: $showsPlain, arrowEdge: .trailing) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Text excluded while parsing (every preset)").font(.headline)
+                                    Text("Text excluded while parsing (every rule set)").font(.headline)
                                     PlainTextEditor(plain: Binding(get: { catalog.plain }, set: { plain in
                                         editing.change { $0.setPlain(plain, builtIn: catalog.builtInPlain) }
                                     }))
@@ -94,7 +94,7 @@ struct FormatsPane: View {
                         actions(entry)
                     }
                 } else {
-                    ContentUnavailableView("Select a preset", systemImage: "textformat.abc")
+                    ContentUnavailableView("Select a rule set", systemImage: "textformat.abc")
                 }
             }
             .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
@@ -126,7 +126,7 @@ struct FormatsPane: View {
                             editing.change { $0.removePreset(entry.id) }
                             if editing.errors.isEmpty, let original = entry.original { saved = PresetDraft(original); draft = saved }
                         }
-                    } message: { Text("The changes you saved to this preset are lost. Presets you saved under a name of your own stay.") }
+                    } message: { Text("The changes you saved to this rule set are lost. The ones you saved under a name of your own stay.") }
             } else {
                 Button("Delete…", role: .destructive) { confirmsDelete = true }
                     .confirmationDialog("Delete “%@”?".ui(entry.preset.name), isPresented: $confirmsDelete) {
@@ -134,13 +134,13 @@ struct FormatsPane: View {
                             editing.change { $0.removePreset(entry.id) }
                             if editing.errors.isEmpty { load(catalog.builtInDefaultPreset) }
                         }
-                    } message: { Text("Folders this preset was assigned to are read with the default preset from now on.") }
+                    } message: { Text("Folders this rule set was assigned to are read with the default one from now on.") }
             }
             if let first = problems.first { Label(first, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red) }
             else if isDirty { Text("There are unsaved changes").font(.caption).foregroundStyle(.secondary) }
             Spacer()
             Button("Discard changes") { draft = saved }.disabled(!isDirty)
-            Button("Save As New Preset…") { showsSaveAs = true }
+            Button("Save As New Rule Set…") { showsSaveAs = true }
                 .disabled(!problems.isEmpty)
                 .popover(isPresented: $showsSaveAs, arrowEdge: .top) {
                     SaveAsView(existing: catalog.names) { name, label in
@@ -186,7 +186,7 @@ private struct PresetRow: View {
                 Text("%1$@ · %2$lld formats".ui(entry.preset.name, entry.preset.formats.count)).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            if isDefault { Image(systemName: "star.fill").foregroundStyle(.yellow).help("Default preset") }
+            if isDefault { Image(systemName: "star.fill").foregroundStyle(.yellow).help("Default rule set") }
             ModifiedDot(isModified: entry.isModified)
         }
     }
@@ -279,12 +279,12 @@ private struct PresetDraftEditor: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Author separators").font(.headline)
-                    Toggle("Set separators for this preset alone", isOn: Binding(get: { draft.separators != nil },
+                    Toggle("Set separators for this rule set alone", isOn: Binding(get: { draft.separators != nil },
                                                                  set: { draft.separators = $0 ? catalog.separators : nil }))
                     if let separators = draft.separators {
                         InlineArrayEditor(items: separators, placeholder: "Separator") { draft.separators = $0 }
                     } else {
-                        Text("Split with the default that every preset shares:")
+                        Text("Split with the default that every rule set shares:")
                             .font(.caption).foregroundStyle(.secondary)
                         ValueChips(items: catalog.separators.map(RuleLabels.visible))
                     }
@@ -297,10 +297,10 @@ private struct PresetDraftEditor: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Text excluded while parsing (added by this preset)").font(.headline)
+                    Text("Text excluded while parsing (added by this rule set)").font(.headline)
                     PlainTextEditor(plain: $draft.plain)
                     if !catalog.plain.isEmpty {
-                        Text("Added to what every preset shares:")
+                        Text("Added to what every rule set shares:")
                             .font(.caption).foregroundStyle(.secondary)
                         ValueChips(items: catalog.plain.words + catalog.plain.patterns)
                     }
@@ -352,7 +352,7 @@ private struct FormatRowView: View {
                 .popover(isPresented: $showsOptions, arrowEdge: .trailing) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Acts only on books read with this format").font(.headline)
-                        Text("Format beats preset, and preset beats what every preset shares: the innermost one wins.").font(.caption).foregroundStyle(.secondary)
+                        Text("Format beats rule set, and rule set beats what they all share: the innermost one wins.").font(.caption).foregroundStyle(.secondary)
                         Toggle("Set separators for this format alone", isOn: Binding(get: { row.format.separators != nil },
                                                                  set: { row.format.separators = $0 ? [","] : nil }))
                         if let separators = row.format.separators {
@@ -455,12 +455,12 @@ private struct SaveAsView: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let problem: String? = trimmed.isEmpty ? nil
-            : existing.contains(trimmed) ? "A preset of that name already exists".ui
+            : existing.contains(trimmed) ? "A rule set of that name already exists".ui
             : trimmed.hasPrefix("$") ? "A name cannot start with “$”".ui
             : trimmed.count > 100 ? "That name is too long".ui : nil
         Form {
-            TextField("Name of the preset", text: $name, prompt: Text("For example: My shelf"))
-            Text("Saves what you have on screen as a new preset. The preset you started from is left alone.").font(.caption).foregroundStyle(.secondary)
+            TextField("Name of the rule set", text: $name, prompt: Text("For example: My shelf"))
+            Text("Saves what you have on screen as a new rule set. The one you started from is left alone.").font(.caption).foregroundStyle(.secondary)
             if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()

@@ -16,8 +16,14 @@ struct QooMetaApp: App {
         .commands { WorkspaceCommands() }
 
         // 規則はアプリの設定(どの一覧にも共通)なので、一覧の窓とは別の窓で直す。
-        Window("Rules", id: RulesEditorView.windowID) {
-            RulesEditorView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
+        // **当たる処理の段ごとに窓を分ける**(2026-09-21、利用者の指示)。
+        Window("File name parsing", id: FileNameRulesView.windowID) {
+            FileNameRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
+        }
+        .defaultSize(width: 1000, height: 720)
+
+        Window("Series and volume rules", id: SeriesRulesView.windowID) {
+            SeriesRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
         }
         .defaultSize(width: 980, height: 680)
 
@@ -109,11 +115,17 @@ final class AppModel {
     }
 
     /// 架空のデータ(`-demo`)。実際の蔵書は画面に出さない確かめ方(CLAUDE.md)。
+    /// **段 2 から始める**: 段 1 で選ぶものが無いだけで、流れの残りはそのままなぞれる
+    /// (前は段 3 へ直行していて、流れそのものが確かめられなかった)。
     func openDemoIfAsked() async {
-        guard workspace == nil, CommandLine.arguments.contains("-demo") else { return }
-        let books = DemoData.files.map { Workfile.Book(id: $0.id, name: $0.name) }
-        workspace = await Workspace.open(Workfile(rootPath: "(demo data)".ui, books: books), rules: settings.rules)
-        step = .review
+        guard picked == nil, workspace == nil, CommandLine.arguments.contains("-demo") else { return }
+        let root = "(demo data)".ui
+        let files = DemoData.files.map {
+            ScannedFile(path: root + "/" + $0.id, relativePath: $0.id, baseName: $0.name, fileExtension: "cbz")
+        }
+        picked = Picked(root: URL(fileURLWithPath: root), files: files,
+                        kinds: [(name: "CBZ", count: files.count)])
+        go(to: .parse)
     }
 
     // MARK: - 段 1: 対象を選ぶ
@@ -290,8 +302,10 @@ struct WorkspaceCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .appSettings) {
-            Button("Rules…") { openWindow(id: RulesEditorView.windowID) }
-                .keyboardShortcut(",", modifiers: [.command, .shift])
+            Button("File Name Parsing…") { openWindow(id: FileNameRulesView.windowID) }
+                .keyboardShortcut("1", modifiers: [.command, .option])
+            Button("Series and Volume Rules…") { openWindow(id: SeriesRulesView.windowID) }
+                .keyboardShortcut("2", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .newItem) {
             Button("Choose Books…") { model?.go(to: .choose) }

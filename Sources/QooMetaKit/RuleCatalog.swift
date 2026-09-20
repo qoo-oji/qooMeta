@@ -175,6 +175,38 @@ public struct RuleChanges: Sendable, Hashable {
 
     public var isEmpty: Bool { series.isEmpty && formats.isEmpty }
 
+    /// 規則の半分。**当たる処理の段が違う**ので、画面も別々に持つ(2026-09-21、利用者の指示)。
+    public enum Half: Sendable, Hashable {
+        /// ファイル名 → 欄(filename-formats.json)。
+        case fileNames
+        /// タイトル → シリーズ名・巻数(series-rules.json)。
+        case series
+
+        var kind: String { self == .fileNames ? "qoometa.filename-formats" : "qoometa.series-rules" }
+        var schemaVersion: Double { self == .fileNames ? 5 : 2 }
+    }
+
+    public func isEmpty(_ half: Half) -> Bool { (half == .fileNames ? formats : series).isEmpty }
+
+    /// 片側だけの差分(その半分の `kind` で書く)。画面に出して、直に書き換えてもらうためのもの。
+    public func data(_ half: Half) -> Data {
+        var o: [String: JSONValue] = ["kind": .string(half.kind),
+                                      "schemaVersion": .number(half.schemaVersion), "base": .string("builtin")]
+        o.merge(half == .fileNames ? formats : series) { a, _ in a }
+        return Data((JSONValue.object(o).rendered() + "\n").utf8)
+    }
+
+    /// 片側だけを差し替える(もう片方はそのまま)。渡すのは、その半分の差分でも rules-bundle でもよい。
+    public mutating func replace(_ half: Half, with data: Data) throws(RulesIssue) {
+        let other = try RuleChanges(data: data)
+        if half == .fileNames { formats = other.formats } else { series = other.series }
+    }
+
+    /// 片側だけを既定に戻す。
+    public mutating func reset(_ half: Half) {
+        if half == .fileNames { formats = [:] } else { series = [:] }
+    }
+
     /// 語の規則に選べる扱い(`keep`・`edition` …)。
     public static var markerTreatments: [String] { RuleSchema.markerTreatments }
 

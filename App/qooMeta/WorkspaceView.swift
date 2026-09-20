@@ -24,8 +24,10 @@ struct WorkspaceView: View {
                 ToolbarItem { ProgressView().controlSize(.small) }
             }
             ToolbarItem {
-                Button { openWindow(id: RulesEditorView.windowID) } label: { Label("Rules", systemImage: "list.bullet.indent") }
-                    .help("Look at and correct the rules that derive the series and volume: policies, word rules and word lists")
+                Button { openWindow(id: SeriesRulesView.windowID) } label: {
+                    Label("Series Rules", systemImage: "list.bullet.indent")
+                }
+                .help("Look at and correct the rules that derive the series and volume: policies, word rules and word lists")
             }
             ToolbarItem {
                 Button { showsDetail.toggle() } label: { Label("Details", systemImage: "sidebar.right") }

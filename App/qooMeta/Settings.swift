@@ -46,6 +46,37 @@ final class AppSettings {
         rulesDiff.isEmpty ? .none : ((try? RuleChanges(data: Data(rulesDiff.utf8))) ?? .none)
     }
 
+    /// 規則の半分(ファイル名の解析 / シリーズと巻数)だけを、書いた JSON で差し替える。
+    @discardableResult
+    func setRulesDiff(_ text: String, for half: RuleChanges.Half) -> [String] {
+        var next = changes
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            next.reset(half)
+        } else {
+            do { try next.replace(half, with: Data(trimmed.utf8)) } catch { return [error.description] }
+        }
+        return setRulesDiff(next.isEmpty ? "" : String(decoding: next.data(), as: UTF8.self))
+    }
+
+    /// その半分で、既定から変えている所の数(窓の下の帯に出す)。
+    func changedCount(_ half: RuleChanges.Half) -> Int {
+        // 変えた値の道筋は、シリーズの規則が段の名前で始まり、ファイル名の解析は presets / separators などで始まる。
+        let fileNameRoots = ["presets", "separators", "defaultPreset", "defaults", "plain"]
+        return rules.changedPaths.filter { path in
+            let root = String(path.prefix { $0 != "." })
+            return (half == .fileNames) == fileNameRoots.contains(root)
+        }.count
+    }
+
+    /// 規則の半分だけを既定に戻す。
+    @discardableResult
+    func resetRules(_ half: RuleChanges.Half) -> [String] {
+        var next = changes
+        next.reset(half)
+        return setRulesDiff(next.isEmpty ? "" : String(decoding: next.data(), as: UTF8.self))
+    }
+
     /// 規則を 1 か所変える。組み立ててみて誤りがあれば、変えずに理由を返す(画面がその場で示す)。
     @discardableResult
     func update(_ body: (inout RuleChanges) -> Void) -> [String] {

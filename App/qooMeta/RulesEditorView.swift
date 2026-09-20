@@ -2,19 +2,21 @@ import QooMetaKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 規則の窓: ファイル名の読み方(型の並び。PresetEditorView)と、タイトルからシリーズ名と巻を導く規則(series-rules)を見て、
-/// 足し、消し、直す。
+/// **シリーズと巻数の規則**の窓(series-rules)。タイトルからシリーズ名と巻数を導く規則を、見て・足して・消して・直す。
+///
+/// **ファイル名の解析(型の並び)は別の窓**(`FileNameRulesView`)。当たる処理の段が違うので、混ぜない
+/// (2026-09-21、利用者の指示)。
 ///
 /// 画面が持つのは**既定値との差分だけ**(`RuleChanges`。アプリの設定に残る)。1 か所変えるたびに組み立て直し、誤りがあれば
 /// 変えずに理由をその場で示す。読めた変更は、開いている一覧にすぐ効く(WorkspaceView が規則の内容のハッシュを見ている)。
 ///
 /// 並びは JSON の形に合わせてある: **配列で書いてある所(語の規則・巻の読み手)は並べ替えられ、ほかは書いてある順に働く**
 /// (docs/rules-format-design.md「規則の順番と例外」)。
-struct RulesEditorView: View {
-    static let windowID = "rules"
+struct SeriesRulesView: View {
+    static let windowID = "series-rules"
 
     @Bindable var settings: AppSettings
-    @State private var pane: Pane = .formats
+    @State private var pane: Pane = .policies
     @State private var editing: RulesEditing
     @State private var confirmsReset = false
 
@@ -23,70 +25,12 @@ struct RulesEditorView: View {
         _editing = State(initialValue: RulesEditing(settings: settings))
     }
 
-    /// 処理の段階。**窓の中には、続き物の 2 つの段階が入っている**(ファイル名を欄に読む段階と、
-    /// タイトルからシリーズと巻を導く段階)。どちらの設定を直しているのか見分けが付かない、という指摘を受けて、
-    /// 並びをこの段階で分け、上にいつも出すことにした(2026-09-21、利用者の指摘)。
-    enum Stage: String, CaseIterable, Identifiable {
-        /// ファイル名 → 欄(filename-formats.json)。
-        case reading
-        /// タイトル → シリーズ名・巻数(series-rules.json)。
-        case deriving
-        /// どちらにもまたがるもの(差分そのもの)。
-        case both
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .reading: "1. Reading the file name"
-            case .deriving: "2. Deriving the series and volume"
-            case .both: "Both stages"
-            }
-        }
-
-        /// 何から何を作る段階か。
-        var flow: String {
-            switch self {
-            case .reading: "File name → fields (title, authors, genre, …)"
-            case .deriving: "Title → series name and volume"
-            case .both: "What you changed in this window, as one file"
-            }
-        }
-
-        /// もとになる規則のファイル(JSON を直に読み書きする利用者のために出す)。
-        var fileName: String {
-            switch self {
-            case .reading: "filename-formats.json"
-            case .deriving: "series-rules.json"
-            case .both: "rules-bundle"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .reading: "doc.text.magnifyingglass"
-            case .deriving: "books.vertical"
-            case .both: "curlybraces"
-            }
-        }
-    }
-
     enum Pane: String, CaseIterable, Identifiable {
-        case formats, policies, markers, readers, steps, lists, json
+        case policies, markers, readers, steps, lists, json
         var id: String { rawValue }
-
-        /// どの段階の設定か。
-        var stage: Stage {
-            switch self {
-            case .formats: .reading
-            case .policies, .markers, .readers, .steps, .lists: .deriving
-            case .json: .both
-            }
-        }
 
         var title: String {
             switch self {
-            case .formats: "File name parsing"
             case .policies: "Policies"
             case .markers: "Word rules"
             case .readers: "Volume readers"
@@ -98,7 +42,6 @@ struct RulesEditorView: View {
 
         var symbol: String {
             switch self {
-            case .formats: "textformat.abc"
             case .policies: "slider.horizontal.3"
             case .markers: "list.number"
             case .readers: "textformat.123"
@@ -115,63 +58,59 @@ struct RulesEditorView: View {
     var body: some View {
         let catalog = settings.rules.catalog
         NavigationSplitView {
-            List(selection: Binding(get: { pane }, set: { pane = $0 ?? pane })) {
-                ForEach(Stage.allCases) { stage in
-                    Section {
-                        ForEach(Pane.allCases.filter { $0.stage == stage }) { pane in
-                            Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
-                                .badge(pane.isOrdered ? Text("Ordered") : nil)
-                                .tag(pane)
-                        }
-                    } header: {
-                        Text(key: stage.title)
-                    }
-                }
+            List(Pane.allCases, selection: Binding(get: { pane }, set: { pane = $0 ?? pane })) { pane in
+                Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
+                    .badge(pane.isOrdered ? Text("Ordered") : nil)
+                    .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 0) {
-                StageBanner(stage: pane.stage)
+                PhaseBanner(title: "Deriving the series and volume",
+                            flow: "Title → series name and volume", fileName: "series-rules.json",
+                            symbol: "books.vertical")
                 Divider()
                 Group {
                     switch pane {
-                    case .formats: FormatsPane(editing: editing, catalog: settings.rules.presetCatalog)
                     case .policies: PoliciesPane(editing: editing, catalog: catalog)
                     case .markers: MarkersPane(editing: editing, catalog: catalog)
                     case .readers: ReadersPane(editing: editing, catalog: catalog)
                     case .steps: StepsPane(editing: editing, catalog: catalog)
                     case .lists: ListsPane(editing: editing, catalog: catalog)
-                    case .json: DiffPane(editing: editing)
+                    case .json: DiffPane(editing: editing, half: .series)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
-                StatusBar(editing: editing, confirmsReset: $confirmsReset)
+                StatusBar(editing: editing, half: .series, confirmsReset: $confirmsReset)
             }
         }
-        .navigationTitle("Rules")
-        .navigationSubtitle(pane.stage.title.ui)
-        .confirmationDialog("Reset every rule to the default?", isPresented: $confirmsReset) {
-            Button("Reset to the default", role: .destructive) { editing.resetAll() }
+        .navigationTitle("Series and volume rules")
+        .navigationSubtitle(LocalizedStringKey(pane.title))
+        .confirmationDialog("Reset every series rule to the default?", isPresented: $confirmsReset) {
+            Button("Reset to the default", role: .destructive) { editing.reset(.series) }
         } message: {
-            Text("Every change you made in this window is lost: the file name formats, the policies, the word rules and the word lists.")
+            Text("Every change you made to the policies, the word rules and the word lists is lost.")
         }
     }
 }
 
-/// いまどの段階の設定を直しているかを、画面の上にいつも出す。
-private struct StageBanner: View {
-    var stage: RulesEditorView.Stage
+/// どの段の規則を直しているかを、画面の上にいつも出す。
+struct PhaseBanner: View {
+    var title: LocalizedStringKey
+    var flow: LocalizedStringKey
+    var fileName: String
+    var symbol: String
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: stage.symbol).foregroundStyle(.tint).font(.title3)
+            Image(systemName: symbol).foregroundStyle(.tint).font(.title3)
             VStack(alignment: .leading, spacing: 1) {
-                Text(key: stage.title).font(.headline)
-                Text(key: stage.flow).font(.caption).foregroundStyle(.secondary)
+                Text(title).font(.headline)
+                Text(flow).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(verbatim: stage.fileName).font(.caption.monospaced()).foregroundStyle(.tertiary)
+            Text(verbatim: fileName).font(.caption.monospaced()).foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,19 +130,21 @@ final class RulesEditing {
         errors = settings.update(body)
     }
 
-    func resetAll() {
-        errors = settings.setRulesDiff("")
+    func reset(_ half: RuleChanges.Half) {
+        errors = settings.resetRules(half)
     }
 }
 
 // MARK: - 下の帯
 
-private struct StatusBar: View {
+struct StatusBar: View {
     @Bindable var editing: RulesEditing
+    /// この窓が受け持つ半分。
+    var half: RuleChanges.Half
     @Binding var confirmsReset: Bool
 
     var body: some View {
-        let changed = editing.settings.rules.changedPaths.count
+        let changed = editing.settings.changedCount(half)
         VStack(alignment: .leading, spacing: 6) {
             if !editing.errors.isEmpty {
                 HStack(alignment: .top) {
@@ -221,7 +162,8 @@ private struct StatusBar: View {
                 Text(changed == 0 ? "Unchanged from the defaults".ui : "Changed in %lld places".ui(changed))
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
-                Button("Reset Everything…") { confirmsReset = true }.disabled(changed == 0 && editing.settings.rulesDiff.isEmpty)
+                Button("Reset Everything…") { confirmsReset = true }
+                    .disabled(changed == 0 && editing.settings.changes.isEmpty(half))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -871,8 +813,10 @@ struct Chip: View {
 // MARK: - 差分(JSON)
 
 /// 画面で変えた内容そのもの(既定値との差分)。手で書き換えたり、ほかの Mac へ持っていったりできる。
-private struct DiffPane: View {
+struct DiffPane: View {
     var editing: RulesEditing
+    /// この窓が受け持つ半分。書き換えても、もう片方の設定には触らない。
+    var half: RuleChanges.Half
     @State private var text = ""
     @State private var message = ""
 
@@ -883,14 +827,14 @@ private struct DiffPane: View {
             TextEditor(text: $text).font(.body.monospaced()).border(.separator)
             HStack {
                 Button("Apply") {
-                    editing.errors = editing.settings.setRulesDiff(text)
+                    editing.errors = editing.settings.setRulesDiff(text, for: half)
                     message = editing.errors.isEmpty ? "Applied" : ""
                 }
                 Button("Back to the current settings") { reload() }
                 Text(message).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Load…") { importFile() }
-                Button("Write…") { exportFile() }.disabled(editing.settings.rulesDiff.isEmpty)
+                Button("Write…") { exportFile() }.disabled(editing.settings.changes.isEmpty(half))
             }
         }
         .padding(14)
@@ -899,7 +843,8 @@ private struct DiffPane: View {
     }
 
     private func reload() {
-        text = editing.settings.rulesDiff
+        text = editing.settings.changes.isEmpty(half) ? ""
+            : String(decoding: editing.settings.changes.data(half), as: UTF8.self)
         message = ""
     }
 
@@ -916,6 +861,6 @@ private struct DiffPane: View {
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "qooMeta rule changes.json".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? Data(editing.settings.rulesDiff.utf8).write(to: url, options: .atomic)
+        try? editing.settings.changes.data(half).write(to: url, options: .atomic)
     }
 }

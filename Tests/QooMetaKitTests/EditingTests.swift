@@ -266,7 +266,7 @@ import QooMetaRules
             return try #require(c.rules, "\(c.errors)")
         }
         let start = CompiledRules.builtin.presetCatalog
-        #expect(start.entries.map(\.preset.name) == ["doujinshi", "doujinshi-event", "commercial"])
+        #expect(start.entries.map(\.preset.name) == ["commercial", "doujinshi", "doujinshi-event"])
         #expect(start.entries.allSatisfy { $0.isBuiltIn && !$0.isModified })
         #expect(start.defaultPreset == "commercial" && start.separators == [",", "，", "、"])
         let commercial = try #require(start.entries.first { $0.id == "commercial" })
@@ -305,7 +305,7 @@ import QooMetaRules
         changes.setSeparators([",", "、"], builtIn: start.builtInSeparators)
         rules = try compile(changes)
         let catalog = rules.presetCatalog
-        #expect(catalog.entries.map(\.preset.name) == ["doujinshi", "doujinshi-event", "commercial", "自分の棚"])
+        #expect(catalog.entries.map(\.preset.name) == ["commercial", "doujinshi", "doujinshi-event", "自分の棚"])
         #expect(catalog.entries.last?.isBuiltIn == false && catalog.entries.last?.preset == mine)
         #expect(catalog.defaultPreset == "自分の棚" && catalog.separators == [",", "、"])
         #expect(rules.formats[nil].label == "自分の棚(著者は末尾)")
