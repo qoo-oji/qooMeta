@@ -38,6 +38,33 @@ let allDictionaries = SystemDictionaries.all
 }
 
 @Suite struct ProposeSyncTests {
+    /// 位取りで書いた漢数字を、桁として読む。「二一」は 1 ではなく 21(数え上げの読み方では読めない形)。
+    ///
+    /// **「〇」は数として扱わない。** 伏せ字(「〇〇さん」)にも使う字で、0 のつもりとは限らないため
+    /// (2026-09-20、利用者の判断)。「第二〇巻」のように単位の付く形だけ、漢数字の読み手が読む。
+    @Test func kanjiNumeralsAreReadByPlace() {
+        #expect(VolumeExtractor.kanjiNumber("二一") == 21)
+        #expect(VolumeExtractor.kanjiNumber("二〇二五") == 2025)
+        #expect(VolumeExtractor.kanjiNumber("十二") == 12)
+        #expect(VolumeExtractor.kanjiNumber("三百二十一") == 321)
+        #expect(VolumeExtractor.kanjiNumber("〇") == nil && VolumeExtractor.kanjiNumber("〇〇") == nil)
+        // 「〇」は数字の途中とはみなさないので、共通部分はそこで切れる(シリーズ名に「〇」が残る)。
+        let books = inputs(["[架空工房] 月の庭〇2 はる", "[架空工房] 月の庭〇3 なつ"])
+        let set = proposeSync(books, rules: .builtin, dictionaries: allDictionaries)
+        #expect(books.allSatisfy { seriesName(set, $0.id) == "月の庭〇" })
+        #expect(set["000"]?.metadata.volume == "2" && set["001"]?.metadata.volume == "3")
+    }
+
+    /// 共通部分は**数の途中で切らない**。「月の庭01 はる」「月の庭02 なつ」の共通部分は「月の庭0」だが、
+    /// それは 01・02 という 1 つの数の途中。シリーズ名は「月の庭」(2026-09-20、利用者の指摘)。
+    @Test func aSharedPrefixDoesNotStopInsideANumber() {
+        let books = inputs(["[架空工房] 月の庭01 はる", "[架空工房] 月の庭02 なつ", "[架空工房] 月の庭03 あき"])
+        let set = proposeSync(books, rules: .builtin, dictionaries: allDictionaries)
+        #expect(books.allSatisfy { seriesName(set, $0.id) == "月の庭" })
+        // ゼロ詰めの表記はそのまま残す(「第01巻」「月の庭 01」と同じ扱い)。
+        #expect(set["000"]?.metadata.volume == "01" && set["002"]?.metadata.volume == "03")
+    }
+
     @Test func rejectedInputs() {
         var limits = InputLimits()
         limits.maxNameLength = 20

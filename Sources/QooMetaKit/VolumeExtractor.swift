@@ -222,6 +222,12 @@ final class VolumeExtractor: Sendable {
             "壱": 1, "弐": 2, "参": 3, "肆": 4, "伍": 5, "陸": 6, "柒": 7, "捌": 8, "玖": 9,
         ]
         let powers: [Character: Int] = ["十": 10, "百": 100, "千": 1000, "拾": 10, "佰": 100, "仟": 1000]
+        // 位取りで書いた漢数字(「二〇」= 20、「二〇二五」= 2025)。十・百・千が 1 つも無く、2 文字以上なら桁として読む。
+        // 数え上げの読み方だと「二〇」は 2 + 0 で 0 になり、読めない数になってしまう(2026-09-20、利用者の指摘)。
+        if s.count >= 2, s.allSatisfy({ digits[$0] != nil }) {
+            let value = s.reduce(0) { $0 * 10 + digits[$1]! }
+            return value > 0 ? value : nil
+        }
         var total = 0, current = 0
         for ch in s {
             if let p = powers[ch] {
@@ -406,6 +412,8 @@ enum ProposalFinalizer {
                 guard title.key.starts(with: name) else { continue }
                 let remainder = title.originalRemainder(afterKeyLength: name.count)
                     .trimmingCharacters(in: engine.volumes.leadingSeparators)
+                // 「〇」は入れない。伏せ字(「〇〇さん」)と見分けが付かず、道具の側で 0 と決めてかからない
+                // (2026-09-20、利用者の判断)。「第二〇巻」のように単位の付く形は、漢数字の読み手が読む。
                 let digits = String(remainder.prefix { "一二三四五六七八九十".contains($0) })
                 guard !digits.isEmpty, let n = VolumeExtractor.kanjiNumber(digits) else { continue }
                 found.append((i, digits, n))

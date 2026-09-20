@@ -78,7 +78,14 @@ struct SeriesGrouper: Sendable {
         guard length > 0, length < text.key.count else { return false }
         let chars = Array(text.original)
         let end = text.originalEnd[length - 1]
-        return end < chars.count && chars[end].isNumber && chars[end - 1].isNumber
+        return end < chars.count && isDigit(chars[end]) && isDigit(chars[end - 1])
+    }
+
+    /// 位取りの数字(算用数字と全角数字)。**漢数字は数えない** ―― 「〇」は伏せ字(「〇〇さん」)にも使う字で、
+    /// 数として書かれたとは限らない。数かどうかを道具の側で決めてかからない(2026-09-20、利用者の判断)。
+    static func isDigit(_ c: Character) -> Bool {
+        guard c.unicodeScalars.count == 1, let v = c.unicodeScalars.first?.value else { return false }
+        return (0x30...0x39).contains(v) || (0xFF10...0xFF19).contains(v)
     }
 
     /// 比較用の先頭 `length` 文字より後ろが巻で始まるか。
@@ -335,7 +342,8 @@ struct SeriesGrouper: Sendable {
                 runPrefix = item.text.key.count
                 continue
             }
-            let l = Self.commonPrefixLength(Array(last.item.text.key.prefix(runPrefix)), item.text.key)
+            let l = Self.notInsideANumber(Self.commonPrefixLength(Array(last.item.text.key.prefix(runPrefix)), item.text.key),
+                                          last.item.text, item.text)
             let shorter = min(runPrefix, item.text.key.count)
             let accepts: Bool
             // **文字数の下限は、語の途中で切れる一致にだけ掛ける。** 両方とも語の切れ目(空白・記号・数字の手前)で
@@ -409,6 +417,17 @@ struct SeriesGrouper: Sendable {
     static func startsWithVolumeMarker(_ s: String) -> Bool {
         let n = s.precomposedNFKC
         return volumeMarker.firstMatch(in: n, range: NSRange(location: 0, length: (n as NSString).length)) != nil
+    }
+
+    /// 共通部分の切れ目を、**数の途中でない所まで戻す**。「Xそ01 夏」「Xそ02 春」の共通部分は「Xそ0」だが、
+    /// それは 01・02 という 1 つの数を途中で切った形で、シリーズ名が「Xそ0」になってしまう(2026-09-20、利用者の指摘)。
+    ///
+    /// `isCleanCut` は「次が数字なら切れ目」(「X2」の X と 2)とみなすので、ここで戻さないと素通りする。
+    /// 1 段目(`volumeHeadLength`)は同じことを `splitsANumber` で断っていて、2 段目にだけ無かった。
+    static func notInsideANumber(_ length: Int, _ a: ComparableText, _ b: ComparableText) -> Int {
+        var length = length
+        while length > 0, splitsANumber(a, at: length) || splitsANumber(b, at: length) { length -= 1 }
+        return length
     }
 
     static func commonPrefixLength(_ a: [Character], _ b: [Character]) -> Int {
