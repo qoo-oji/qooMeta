@@ -186,7 +186,8 @@ enum RuleSchema {
     /// **ファイル全体の段は持たない**(2026-09-21、利用者の指示。設定はルールセットごと)。
     static let presetNode = Node([
         optional("label", .string), optional("note", .string), optional("separators", .separators),
-        optional("defaults", .presetDefaults), optional("plain", .object(plainNode)), f("formats", .formats),
+        optional("defaults", .presetDefaults), optional("plain", .object(plainNode)),
+        optional("ignoreBracketsInsideTitle", .bool), f("formats", .formats),
     ])
 
     /// 1 つの型をオブジェクトで書いたとき。要るのは `format` だけ。

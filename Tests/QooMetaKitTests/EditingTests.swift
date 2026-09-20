@@ -300,6 +300,18 @@ import QooMetaRules
         // ほかのルールセットには効かない。
         #expect(rules.formats["doujinshi"].read("[架空工房] 月の庭 (仮)").metadata.source == "仮")
 
+        // 題の途中の括弧を読み残しに数えるかも、ルールセットごとに保存できる(既定は数えない)。
+        #expect(commercial.preset.ignoresBracketsInsideTitle)
+        edited.ignoresBracketsInsideTitle = false
+        changes.setPreset(edited, original: commercial.original)
+        rules = try compile(changes)
+        #expect(rules.presetCatalog.entries.first { $0.id == "commercial" }?.preset == edited)
+        #expect(!rules.formats["commercial"].ignoresBracketsInsideTitle)
+        #expect(rules.formats["doujinshi"].ignoresBracketsInsideTitle)
+        edited.ignoresBracketsInsideTitle = true
+        changes.setPreset(edited, original: commercial.original)
+        rules = try compile(changes)
+
         // 名前をつけて保存: 新しいプリセットは全体が差分に入る。既定のプリセットにも選べる。
         var mine = edited
         mine.name = "自分の棚"

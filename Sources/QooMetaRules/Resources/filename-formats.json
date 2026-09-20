@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
   "kind": "qoometa.filename-formats",
   "schemaVersion": 6,
-  "revision": "2026.09.21.3",
+  "revision": "2026.09.21.4",
   "defaultPreset": "commercial",
   "presets": {
     "commercial": {
@@ -17,6 +17,7 @@
           "[(（](?:19|20)\\d{2}年?[)）]"
         ]
       },
+      "ignoreBracketsInsideTitle": true,
       "formats": [
         "(@genre) [@author] @series (@volume) [@info]",
         "(@genre) [@author] @series (@volume)",
@@ -42,6 +43,7 @@
           "[(（](?:19|20)\\d{2}年?[)）]"
         ]
       },
+      "ignoreBracketsInsideTitle": true,
       "formats": [
         "(@genre) [@author (@author)] @title (@source) [@info]",
         "(@genre) [@author (@author)] @title (@source)",
@@ -76,6 +78,7 @@
       "defaults": {
         "genre": "同人誌"
       },
+      "ignoreBracketsInsideTitle": true,
       "formats": [
         "(@event) [@author (@author)] @title (@source) [@info]",
         "(@event) [@author (@author)] @title (@source)",

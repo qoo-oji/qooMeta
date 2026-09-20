@@ -179,6 +179,19 @@ import Testing
         #expect(set.check(name).outcome == .read)
     }
 
+    /// 題の**途中**の括弧は読み残しに数えない(既定)。型が括弧を欄として読む場所ではないため。
+    /// 題の頭と末尾の括弧は、原作や巻数だったかもしれないので数える。
+    @Test func bracketsInsideTheTitleAreNotCountedAsLeftOver() throws {
+        var set = FilenameFormats(formats: [try FilenameFormat("[@author] @title")])
+        #expect(set.check("[架空工房] 月の庭 (架空の版) つづき").outcome == .read)
+        #expect(set.check("[架空工房] 月の庭 (架空の原作)").outcome == .leftover)
+        #expect(set.check("[架空工房] (架空の版) 月の庭").outcome == .leftover)
+        // 数える側に切り替えると、途中の括弧も読み残しになる。
+        set.ignoresBracketsInsideTitle = false
+        let counted = set.check("[架空工房] 月の庭 (架空の版) つづき")
+        #expect(counted.outcome == .leftover && counted.problems.count == 1)
+    }
+
     @Test func spansPointAtTheValues() {
         let name = "[架空工房] 月の庭"
         let r = Self.read(name)

@@ -84,6 +84,10 @@
         },
         "plain": {
           "$ref": "#/$defs/plain"
+        },
+        "ignoreBracketsInsideTitle": {
+          "type": "boolean",
+          "description": "題の途中(頭でも末尾でもない所)にある括弧を、読み残しに数えないか。省くと true。型が括弧を欄として読むのは名前の頭・著者の直後・末尾だけなので、途中の括弧は欄になりようがない"
         }
       }
     },

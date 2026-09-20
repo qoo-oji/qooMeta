@@ -376,13 +376,14 @@ public struct FilenameFormat: Sendable, Hashable {
 /// (docs/filename-format.md の 4)。ここが持つのは、ファイル全体とプリセットを重ねた後の値。型の分は型が持つ。
 public struct FilenameFormats: Sendable, Hashable {
     public static func == (a: FilenameFormats, b: FilenameFormats) -> Bool {
-        (a.label, a.note, a.formats, a.separators, a.defaults, a.plain)
-            == (b.label, b.note, b.formats, b.separators, b.defaults, b.plain)
+        (a.label, a.note, a.formats, a.separators) == (b.label, b.note, b.formats, b.separators)
+            && (a.defaults, a.plain, a.ignoresBracketsInsideTitle) == (b.defaults, b.plain, b.ignoresBracketsInsideTitle)
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(label); hasher.combine(note); hasher.combine(formats)
         hasher.combine(separators); hasher.combine(defaults); hasher.combine(plain)
+        hasher.combine(ignoresBracketsInsideTitle)
     }
 
     /// 画面に出す見出しと説明(無ければプリセットの名前を出す)。
@@ -399,6 +400,12 @@ public struct FilenameFormats: Sendable, Hashable {
     public var defaults: [BookMetadata.Field: [String]]
     /// 型として読まない文字列(このルールセットの分。型の分は型が持つ)。
     public var plain: PlainText
+    /// 題の**途中**(頭でも末尾でもない所)にある括弧を、読み残しに数えないか。**既定は数えない**。
+    ///
+    /// 型が括弧を欄として読む場所は、名前の頭・著者の直後・末尾しかない。題の途中の括弧はどの型でも欄になりようが
+    /// ないので、読み残しと呼ぶと**直しようのない警告**になる(手元の蔵書では、読み残し 23 冊のうち 15 冊がこれだった)。
+    /// 題の頭と末尾の括弧は、原作や巻数だったかもしれないので、これまでどおり数える(2026-09-20、利用者の判断)。
+    public var ignoresBracketsInsideTitle = true
     /// 巻数とみなせるかの判定(規則の巻の読み手。組み立てのときに渡る)。比べるときは見ない(規則の側で決まるため)。
     public var isVolume: VolumeTest = .none
 
@@ -406,11 +413,12 @@ public struct FilenameFormats: Sendable, Hashable {
 
     public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators,
                 defaults: [BookMetadata.Field: [String]] = [:], label: String? = nil, note: String? = nil,
-                plain: PlainText = .none, isVolume: VolumeTest = .none) {
+                plain: PlainText = .none, ignoresBracketsInsideTitle: Bool = true, isVolume: VolumeTest = .none) {
         self.formats = formats
         self.separators = separators
         self.defaults = defaults
         self.plain = plain
+        self.ignoresBracketsInsideTitle = ignoresBracketsInsideTitle
         self.isVolume = isVolume
         self.label = label
         self.note = note
@@ -485,8 +493,13 @@ public struct FilenameFormats: Sendable, Hashable {
     public func unreadBrackets(in reading: FormatReading, name: [Character]) -> [Range<Int>] {
         guard let index = reading.formatIndex, formats.indices.contains(index) else { return [] }
         let format = formats[index]
-        let groups = reading.spans.filter { $0.word == .title }
-            .flatMap { Self.bracketGroups(in: name, within: $0.range) }
+        // 欄の位置は前後の空白を含まないので、題の「頭」「末尾」はその範囲の両端そのもの。
+        let groups = reading.spans.filter { $0.word == .title }.flatMap { span in
+            Self.bracketGroups(in: name, within: span.range).filter { group in
+                guard ignoresBracketsInsideTitle else { return true }
+                return group.lowerBound == span.range.lowerBound || group.upperBound == span.range.upperBound
+            }
+        }
         guard let mask = (format.plain.isEmpty ? plain : plain.adding(format.plain)).mask(name) else { return groups }
         return groups.filter { group in !group.allSatisfy { mask[$0] } }
     }

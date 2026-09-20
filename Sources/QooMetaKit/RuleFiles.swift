@@ -343,7 +343,9 @@ struct RuleCompiler {
                                             separators: separators(preset["separators"]) ?? FilenameFormats.defaultSeparators,
                                             defaults: defaults(preset["defaults"]),
                                             label: preset["label"]?.stringValue, note: preset["note"]?.stringValue,
-                                            plain: plain(preset["plain"]), isVolume: isVolume)
+                                            plain: plain(preset["plain"]),
+                                            ignoresBracketsInsideTitle: preset["ignoreBracketsInsideTitle"]?.boolValue ?? true,
+                                            isVolume: isVolume)
         }
         let defaultName = root["defaultPreset"]?.stringValue ?? "commercial"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }

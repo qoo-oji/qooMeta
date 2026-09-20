@@ -29,16 +29,20 @@ public struct PresetCatalog: Sendable, Hashable {
         public var defaults: [String: String]
         /// このプリセットで足す「型として読まない文字列」(ファイル全体の分に足される)。
         public var plain: PlainText
+        /// 題の途中の括弧を読み残しに数えないか(既定は数えない。`FilenameFormats.ignoresBracketsInsideTitle`)。
+        public var ignoresBracketsInsideTitle: Bool
         public var formats: [Format]
 
         public init(name: String, label: String = "", note: String = "", separators: [String]? = nil,
-                    defaults: [String: String] = [:], plain: PlainText = .none, formats: [Format] = []) {
+                    defaults: [String: String] = [:], plain: PlainText = .none,
+                    ignoresBracketsInsideTitle: Bool = true, formats: [Format] = []) {
             self.name = name
             self.label = label
             self.note = note
             self.separators = separators
             self.defaults = defaults
             self.plain = plain
+            self.ignoresBracketsInsideTitle = ignoresBracketsInsideTitle
             self.formats = formats
         }
     }
@@ -72,6 +76,7 @@ extension CompiledRules {
             PresetCatalog.Preset(
                 name: name, label: v["label"]?.stringValue ?? "", note: v["note"]?.stringValue ?? "",
                 separators: strings(v["separators"]), defaults: defaults(v["defaults"]), plain: plain(v["plain"]),
+                ignoresBracketsInsideTitle: v["ignoreBracketsInsideTitle"]?.boolValue ?? true,
                 formats: (v["formats"]?.arrayValue ?? []).compactMap { entry in
                     guard let text = RuleLoader.formatText(entry).stringValue else { return nil }
                     return PresetCatalog.Format(text: text, separators: strings(entry["separators"]), defaults: defaults(entry["defaults"]),
@@ -119,6 +124,9 @@ extension RuleChanges {
             }
             if !defaults.isEmpty { o["defaults"] = .object(defaults) }
             if preset.plain != original.plain { o["plain"] = Self.replacing(preset.plain) }
+            if preset.ignoresBracketsInsideTitle != original.ignoresBracketsInsideTitle {
+                o["ignoreBracketsInsideTitle"] = .bool(preset.ignoresBracketsInsideTitle)
+            }
             if preset.formats != original.formats { o["formats"] = .object(["$replace": .array(preset.formats.map(entry))]) }
         } else {
             if !preset.label.isEmpty { o["label"] = .string(preset.label) }
@@ -126,6 +134,7 @@ extension RuleChanges {
             if let separators = preset.separators { o["separators"] = .array(separators.map(JSONValue.string)) }
             if !preset.defaults.isEmpty { o["defaults"] = .object(preset.defaults.mapValues(JSONValue.string)) }
             if !preset.plain.isEmpty { o["plain"] = whole(preset.plain) }
+            if !preset.ignoresBracketsInsideTitle { o["ignoreBracketsInsideTitle"] = .bool(false) }
             o["formats"] = .array(preset.formats.map(entry))
         }
         if o.isEmpty { Self.remove(&formats, ["presets", preset.name]) } else { Self.set(&formats, ["presets", preset.name], .object(o)) }
