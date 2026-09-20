@@ -518,6 +518,23 @@
         }
       }
     },
+    "A format reads a bracket as a field only at the head of a name, right after the authors, or at the end. A bracket in the middle of a title could never have become a field, so it is not counted as left over. The ones at the title's head and end are still counted — they may have been a source work or a volume.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A format reads a bracket as a field only at the head of a name, right after the authors, or at the end. A bracket in the middle of a title could never have become a field, so it is not counted as left over. The ones at the title's head and end are still counted — they may have been a source work or a volume."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォーマットが括弧を欄として解析するのは、名前の先頭・著者の直後・末尾だけです。タイトルの途中の括弧はどのフォーマットでも欄になりえないので、未割当として数えません。タイトルの先頭と末尾の括弧は、原作や巻数だった可能性があるので数えます。"
+          }
+        }
+      }
+    },
     "A name cannot start with “$”": {
       "extractionState": "manual",
       "localizations": {
@@ -786,6 +803,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "追加した語"
+          }
+        }
+      }
+    },
+    "Adds every bracket left over in these names to the excluded text, so each one stays in the title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adds every bracket left over in these names to the excluded text, so each one stays in the title"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この一覧に残っている括弧をまとめて「解析時に除外する文字列」に追加します。どれもタイトルの中に残るようになります"
+          }
+        }
+      }
+    },
+    "Adds the marked bracket to the excluded text, so it stays in the title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adds the marked bracket to the excluded text, so it stays in the title"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "印の括弧を「解析時に除外する文字列」に追加します。タイトルの中に残るようになります"
           }
         }
       }
@@ -1896,6 +1947,23 @@
         }
       }
     },
+    "Default values": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default values"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルト値"
+          }
+        }
+      }
+    },
     "Delete it": {
       "extractionState": "manual",
       "localizations": {
@@ -2559,6 +2627,40 @@
         }
       }
     },
+    "Exclude %lld brackets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude %lld brackets"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個の括弧を除外"
+          }
+        }
+      }
+    },
+    "Excluded text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluded text"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "除外文字列"
+          }
+        }
+      }
+    },
     "Export": {
       "extractionState": "manual",
       "localizations": {
@@ -2912,6 +3014,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "フォーマットの並び"
+          }
+        }
+      }
+    },
+    "Formats": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formats"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォーマット"
           }
         }
       }
@@ -6448,6 +6567,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "タイトル → シリーズ名・巻数"
+          }
+        }
+      }
+    },
+    "Treat a bracket inside the title as part of the title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Treat a bracket inside the title as part of the title"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイトルの途中の括弧は、タイトルの一部として扱う"
           }
         }
       }

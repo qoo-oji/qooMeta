@@ -40,6 +40,13 @@ final class NameCheck {
             if now.outcome == before { return .same }
             return now.outcome < before ? .better : .worse
         }
+
+        /// 読み残した括弧の文字列(どの欄にもならず題に残ったもの)。**除外する文字列にそのまま登録できる形**。
+        var leftoverBrackets: [String] {
+            guard now.outcome == .leftover else { return [] }
+            let chars = Array(name)
+            return now.problems.filter { $0.upperBound <= chars.count }.map { String(chars[$0]) }
+        }
     }
 
     enum Change { case same, better, worse }
@@ -129,6 +136,11 @@ struct NameCheckPane: View {
     var draft: PresetDraft
     var saved: PresetDraft
     var isVolume: VolumeTest
+    /// 読み残した括弧を、**除外する文字列**へ足す(重なりは呼ばれた側で落とす)。
+    ///
+    /// 題の中の括弧で読み残しになる名前が多く、直す手立ては「その文字列を除外に登録する」しかなかった。
+    /// 見えている読み残しから 1 押しで登録できるようにする(2026-09-20、利用者の指示)。
+    var exclude: ([String]) -> Void
 
     @State private var check = NameCheck()
     @State private var filter: Filter = .problems
@@ -147,6 +159,16 @@ struct NameCheckPane: View {
         }
     }
 
+    /// まだ除外していない読み残しの括弧(出てきた順、重なりは 1 つ)。
+    private var unregistered: [String] {
+        var seen = Set(draft.plain.words)
+        var result: [String] = []
+        for row in check.rows {
+            for text in row.leftoverBrackets where seen.insert(text).inserted { result.append(text) }
+        }
+        return result
+    }
+
     private var rows: [NameCheck.Row] {
         switch filter {
         case .problems: check.rows.filter { !$0.now.isRead }
@@ -160,21 +182,24 @@ struct NameCheckPane: View {
             header
             Divider()
             if picked.names.isEmpty {
+                // 外の VStack は左そろえなので、そのままだと知らせが左端に寄る。空いている所の真ん中に置く。
                 ContentUnavailableView {
                     Label("No books chosen yet", systemImage: "books.vertical")
                 } description: {
                     Text("Choose the books in step 1 and their names appear here, so you can see which ones this rule set fails to read.")
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if rows.isEmpty {
                 ContentUnavailableView {
                     Label(filter == .changed ? "Your edit changed nothing yet" : "Every name was read in full", systemImage: "checkmark.circle")
                 } description: {
                     Text(filter == .changed ? "Nothing here reads differently from the saved rule set." : "No name was left with a bracket that became no field.")
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let usable = draft.usable(isVolume: isVolume)
                 List(rows) { row in
-                    NameCheckRow(row: row, usable: usable).listRowSeparator(.visible)
+                    NameCheckRow(row: row, usable: usable, exclude: exclude).listRowSeparator(.visible)
                 }
                 .listStyle(.inset)
             }
@@ -203,6 +228,14 @@ struct NameCheckPane: View {
             }
             if check.isWorking { ProgressView().controlSize(.small) }
             Spacer()
+            // 読み残しは、ほとんどが題の中の括弧。1 つずつ足すのは骨なので、見えている分をまとめて足せるようにする。
+            let pending = unregistered
+            if !pending.isEmpty {
+                Button { exclude(pending) } label: {
+                    Label("Exclude %lld brackets".ui(pending.count), systemImage: "eye.slash")
+                }
+                .help("Adds every bracket left over in these names to the excluded text, so each one stays in the title".ui)
+            }
             Picker("", selection: $filter) {
                 ForEach(Filter.allCases) { Text(key: $0.title).tag($0) }
             }
@@ -251,6 +284,7 @@ private struct NameCheckRow: View {
     var row: NameCheck.Row
     /// いま読める型の並び(何行目の型で読んだかを出すため)。
     var usable: PresetDraft.Usable
+    var exclude: ([String]) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -261,6 +295,13 @@ private struct NameCheckRow: View {
                 Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 0)
+            // 読み残しの行だけ、その括弧を除外する文字列へ足す釦を出す。
+            let brackets = row.leftoverBrackets
+            if !brackets.isEmpty {
+                Button { exclude(brackets) } label: { Image(systemName: "eye.slash") }
+                    .buttonStyle(.borderless)
+                    .help("Adds the marked bracket to the excluded text, so it stays in the title".ui)
+            }
             switch row.change {
             case .same: EmptyView()
             case .better:

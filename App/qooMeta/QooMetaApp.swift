@@ -24,7 +24,8 @@ struct QooMetaApp: App {
         Window("File name parsing", id: FileNameRulesView.windowID) {
             FileNameRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
         }
-        .defaultSize(width: 1000, height: 720)
+        // 3 ペインが最初から収まる幅(ルールセットの一覧 + 組の一覧 + 型 1 行が切れない幅)。
+        .defaultSize(width: 1240, height: 820)
 
         Window("Series and volume rules", id: SeriesRulesView.windowID) {
             SeriesRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)

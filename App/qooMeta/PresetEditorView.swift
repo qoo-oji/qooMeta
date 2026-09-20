@@ -15,6 +15,10 @@ struct FormatsPane: View {
     var isVolume: VolumeTest
 
     @State private var selection: String?
+    /// 右ペインに出す組(中央ペインで選ぶ)。
+    @State private var group: EditorGroup = .formats
+    /// 解析のテストに打った名前。**プリセットを選び直しても消さない**(同じ名前で見比べるため)。
+    @State private var sample = ""
     @State private var draft = PresetDraft()
     /// 下書きの元(保存してあるもの)。下書きがこれと違えば、保存していない変更がある。
     @State private var saved = PresetDraft()
@@ -42,7 +46,10 @@ struct FormatsPane: View {
                     }
                 }
             }
-            .frame(minWidth: 240, idealWidth: 280)
+            // 幅は中身で決める: いちばん長い見出しと、その下の「名前 ・ N 通り」が収まれば足りる。
+            // **上限を付けないと、窓を広げた分がここに入ってしまう**(右の型が読めない幅に潰れる。
+            // 2026-09-20、利用者の指摘)。説明の文は折り返すので、幅を決める根拠にしない。
+            .frame(minWidth: 220, idealWidth: 250, maxWidth: 300)
 
             Group {
                 if let entry {
@@ -50,10 +57,19 @@ struct FormatsPane: View {
                         // 下半分は、直したものを**実際に選んだ名前へ当てた結果**(2026-09-21、利用者の指示)。
                         // 直しながら効果が見えるように、編集の場と同じ画面に置く。
                         VSplitView {
-                            PresetDraftEditor(draft: $draft, catalog: catalog, isVolume: isVolume)
-                                .frame(minHeight: 200, idealHeight: 380)
-                            NameCheckPane(draft: draft, saved: saved, isVolume: isVolume)
-                                .frame(minHeight: 150, idealHeight: 260)
+                            // 組の一覧(中央)と、その組だけの編集(右)に分かれるのは**上半分だけ**。
+                            // 下のプレビューは両方の幅をまたいで使う(2026-09-20、利用者の指示)。
+                            HSplitView {
+                                // 中央も中身の分だけ。組の名前(いちばん長いもの)と数のバッジ、表示名の欄が収まればよい。
+                                PresetGroupList(draft: $draft, group: $group)
+                                    .frame(minWidth: 190, idealWidth: 220, maxWidth: 280)
+                                // 余った幅はここへ。型の 1 行(番号・型の文字列・釦 4 つ)が切れずに見えるだけの幅が要る。
+                                PresetGroupEditor(draft: $draft, group: group)
+                                    .frame(minWidth: 420, idealWidth: 620, maxWidth: .infinity)
+                            }
+                            .frame(minHeight: 220, idealHeight: 380)
+                            PreviewPane(sample: $sample, draft: $draft, saved: saved, isVolume: isVolume)
+                                .frame(minHeight: 220, idealHeight: 300)
                         }
                         Divider()
                         actions(entry)
@@ -62,7 +78,7 @@ struct FormatsPane: View {
                     ContentUnavailableView("Select a rule set", systemImage: "textformat.abc")
                 }
             }
-            .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { if selection == nil { load(catalog.defaultPreset) } }
         // 保存・初期化のあと、保存してある中身が変わったら下書きを取り直す(直している途中の下書きは、そのまま)。
@@ -168,6 +184,8 @@ struct PresetDraft {
     var separators: [String]?
     var defaults: [String: String] = [:]
     var plain = PlainText.none
+    /// 題の途中の括弧を読み残しに数えないか(既定は数えない)。
+    var ignoresBracketsInsideTitle = true
     var rows: [Row] = []
 
     init() {}
@@ -179,13 +197,14 @@ struct PresetDraft {
         separators = preset.separators
         defaults = preset.defaults
         plain = preset.plain
+        ignoresBracketsInsideTitle = preset.ignoresBracketsInsideTitle
         rows = preset.formats.map { Row(format: $0) }
     }
 
     var preset: PresetCatalog.Preset {
         PresetCatalog.Preset(name: name, label: label.trimmingCharacters(in: .whitespaces), note: note.trimmingCharacters(in: .whitespaces),
                              separators: separators, defaults: defaults.filter { !$0.value.isEmpty }, plain: plain,
-                             formats: rows.map(\.format))
+                             ignoresBracketsInsideTitle: ignoresBracketsInsideTitle, formats: rows.map(\.format))
     }
 
     /// 下書きの型の並びを、いま読める形にしたもの。**書きかけで読めない型は飛ばす**(1 文字打つたびに読めなくなるため)。
@@ -209,7 +228,8 @@ struct PresetDraft {
             texts.append(row.format.text)
         }
         return Usable(formats: FilenameFormats(formats: compiled, separators: separators ?? FilenameFormats.defaultSeparators,
-                                               defaults: fields(defaults), plain: plain, isVolume: isVolume),
+                                               defaults: fields(defaults), plain: plain,
+                                               ignoresBracketsInsideTitle: ignoresBracketsInsideTitle, isVolume: isVolume),
                       lines: lines, texts: texts)
     }
 
@@ -238,66 +258,208 @@ struct PresetDraft {
     }
 }
 
-/// プリセット 1 つの下書きを直す: 見出しと説明、型の並び(並び順が優先順位)、区切り、既定の欄、試し読み。
-private struct PresetDraftEditor: View {
+/// 右ペインを分ける組。プリセット 1 つの中身は 4 つの持ちものに分かれていて、いちどに全部は要らないので、
+/// 中央ペインで 1 つ選んで右ペインに出す(2026-09-20、利用者の指示)。
+///
+/// **解析のテストはここに入れない。** どの組を直しているときにも見たいものなので、下のプレビューに置く。
+private enum EditorGroup: String, CaseIterable, Identifiable {
+    case formats, separators, defaults, plain
+
+    var id: String { rawValue }
+
+    /// 中央ペインに出す短い名前。
+    var title: String {
+        switch self {
+        case .formats: "Formats"
+        case .separators: "Author separators"
+        case .defaults: "Default values"
+        case .plain: "Excluded text"
+        }
+    }
+
+    /// 右ペインの見出し(短い名前より詳しい)。
+    var heading: String {
+        switch self {
+        case .formats: "Format list"
+        case .separators: "Author separators"
+        case .defaults: "Values for fields the name does not carry"
+        case .plain: "Text excluded while parsing"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .formats: "list.number"
+        case .separators: "scissors"
+        case .defaults: "text.badge.plus"
+        case .plain: "eye.slash"
+        }
+    }
+
+    /// 中央ペインの行に出す数(その組にいま何が入っているか)。
+    func count(in draft: PresetDraft) -> Int {
+        switch self {
+        case .formats: draft.rows.count
+        case .separators: (draft.separators ?? FilenameFormats.defaultSeparators).count
+        case .defaults: draft.defaults.filter { !$0.value.isEmpty }.count
+        case .plain: draft.plain.words.count + draft.plain.patterns.count
+        }
+    }
+}
+
+/// 中央ペイン: このプリセットの見出しと説明、そして右ペインに出す組の一覧。
+private struct PresetGroupList: View {
     @Binding var draft: PresetDraft
-    var catalog: PresetCatalog
-    var isVolume: VolumeTest
-    @State private var sample = ""
+    @Binding var group: EditorGroup
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 見出しと説明はどの組にも属さない(プリセットそのものの名札)ので、組の一覧の上に置く。
+            VStack(alignment: .leading, spacing: 8) {
+                LabeledBox("Display name") {
+                    TextField("Display name", text: $draft.label, prompt: Text(key: draft.bundledName))
+                }
+                LabeledBox("Description") {
+                    TextField("Description", text: $draft.note, prompt: Text(key: draft.bundledNote), axis: .vertical)
+                        .lineLimit(1...3)
+                }
+            }
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            Divider()
+            List(selection: Binding(get: { Optional(group) }, set: { if let picked = $0 { group = picked } })) {
+                ForEach(EditorGroup.allCases) { item in
+                    Label(key: item.title, systemImage: item.symbol)
+                        .badge(item.count(in: draft))
+                        .tag(item)
+                }
+            }
+            .listStyle(.sidebar)
+        }
+    }
+}
+
+/// 小さな見出しを付けた入れもの(狭いペインでは、欄の名前を左に置くと欄が細くなるので上に置く)。
+private struct LabeledBox<Content: View>: View {
+    var title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(key: title).font(.caption).foregroundStyle(.secondary)
+            content
+        }
+    }
+}
+
+/// 説明の文の折り返し幅。**ペインの幅はこれで決めない**: 1 行に伸ばした長さが「ちょうどいい幅」として
+/// 効いてしまうと、説明の長い組ほどペインが広くなる(2026-09-20、利用者の指摘)。読みやすい長さで折り返す。
+private let helpWidth: CGFloat = 560
+
+/// 右ペイン: 中央ペインで選んだ組だけを直す。
+private struct PresetGroupEditor: View {
+    @Binding var draft: PresetDraft
+    var group: EditorGroup
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Form {
-                    TextField("Display name", text: $draft.label, prompt: Text(key: draft.bundledName))
-                    TextField("Description", text: $draft.note, prompt: Text(key: draft.bundledNote), axis: .vertical).lineLimit(1...3)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(key: group.heading).font(.headline)
+                switch group {
+                case .formats: formats
+                case .separators: separators
+                case .defaults: defaults
+                case .plain: plain
                 }
-                .formStyle(.columns)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Format list").font(.headline)
-                    Text("Formats are tried **from the top down**, and the first one that matches the whole name reads it. Put the shapes with more fields above the ones with fewer.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Text("Reserved words: @title @author @genre @event @source @info @series @volume @ignore. @author and @ignore may appear any number of times; a format needs either @title or @series.")
-                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    VStack(spacing: 4) {
-                        // 行は ID で指す(番号で指すと、消した直後に無い番号を読んで落ちる)。
-                        ForEach($draft.rows) { $row in
-                            let index = draft.rows.firstIndex { $0.id == row.id } ?? 0
-                            FormatRowView(index: index, count: draft.rows.count, row: $row, problem: draft.problem(of: row),
-                                          move: { offset in
-                                              guard let i = draft.rows.firstIndex(where: { $0.id == row.id }),
-                                                    draft.rows.indices.contains(i + offset) else { return }
-                                              draft.rows.swapAt(i, i + offset)
-                                          },
-                                          remove: { draft.rows.removeAll { $0.id == row.id } })
-                        }
-                    }
-                    Button { draft.rows.append(.init(format: .init(text: "[@author] @title"))) } label: { Label("Add a format", systemImage: "plus") }
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Author separators").font(.headline)
-                    Text("The characters that split the authors read from a name. A format can set its own instead.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    InlineArrayEditor(items: draft.separators ?? FilenameFormats.defaultSeparators,
-                                      placeholder: "Separator") { draft.separators = $0 }
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Values for fields the name does not carry").font(.headline)
-                    Text("A field read from the name is never overwritten. These also go into names that matched no format.").font(.caption).foregroundStyle(.secondary)
-                    DefaultsFields(defaults: $draft.defaults)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Text excluded while parsing").font(.headline)
-                    PlainTextEditor(plain: $draft.plain)
-                }
-
-                SampleReading(sample: $sample, draft: draft, catalog: catalog, isVolume: isVolume)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
+        }
+    }
+
+    @ViewBuilder private var formats: some View {
+        Text("Formats are tried **from the top down**, and the first one that matches the whole name reads it. Put the shapes with more fields above the ones with fewer.")
+            .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+        Text("Reserved words: @title @author @genre @event @source @info @series @volume @ignore. @author and @ignore may appear any number of times; a format needs either @title or @series.")
+            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            .frame(maxWidth: helpWidth, alignment: .leading)
+        VStack(spacing: 4) {
+            // 行は ID で指す(番号で指すと、消した直後に無い番号を読んで落ちる)。
+            ForEach($draft.rows) { $row in
+                let index = draft.rows.firstIndex { $0.id == row.id } ?? 0
+                FormatRowView(index: index, count: draft.rows.count, row: $row, problem: draft.problem(of: row),
+                              move: { offset in
+                                  guard let i = draft.rows.firstIndex(where: { $0.id == row.id }),
+                                        draft.rows.indices.contains(i + offset) else { return }
+                                  draft.rows.swapAt(i, i + offset)
+                              },
+                              remove: { draft.rows.removeAll { $0.id == row.id } })
+            }
+        }
+        .padding(.top, 4)
+        Button { draft.rows.append(.init(format: .init(text: "[@author] @title"))) } label: { Label("Add a format", systemImage: "plus") }
+    }
+
+    @ViewBuilder private var plain: some View {
+        // 題の途中の括弧は、どの型でも欄になりようがない(型が括弧を読むのは名前の頭・著者の直後・末尾だけ)。
+        // 数えると直しようのない警告になるので、既定では数えない。数えたい利用者のために入切を置く
+        // (2026-09-20、利用者の指示)。
+        Toggle(isOn: $draft.ignoresBracketsInsideTitle) {
+            Text("Treat a bracket inside the title as part of the title")
+        }
+        Text("A format reads a bracket as a field only at the head of a name, right after the authors, or at the end. A bracket in the middle of a title could never have become a field, so it is not counted as left over. The ones at the title's head and end are still counted — they may have been a source work or a volume.")
+            .font(.caption).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+        Divider().padding(.vertical, 4)
+        PlainTextEditor(plain: $draft.plain)
+    }
+
+    @ViewBuilder private var separators: some View {
+        Text("The characters that split the authors read from a name. A format can set its own instead.")
+            .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+        InlineArrayEditor(items: draft.separators ?? FilenameFormats.defaultSeparators,
+                          placeholder: "Separator") { draft.separators = $0 }
+    }
+
+    @ViewBuilder private var defaults: some View {
+        Text("A field read from the name is never overwritten. These also go into names that matched no format.")
+            .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+        DefaultsFields(defaults: $draft.defaults)
+    }
+}
+
+/// 下のプレビュー: **中央ペインと右ペインの幅をまたいで**、直した並びで実際にどう読めるかを見せる。
+/// 上は打った名前 1 つの試し読み、下は段 1 で選んだ本の名前ぜんぶ(2026-09-20、利用者の指示)。
+private struct PreviewPane: View {
+    @Binding var sample: String
+    @Binding var draft: PresetDraft
+    var saved: PresetDraft
+    var isVolume: VolumeTest
+
+    /// 読み残した括弧を、除外する文字列へ足す。すでに入っているものは足さない(並びの順は変えない)。
+    private func exclude(_ texts: [String]) {
+        var words = draft.plain.words
+        for text in texts where !text.isEmpty && !words.contains(text) { words.append(text) }
+        guard words.count != draft.plain.words.count else { return }
+        draft.plain = PlainText(words: words, patterns: draft.plain.patterns)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 試し読みは打った名前の分だけ背が伸びる。伸びた分は一覧から取らず、自分の高さのまま置く
+            // (足りなくなったら仕切りを動かしてもらう)。
+            SampleReading(sample: $sample, draft: draft, isVolume: isVolume)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider()
+            NameCheckPane(draft: draft, saved: saved, isVolume: isVolume, exclude: exclude)
+                .frame(maxHeight: .infinity)
         }
     }
 }
@@ -365,7 +527,6 @@ private struct FormatRowView: View {
 private struct SampleReading: View {
     @Binding var sample: String
     var draft: PresetDraft
-    var catalog: PresetCatalog
     var isVolume: VolumeTest
 
     var body: some View {
@@ -414,7 +575,7 @@ private struct PlainTextEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             if showsHelp {
                 Text("This part of a name is **not read as a format bracket**, even when it is one: it does not divide fields, and it stays in the title or whatever value holds it. Use it so that the “(2026)” of “Garden of the Moon (2026)” becomes neither a source work nor a volume.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
             }
             Text("Words, matched exactly as written").font(.caption.bold())
             InlineArrayEditor(items: plain.words, placeholder: "For example: (draft)") { plain = PlainText(words: $0, patterns: plain.patterns) }
