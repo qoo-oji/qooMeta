@@ -18,7 +18,7 @@ struct DetailView: View {
             Form {
                 Section {
                     if books.count == 1, let book = books.first {
-                        FileNameView(book: book, formats: workspace.formats)
+                        FileNameView(book: book, formats: workspace.formats(for: book.id))
                     } else {
                         Text("\(books.count) 冊を選択").font(.headline)
                     }

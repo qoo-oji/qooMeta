@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkspaceView: View {
     @Bindable var workspace: Workspace
     @State private var showsDetail = true
+    @State private var showsPresets = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,13 +19,65 @@ struct WorkspaceView: View {
         }
         .searchable(text: $workspace.searchText, placement: .toolbar, prompt: "欄とファイル名を検索")
         .toolbar {
+            if workspace.isWorking {
+                ToolbarItem { ProgressView().controlSize(.small) }
+            }
+            ToolbarItem {
+                Button { showsPresets = true } label: { Label("型の並び", systemImage: "folder.badge.gearshape") }
+                    .help("フォルダごとに、どの型の並びで名前を読むかを決める")
+            }
             ToolbarItem {
                 Button { showsDetail.toggle() } label: { Label("詳細", systemImage: "sidebar.right") }
             }
         }
-        .focusedSceneValue(\.workspace, workspace)
-        .navigationTitle("qooMeta")
+        .sheet(isPresented: $showsPresets) { PresetAssignmentView(workspace: workspace) }
+        .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta(未保存の変更)" : "qooMeta")
         .navigationSubtitle("\(workspace.visibleBooks.count) / \(workspace.books.count) 冊")
+    }
+}
+
+// MARK: - フォルダごとの型の並び
+
+/// フォルダごとに、どの型の並び(プリセット)で名前を読むかを決める。
+/// 同人誌と商業の本が混ざった蔵書のために、**本ごとにプリセットを選べる**(割り当ては作業ファイルに残る)。
+struct PresetAssignmentView: View {
+    @Bindable var workspace: Workspace
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("型の並び(プリセット)").font(.headline)
+            Text("フォルダごとに、ファイル名をどの型の並びで読むかを決めます。割り当てを変えると、そのフォルダの本を読み直します。")
+                .font(.caption).foregroundStyle(.secondary)
+            Form {
+                Picker("既定", selection: Binding(get: { workspace.presets.defaultPreset },
+                                                 set: { workspace.setPreset($0, forFolder: nil) })) {
+                    Text("同梱の既定(\(workspace.formats.defaultName))").tag(String?.none)
+                    ForEach(workspace.formats.names, id: \.self) { Text($0).tag(String?.some($0)) }
+                }
+                if workspace.topLevelFolders.isEmpty {
+                    Text("直下のフォルダはありません(すべて既定で読みます)").foregroundStyle(.secondary)
+                } else {
+                    Section("直下のフォルダ") {
+                        ForEach(workspace.topLevelFolders, id: \.folder) { row in
+                            Picker("\(row.folder)(\(row.count) 冊)",
+                                   selection: Binding(get: { workspace.presets.folders[row.folder] },
+                                                      set: { workspace.setPreset($0, forFolder: row.folder) })) {
+                                Text("既定に従う").tag(String?.none)
+                                ForEach(workspace.formats.names, id: \.self) { Text($0).tag(String?.some($0)) }
+                            }
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("閉じる") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 460, height: 420)
     }
 }
 

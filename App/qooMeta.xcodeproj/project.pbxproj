@@ -15,6 +15,7 @@
 		A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */; };
 		CF2BA062F11138C7CF56C2E5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 026D669D5E2477C2E800ACEA /* Assets.xcassets */; };
 		FF17B661D9ED57B280285700 /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4760B3275FF3971B539296 /* DemoData.swift */; };
+		FFBE93BE71615B811C14E97B /* QooMetaScan in Frameworks */ = {isa = PBXBuildFile; productRef = ECC807B83697548A0012D159 /* QooMetaScan */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 			files = (
 				947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */,
 				3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */,
+				FFBE93BE71615B811C14E97B /* QooMetaScan in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,6 +100,7 @@
 			packageProductDependencies = (
 				74CE0620A1873D2F829A351F /* QooMetaKit */,
 				F548B9A73E497C1459503F3C /* QooMetaRules */,
+				ECC807B83697548A0012D159 /* QooMetaScan */,
 			);
 			productName = qooMeta;
 			productReference = 0874B8EB5ABA307C2EF67551 /* qooMeta.app */;
@@ -365,6 +368,10 @@
 		74CE0620A1873D2F829A351F /* QooMetaKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = QooMetaKit;
+		};
+		ECC807B83697548A0012D159 /* QooMetaScan */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QooMetaScan;
 		};
 		F548B9A73E497C1459503F3C /* QooMetaRules */ = {
 			isa = XCSwiftPackageProductDependency;

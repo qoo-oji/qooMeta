@@ -270,3 +270,49 @@ import QooMetaRules
     }
 }
 
+
+/// 作業ファイル(開いた一覧と修正、フォルダごとのプリセット)。名前はすべて架空のもの。
+@Suite struct WorkfileTests {
+    static let file = Workfile(
+        rootPath: "/架空の場所/蔵書",
+        books: [
+            .init(id: "同人/[架空工房] 月の庭 1.zip", name: "[架空工房] 月の庭 1"),
+            .init(id: "商業/(種別A) [架空工房] 星降る夜の喫茶店 2.zip", name: "(種別A) [架空工房] 星降る夜の喫茶店 2",
+                  confirmation: .series(name: "星降る夜の喫茶店", volume: "2", fields: ConfirmedFields([.genre: ["種別B"]]))),
+            .init(id: "表紙だけ.zip", name: "表紙だけ"),
+        ],
+        presets: .init(defaultPreset: "commercial", folders: ["同人": "doujinshi"]))
+
+    @Test func roundTrips() throws {
+        let read = try Workfile.decoded(Self.file.encoded())
+        #expect(read.books == Self.file.books)
+        #expect(read.presets == Self.file.presets)
+        #expect(read.rootPath == Self.file.rootPath)
+        #expect(read.savedAt != nil)  // 書き出すときに入る。
+    }
+
+    /// フォルダごとの割り当ては、長い頭から先に見る。どれにも当たらない本は既定。
+    @Test func presetsFollowTheFolder() {
+        let inputs = Self.file.inputs
+        #expect(inputs[0].preset == "doujinshi")
+        #expect(inputs[1].preset == "commercial")
+        #expect(inputs[2].preset == "commercial")
+        let nested = Workfile.PresetAssignment(defaultPreset: "mixed", folders: ["A": "commercial", "A/B": "doujinshi"])
+        #expect(nested.preset(for: "A/B/本.zip") == "doujinshi")
+        #expect(nested.preset(for: "A/C/本.zip") == "commercial")
+        #expect(nested.preset(for: "D/本.zip") == "mixed")
+    }
+
+    @Test func foldersAndErrors() throws {
+        #expect(Self.file.topLevelFolders == ["同人", "商業"])
+        #expect(throws: Workfile.LoadError.notAWorkfile) {
+            try Workfile.decoded(Data(#"{"kind":"qoometa.rules","formatVersion":1,"rootPath":"/x","books":[],"presets":{"folders":{}}}"#.utf8))
+        }
+    }
+
+    /// 直していない本は confirmation を書かない(作業ファイルを小さく保つ)。
+    @Test func untouchedBooksStaySmall() throws {
+        let text = try String(decoding: Self.file.encoded(), as: UTF8.self)
+        #expect(text.components(separatedBy: "\"confirmation\"").count == 2)
+    }
+}
