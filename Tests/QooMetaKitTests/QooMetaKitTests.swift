@@ -146,9 +146,10 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         let book = try #require((root["Books"] as? [String: [String: Any]])?["1"])
         #expect(book["Title"] as? String == "星降る夜の喫茶店 1")
         #expect(book["Author"] as? String == "架空工房")        // 先頭だけ。
-        #expect(book["Keyword A"] as? String == "分類A")        // ジャンルの欄は読まれないので、キーワード A へ。
+        #expect(book["Keyword A"] as? String == "星降る夜の喫茶店")  // シリーズの欄が無いので、キーワード A へ。
         #expect(book["Keyword B"] as? String == "1")           // 巻数(表示)は空いている欄へ。
-        #expect(book["Genre"] == nil)
+        #expect(book["Neta"] as? String == "オリジナル")         // 原作は ShelfRow の「メモ」になる。
+        #expect(book["Genre"] == nil)                           // ジャンルの欄は読まれないので渡さない。
         #expect(book["Series"] == nil)
         #expect(book["Volume"] == nil)
     }

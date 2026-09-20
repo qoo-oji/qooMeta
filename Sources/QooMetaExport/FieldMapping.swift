@@ -217,10 +217,11 @@ public struct FieldMapping: Sendable, Hashable, Codable {
                                                  .volume: .keywordC])
         case .shelfRow:
             // ShelfRow が読むのは タイトル・著者・キーワード A・キーワード B・Neta(= メモ)だけ。
-            // ジャンルの欄は取り込みで読まれないので、キーワード A へ回す。情報は Neta へ入れると「メモ」になる。
-            // 原作は既定では渡さない(空いている行き先が残っていない。キーワード B と入れ替えられる)。
-            FieldMapping(target: target, slots: [.title: .title, .authors: .author, .genre: .keywordA,
-                                                 .info: .neta, .volume: .keywordB])
+            // **シリーズの欄が無いので、シリーズ名をキーワード A へ**(2026-09-20、利用者の判断。
+            // ジャンルより、シリーズで絞り込めるほうが役に立つ)。巻数の表記はキーワード B、原作はメモ(Neta)。
+            // ジャンル・イベント・情報は、行き先が残っていないので既定では落とす(対応表で入れ替えられる)。
+            FieldMapping(target: target, slots: [.title: .title, .authors: .author, .series: .keywordA,
+                                                 .volume: .keywordB, .source: .neta])
         }
     }
 
