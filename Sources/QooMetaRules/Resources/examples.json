@@ -181,7 +181,7 @@
       ]
     },
     {
-      "id": "a-subtitled-book-is-not-taken-for-the-first",
+      "id": "a-subtitled-book-can-still-be-the-first",
       "files": [
         "[架空工房] 月影 はじまりの章",
         "[架空工房] 月影 2"
@@ -189,8 +189,8 @@
       "expect": [
         {
           "series": "月影",
-          "volumeSort": null,
-          "inferred": false
+          "volumeSort": 1,
+          "inferred": true
         },
         {
           "series": "月影",
@@ -201,6 +201,200 @@
         "volumeHead",
         "firstVolume",
         "subtitled"
+      ]
+    },
+    {
+      "id": "an-inferred-first-volume-follows-the-position-words",
+      "files": [
+        "[架空工房] 月の庭",
+        "[架空工房] 月の庭-後編-"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "前編",
+          "volumeSort": 1,
+          "inferred": true
+        },
+        {
+          "series": "月の庭",
+          "volume": "後編",
+          "volumeSort": 2
+        }
+      ],
+      "covers": [
+        "firstVolume",
+        "position"
+      ]
+    },
+    {
+      "id": "two-editions-of-the-first-volume-are-both-volume-one",
+      "files": [
+        "[架空工房] 月の庭。",
+        "[架空工房] 月の庭。 フルカラー版",
+        "[架空工房] 月の庭。II",
+        "[架空工房] 月の庭。III"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "I",
+          "volumeSort": 1,
+          "inferred": true
+        },
+        {
+          "series": "月の庭",
+          "volume": "I",
+          "volumeSort": 1,
+          "inferred": true,
+          "editionMark": true
+        },
+        {
+          "series": "月の庭",
+          "volume": "II",
+          "volumeSort": 2
+        },
+        {
+          "series": "月の庭",
+          "volume": "III",
+          "volumeSort": 3
+        }
+      ],
+      "covers": [
+        "firstVolume",
+        "edition",
+        "roman"
+      ]
+    },
+    {
+      "id": "a-subtitle-with-no-separator-joins-the-run",
+      "files": [
+        "[架空工房] 月の庭",
+        "[架空工房] 月の庭2",
+        "[架空工房] 月の庭3",
+        "[架空工房] 月の庭リベンジ"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volumeSort": 1,
+          "inferred": true
+        },
+        {
+          "series": "月の庭",
+          "volumeSort": 2
+        },
+        {
+          "series": "月の庭",
+          "volumeSort": 3
+        },
+        {
+          "series": "月の庭",
+          "volume": "リベンジ",
+          "volumeSort": null
+        }
+      ],
+      "covers": [
+        "attachAcrossScript",
+        "unnumberedVolume"
+      ]
+    },
+    {
+      "id": "a-compilation-word-in-the-middle-does-not-cost-the-series",
+      "files": [
+        "[架空工房] 月の庭・楽",
+        "[架空工房] 月の庭・密",
+        "[架空工房] 月の庭・食／総集編"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "楽",
+          "volumeSort": null
+        },
+        {
+          "series": "月の庭",
+          "volume": "密",
+          "volumeSort": null
+        },
+        {
+          "series": "月の庭",
+          "volume": "食／総集編",
+          "volumeSort": null
+        }
+      ],
+      "covers": [
+        "compilation",
+        "unnumberedVolume"
+      ]
+    },
+    {
+      "id": "a-shared-kanji-alone-does-not-make-a-series",
+      "files": [
+        "[架空工房] 催眠レッスン",
+        "[架空工房] 催眠アプリ物語"
+      ],
+      "expect": [
+        {
+          "series": null
+        },
+        {
+          "series": null
+        }
+      ],
+      "covers": [
+        "attachAcrossScript",
+        "sharedPrefix"
+      ]
+    },
+    {
+      "id": "an-inferred-first-volume-matches-the-style-of-the-set",
+      "files": [
+        "[架空工房] 星の海",
+        "[架空工房] 星の海 下巻"
+      ],
+      "expect": [
+        {
+          "series": "星の海",
+          "volume": "上巻",
+          "volumeSort": 1,
+          "inferred": true
+        },
+        {
+          "series": "星の海",
+          "volume": "下巻",
+          "volumeSort": 2
+        }
+      ],
+      "covers": [
+        "firstVolume",
+        "position"
+      ]
+    },
+    {
+      "id": "a-book-that-follows-the-story-is-not-the-first",
+      "files": [
+        "[架空工房] 月の庭 5",
+        "[架空工房] 月の庭 6",
+        "[架空工房] 月の庭 後日談"
+      ],
+      "expect": [
+        {
+          "volumeSort": 5
+        },
+        {
+          "volumeSort": 6
+        },
+        {
+          "series": "月の庭",
+          "volume": "後日談",
+          "volumeSort": null,
+          "inferred": false
+        }
+      ],
+      "covers": [
+        "firstVolume",
+        "unnumberedVolume"
       ]
     },
     {
@@ -355,8 +549,8 @@
       "expect": [
         {
           "series": "雪鍋",
-          "volumeSort": null,
-          "inferred": false
+          "volumeSort": 1,
+          "inferred": true
         },
         {
           "series": "雪鍋",
@@ -610,9 +804,9 @@
           "volume": "2"
         },
         {
-          "volume": "三人の夜",
-          "inferred": false,
-          "volumeSort": null
+          "volume": "1",
+          "inferred": true,
+          "volumeSort": 1
         }
       ],
       "covers": [

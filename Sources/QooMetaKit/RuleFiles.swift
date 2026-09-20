@@ -39,7 +39,7 @@ public struct RulesCompilation: Sendable {
 /// 組み立て済みの規則。
 public struct CompiledRules: Sendable {
     /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
-    public static let engineLevel = 6
+    public static let engineLevel = 7
 
     let series: SeriesRules
     /// 名前を付けた型の並び。本ごとに、どのプリセットで読むかを選べる(フォルダごとに分けたい利用者のため)。
@@ -268,6 +268,7 @@ struct RuleCompiler {
                 minPrefix: shared?["minPrefix"]?.intValue ?? 4,
                 minWholeTitle: shared?["minWholeTitle"]?.intValue ?? 2,
                 attachSubtitled: policies["subtitled"] != "separate",
+                attachAcrossScript: enabled(grouping?["attachAcrossScript"]),
                 splitByRelation: policies["differentRelation"] != "keep",
                 splitByGenre: policies["differentGenre"] != "keep",
                 volumeHeadEnabled: enabled(grouping?["volumeHead"]),
@@ -376,6 +377,8 @@ struct SeriesRules: Sendable {
         var minWholeTitle: Int
         /// 方針 `subtitled`。
         var attachSubtitled: Bool
+        /// 規則 `attachAcrossScript`。区切りなしで続く副題の本も、巻でまとまった組へ入れる。
+        var attachAcrossScript: Bool
         /// 方針 `differentRelation`(ネタが違う本を分ける)。
         var splitByRelation: Bool
         /// 方針 `differentGenre`(本の種別が違う本を分ける)。

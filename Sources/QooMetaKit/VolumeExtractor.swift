@@ -373,9 +373,11 @@ enum ProposalFinalizer {
         if engine.volumes.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document, engine: engine, log: log) }
         numberPositionWords(&document, engine: engine)
         numberSequels(&document, engine: engine, log: log)
-        // 1 巻の推定より**前**に置く: 名前に何か書いてある本は、番号の無い 1 冊目ではない。
-        if engine.volumes.rules.unreadAsWritten { showRemainingText(&document, engine: engine, log: log) }
+        // 1 巻の推定より**後**に置く: 推定は「巻の読めない本がちょうど 1 冊か」を見るので、先に文字を
+        // 入れてしまうと、番号の無い 1 冊目(「X 副題」と「X 2」の X 側)を見つけられない
+        // (2026-09-21、利用者の指摘)。
         if engine.volumes.rules.inferFirstVolume { inferFirstVolumes(&document, engine: engine, log: log) }
+        if engine.volumes.rules.unreadAsWritten { showRemainingText(&document, engine: engine, log: log) }
     }
 
     /// 本編に含めた総集編(方針 compilations = inMainSeries)の巻を、収録範囲の最後の巻の直後にする
@@ -397,6 +399,23 @@ enum ProposalFinalizer {
             document.books[i].volumeNumber = Double(last) + 0.5
             log?.apply("compilationVolume", to: document.books[i].id)
         }
+    }
+
+    /// 位置の語で並ぶシリーズの、1 巻目の書き方(「後編」なら「前編」、「下巻」なら「上巻」)。
+    ///
+    /// 3 つの一覧(`positionFirst` / `positionMiddle` / `positionLast`)は**同じ並びで書く**決まりなので、
+    /// ほかの本の語が何番目かを見て、同じ番目の「上」の語を選ぶ(利用者の指示 2026-09-21)。
+    /// 一覧の長さが違うときは、いちばん近い所まで寄せる。
+    static func firstPositionWord(_ others: [String], _ rules: SeriesRules.Volume) -> String? {
+        let words = rules.positionWords
+        guard !words.first.isEmpty else { return nil }
+        for text in others {
+            // 「後編1」のような分冊は、語の部分だけで見る。
+            let word = String(text.prefix { !$0.isNumber }).trimmingCharacters(in: .whitespaces)
+            guard let i = words.middle.firstIndex(of: word) ?? words.last.firstIndex(of: word) else { continue }
+            return words.first[min(i, words.first.count - 1)]
+        }
+        return nil
     }
 
     /// 「上」「中」「下」(「前編」「中編」「後編」)を数にする。**組の中に「中」があるかで決める**:
@@ -452,7 +471,8 @@ enum ProposalFinalizer {
             guard !rest.isEmpty else { continue }
             // 総集編の語で始まる残りは、区切りが無くても採る(「X総集編1」。語そのものが切れ目を示している)。
             let startsWithCompilationWord = engine.compilation.keywordRange(in: rest)?.lowerBound == rest.startIndex
-            guard SeriesGrouper.isCleanCut(title, at: name.count) || startsWithCompilationWord else { continue }
+            guard SeriesGrouper.isCleanCut(title, at: name.count) || startsWithCompilationWord
+                || SeriesGrouper.startsNewWord(title, at: name.count) else { continue }
             document.books[i].volumeText = rest
             log?.apply("unnumberedVolume", to: document.books[i].id)
         }
@@ -569,8 +589,10 @@ enum ProposalFinalizer {
             // どれも決められなければ推定しない。
             let exact = plausible.filter { remainder($0).isEmpty }
             let candidates = plausible.count == 1 ? plausible : exact
-            guard candidates.count == 1 else { continue }
-            let i = candidates[0]
+            // **版違いは同じ作品なので 1 冊と数える**(「X」と「X フルカラー版」は、どちらも 1 巻。
+            // 印を除いた比べるタイトルが同じなら、候補が何冊あっても迷いは無い。2026-09-21、利用者の指摘)。
+            let bases = Set(candidates.map { String(engine.text.comparable(document.books[$0].compareTitle).key) })
+            guard !candidates.isEmpty, bases.count == 1 else { continue }
             // ほかの巻がゼロ埋め(「02」「03」)なら、同じ桁数にそろえる(「01」)。
             let padded = indices.compactMap { i -> Int? in
                 let t = document.books[i].volumeText
@@ -584,7 +606,8 @@ enum ProposalFinalizer {
             }
             // ほかの巻が漢数字だけ(「二籠」「三鼎」)なら、推定した 1 巻も同じ書き方にする ―― 並びの中で
             // 1 冊だけ算用数字が混ざらないように(2026-09-22、利用者の指摘)。大字なら「壱」、その旧字体なら「壹」。
-            let others = indices.filter { $0 != i }.map { document.books[$0].volumeText }.filter { !$0.isEmpty }
+            let others = indices.filter { !candidates.contains($0) }
+                .map { document.books[$0].volumeText }.filter { !$0.isEmpty }
             let kanji = !others.isEmpty && others.allSatisfy { $0.allSatisfy(VolumeExtractor.kanjiDigits.contains) }
             var one = !kanji ? nil
                 : others.joined().contains(where: "壹貳參".contains) ? "壹"
@@ -595,10 +618,15 @@ enum ProposalFinalizer {
                     $0.count != $1.count ? $0.count < $1.count : $0 < $1
                 }.first
             }
-            document.books[i].volumeText = one ?? (usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1")
-            document.books[i].volumeNumber = 1
-            document.books[i].volumeInferred = true
-            log?.apply("firstVolume", to: document.books[i].id)
+            // 位置の語で並ぶシリーズ(「後編」「下巻」)なら、そろいの「上」の語にする。
+            if one == nil { one = Self.firstPositionWord(others, engine.volumes.rules) }
+            let text = one ?? (usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1")
+            for i in candidates {
+                document.books[i].volumeText = text
+                document.books[i].volumeNumber = 1
+                document.books[i].volumeInferred = true
+                log?.apply("firstVolume", to: document.books[i].id)
+            }
         }
     }
 }

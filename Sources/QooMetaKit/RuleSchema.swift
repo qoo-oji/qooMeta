@@ -122,6 +122,8 @@ enum RuleSchema {
         f("grouping", .object(Node([
             f("compilation", rule([f("singleWhenMainExists", .bool)], enabled: false)),
             f("volumeHead", rule()),
+            // 区切りなしで続く副題(「X リベンジ」)を、巻でまとまった組へ入れる。組を作るのには使わない。
+            Field(name: "attachAcrossScript", shape: rule(), since: 7),
             f("sharedPrefix", rule([
                 f("minPrefix", .int(1...20)), f("minWholeTitle", .int(1...20)),
                 f("conditions", .object(Node([

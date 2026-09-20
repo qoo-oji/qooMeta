@@ -4004,6 +4004,23 @@
         }
       }
     },
+    "Keep the three lists in the same order (上/中/下, 上巻/中巻/下巻, 前編/中編/後編): a first volume that had no number is written with the word that matches the set — 後編 gives 前編.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the three lists in the same order (上/中/下, 上巻/中巻/下巻, 前編/中編/後編): a first volume that had no number is written with the word that matches the set — 後編 gives 前編."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 つの一覧は同じ並びで書いてください(上/中/下、上巻/中巻/下巻、前編/中編/後編)。番号の無い 1 巻目を推定したとき、そろいの語で書きます(「後編」があれば「前編」)。"
+          }
+        }
+      }
+    },
     "Keep them together": {
       "extractionState": "manual",
       "localizations": {
@@ -6690,6 +6707,23 @@
         }
       }
     },
+    "Take in a subtitle that follows with no separator": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take in a subtitle that follows with no separator"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "区切りなしで続く副題も入れる"
+          }
+        }
+      }
+    },
     "Text excluded while parsing": {
       "extractionState": "manual",
       "localizations": {
@@ -8964,6 +8998,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "~ - ・ ! ? . ) ー … 数字の後ろがこれらの文字なら、巻数として読みます。「〜」「―」は入れていないので、使う蔵書なら足してください。"
+          }
+        }
+      }
+    },
+    "“Her Hypnosis Revenge” joins the run of “Her Hypnosis 2, 3, 4”. It acts only where the script changes and what follows is not hiragana — hiragana carries on the same word — and only to join a run that volumes already built, never to start one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Her Hypnosis Revenge” joins the run of “Her Hypnosis 2, 3, 4”. It acts only where the script changes and what follows is not hiragana — hiragana carries on the same word — and only to join a run that volumes already built, never to start one"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「彼女催眠2・3・4」の並びに「彼女催眠リベンジ」を入れます。効くのは文字の種類が変わり、続きがひらがなでないとき(ひらがなが続くのは語の途中)で、しかも巻でまとまった組へ入れるときだけです。新しい組を作るのには使いません。"
           }
         }
       }

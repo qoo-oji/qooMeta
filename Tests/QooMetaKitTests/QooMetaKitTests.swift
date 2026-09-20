@@ -61,6 +61,18 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(v?.number == number)
     }
 
+    /// 位置の語で並ぶシリーズの 1 巻目は、そろいの「上」の語(「後編」なら「前編」、「中巻」なら「上巻」)。
+    /// 3 つの一覧は同じ並びで書いてあるので、何番目かで選ぶ(利用者の指示 2026-09-21)。
+    @Test func theFirstPositionWordMatchesTheSet() {
+        let rules = builtinEngine.volumes.rules
+        #expect(ProposalFinalizer.firstPositionWord(["後編"], rules) == "前編")
+        #expect(ProposalFinalizer.firstPositionWord(["下巻"], rules) == "上巻")
+        #expect(ProposalFinalizer.firstPositionWord(["下"], rules) == "上")
+        #expect(ProposalFinalizer.firstPositionWord(["中"], rules) == "上")
+        #expect(ProposalFinalizer.firstPositionWord(["後編2"], rules) == "前編")
+        #expect(ProposalFinalizer.firstPositionWord(["夏の章"], rules) == nil)
+    }
+
     @Test func positionWordsAreReadAsText() {
         // 1 冊だけでは数にしない(数はシリーズの中の文脈で決める)。
         let v = builtinEngine.volumes.extract(fromRemainder: " 後編")

@@ -18,6 +18,11 @@ struct SeriesGrouper: Sendable {
     /// (短いシリーズ名の「X」と「X 2」)。
     var minWholeTitle: Int
 
+    /// 区切りなしで続く副題の本(「X リベンジ」の X とカタカナの境)も、その組に入れるか(規則 attachAcrossScript)。
+    /// **文字の種類が変わる所だけ**を切れ目とみなす、ゆるい判定。すでに巻でまとまった組へ**入れるときにだけ**使い、
+    /// 新しい組を作るのには使わない(日本語は語の中で文字種が変わるので、組を作る手がかりには弱い)。
+    var attachesAcrossScript: Bool
+
     /// 副題付きの本(「X 〇〇編」)を、巻でまとめた「X」の組に入れるか。NDL の書誌では副題付きが別の作品として
     /// 記録されていることが多く(「X : 〇〇」)、入れると NDL を正解とした適合率は下がる。どちらが正しいかは
     /// 蔵書の整理の考え方次第(docs/design.md「公開データでの検討」)。
@@ -62,6 +67,7 @@ struct SeriesGrouper: Sendable {
         self.minPrefix = minPrefix ?? g.minPrefix
         minWholeTitle = g.minWholeTitle
         attachesSubtitledBooks = g.attachSubtitled
+        attachesAcrossScript = g.attachAcrossScript
         rejectsHiraganaEndings = g.rejectHiraganaEndings
         splitsByRelation = g.splitByRelation
         splitsByGenre = g.splitByGenre
@@ -105,6 +111,17 @@ struct SeriesGrouper: Sendable {
         case 0x30...0x39: return .digit
         default: return ch.isLetter ? .latin : .other
         }
+    }
+
+    /// 区切りの無い所で、**次の語が始まっているとみなせるか**。文字の種類が変わり、しかも続きがひらがなでない
+    /// ことを見る ―― ひらがなが続くのは語の途中(「灯|り咲く庭」)、カタカナや英字が続くのは副題
+    /// (「彼女催眠|リベンジ」)。すでに巻でまとまった組へ入れるときと、残りを巻数(表示)にするときに使う
+    /// (2026-09-21、利用者の指示)。
+    static func startsNewWord(_ text: ComparableText, at length: Int) -> Bool {
+        guard length > 0, length < text.key.count else { return false }
+        let next = text.key[length]
+        guard !isHiragana(next) else { return false }
+        return script(text.key[length - 1]) != script(next)
     }
 
     static func isSingleScriptRun(_ chars: [Character]) -> Bool {
@@ -250,10 +267,14 @@ struct SeriesGrouper: Sendable {
                 let heads = headGroups.indices.sorted { headGroups[$0].key.count > headGroups[$1].key.count }
                 rest.removeAll { item in
                     let key = String(item.text.key)
-                    guard let h = heads.first(where: { key.hasPrefix(headGroups[$0].key)
-                        && Self.isCleanCut(item.text, at: headGroups[$0].key.count) }) else { return false }
+                    guard let h = heads.first(where: { i in
+                        guard key.hasPrefix(headGroups[i].key) else { return false }
+                        return Self.isCleanCut(item.text, at: headGroups[i].key.count)
+                            || (attachesAcrossScript && Self.startsNewWord(item.text, at: headGroups[i].key.count))
+                    }) else { return false }
                     headGroups[h].members.append((item.id, item.text, headGroups[h].key.count))
-                    log?.apply("subtitled", to: item.id)
+                    log?.apply(Self.isCleanCut(item.text, at: headGroups[h].key.count)
+                        ? "subtitled" : "attachAcrossScript", to: item.id)
                     return true
                 }
             }
@@ -321,6 +342,15 @@ struct SeriesGrouper: Sendable {
                     groups.append(g)
                     continue
                 }
+                // 総集編の語が**題名の途中にあるだけ**で、その名前が指す本編が無いとき(「X・食／総集編」)は、
+                // ふつうの本として、名前の頭が合う組へ入れる ―― 語が 1 つ入っているせいで、どのシリーズにも
+                // 入れないのはおかしい(2026-09-21、利用者の指摘)。
+                if members.count == 1, !hasMain, placement != .notInSeries,
+                   let g = attachableGroup(for: members[0].0, in: groups, from: groupsBefore) {
+                    groups[g].memberIDs = (groups[g].memberIDs + [members[0].0.id]).sorted()
+                    log?.apply("subtitled", to: members[0].0.id)
+                    continue
+                }
                 guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
                 var g = CandidateGroup(
                     id: 0, writerKey: writerKey.components(separatedBy: "\u{1}")[0],
@@ -344,6 +374,18 @@ struct SeriesGrouper: Sendable {
             groups[i].id = i + 1
         }
         return groups
+    }
+
+    /// その本の名前の頭に当たる組(いちばん長い名前のもの)。総集編の語が題名の途中にあるだけの本を、
+    /// ふつうの本として入れるのに使う。切れ目の見方は副題の本と同じ。
+    private func attachableGroup(for book: WorkingBook, in groups: [CandidateGroup], from first: Int) -> Int? {
+        let title = text.comparable(book.compareTitle)
+        return (first..<groups.count).filter { i in
+            let name = text.comparable(groups[i].ruleName).key
+            guard !name.isEmpty, title.key.count > name.count, String(title.key).hasPrefix(String(name)) else { return false }
+            return Self.isCleanCut(title, at: name.count)
+                || (attachesAcrossScript && Self.startsNewWord(title, at: name.count))
+        }.max { text.key(groups[$0].ruleName).count < text.key(groups[$1].ruleName).count }
     }
 
     /// 総集編が言っている本編の名前(「X 総集編」の「X」)で、入れる先の組を探す(方針 compilations = inMainSeries)。
