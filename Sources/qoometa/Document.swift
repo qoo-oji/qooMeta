@@ -1,5 +1,6 @@
 import Foundation
 import QooMetaAI
+import QooMetaExport
 import QooMetaKit
 import QooMetaScan
 
@@ -87,6 +88,104 @@ struct ScanDocument: Codable {
     }
 }
 
+/// CLI が読める入力: `scan` が作る提案ファイルか、アプリの作業ファイル。どちらも中身は蔵書の名前なので、リポジトリの外に置く。
+///
+/// 作業ファイルを読めるようにしてあるのは、アプリで直した内容のまま**一括で書き出し・集計をやり直せる**ように
+/// (docs/roadmap.md の段階 10)。作業ファイルはファイルの事実(日付・iノード)を持たないので、パスは起点と相対パスから組み立てる。
+enum InputDocument {
+    case scan(ScanDocument)
+    case work(Workfile)
+
+    static func load(_ path: String) throws -> InputDocument {
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let kind = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["kind"] as? String
+        if kind == Workfile.kind { return .work(try Workfile.decoded(data)) }
+        return .scan(try ScanDocument.load(path))
+    }
+
+    var rootPath: String {
+        switch self {
+        case .scan(let d): d.rootPath
+        case .work(let w): w.rootPath
+        }
+    }
+
+    var createdAt: Date {
+        switch self {
+        case .scan(let d): d.createdAt
+        case .work(let w): w.savedAt ?? Date(timeIntervalSince1970: 0)
+        }
+    }
+
+    /// 端末内モデルの判定(作業ファイルは持たない)。
+    var judgements: [ScanDocument.Judgement] {
+        switch self {
+        case .scan(let d): d.judgements
+        case .work: []
+        }
+    }
+
+    var bookCount: Int {
+        switch self {
+        case .scan(let d): d.files.count
+        case .work(let w): w.books.count
+        }
+    }
+
+    /// 読み取りの入力。作業ファイルは、自分の持つ割り当て(`--presets` があればそちら)と、利用者の修正を渡す。
+    func inputs(useAI: Bool, rulesOnly: ProposalSet? = nil, presets: ScanDocument.PresetMap? = nil) -> [BookInput] {
+        switch self {
+        case .scan(let d): d.inputs(useAI: useAI, rulesOnly: rulesOnly, presets: presets)
+        case .work(let w):
+            w.inputs.map { input in
+                guard let presets else { return input }
+                var copy = input
+                copy.preset = presets.preset(for: input.id)
+                return copy
+            }
+        }
+    }
+
+    /// 名前とプリセット(型の一致を数える `formats` 用)。
+    var namesAndPresets: [(name: String, preset: String?)] {
+        switch self {
+        case .scan(let d): d.files.map { (name: $0.baseName, preset: nil) }
+        case .work(let w): w.inputs.map { (name: $0.name, preset: $0.preset) }
+        }
+    }
+
+    /// 書き出しに要るファイルの事実。作業ファイルには日付が無いので、起点からのパスと拡張子だけを組み立てる。
+    var fileFacts: [String: Exporter.FileFacts] {
+        switch self {
+        case .scan(let d):
+            Dictionary(d.files.map { f in
+                (f.relativePath, Exporter.FileFacts(path: f.path, fileExtension: f.fileExtension,
+                                                    dateAdded: f.created ?? f.modified))
+            }, uniquingKeysWith: { a, _ in a })
+        case .work(let w):
+            Dictionary(w.books.map { book in
+                (book.id, Exporter.FileFacts(path: (w.rootPath as NSString).appendingPathComponent(book.id),
+                                             fileExtension: (book.id as NSString).pathExtension))
+            }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    /// qooViewer がファイルを同定する手段。作業ファイルにはファイルノードが無いので、パスだけ。
+    var identities: [String: Exporter.FileIdentity] {
+        switch self {
+        case .scan(let d):
+            Dictionary(d.files.map { f in
+                (f.relativePath, Exporter.FileIdentity(path: f.path, inodeNumber: f.inodeNumber,
+                                                       volumeDeviceNumber: f.volumeDeviceNumber, volumeUUID: f.volumeUUID))
+            }, uniquingKeysWith: { a, _ in a })
+        case .work(let w):
+            Dictionary(w.books.map { book in
+                (book.id, Exporter.FileIdentity(path: (w.rootPath as NSString).appendingPathComponent(book.id)))
+            }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+}
+
 /// 提案を計算する道具一式(規則・語彙)。
 struct Proposer {
     let rules: CompiledRules
@@ -96,8 +195,8 @@ struct Proposer {
     /// 説明(組になりかけた相手など)も作るか(見直し表のため)。
     var explanations = false
 
-    /// 規則だけの提案と、端末内モデルの判定を反映した提案。
-    func proposals(_ doc: ScanDocument, useAI: Bool) -> (rulesOnly: ProposalSet, final: ProposalSet) {
+    /// 規則だけの提案と、端末内モデルの判定を反映した提案(提案ファイルでも作業ファイルでも同じ)。
+    func proposals(_ doc: InputDocument, useAI: Bool) -> (rulesOnly: ProposalSet, final: ProposalSet) {
         let options = ProposalOptions(explanations: explanations)
         let rulesOnly = proposeSync(doc.inputs(useAI: false, presets: presets), rules: rules, dictionaries: dictionaries,
                                     options: options)

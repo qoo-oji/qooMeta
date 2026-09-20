@@ -8,7 +8,7 @@ import QooMetaScan
 /// 標準出力はターミナルの記録や AI との会話へ写りうるので、名前を出さない
 /// (qooViewer の check-private-terms.py と同じ考え方)。名前を見るのは手元で開く HTML の見直し表だけ。
 enum StatsReport {
-    static func lines(_ set: ProposalSet, doc: ScanDocument) -> [String] {
+    static func lines(_ set: ProposalSet, judgements: [ScanDocument.Judgement] = []) -> [String] {
         let books = set.proposals
         func ratio(_ n: Int, _ d: Int) -> String { d == 0 ? "-" : String(format: "%.1f%%", Double(n) * 100 / Double(d)) }
         let matched = books.filter { $0.reading.formatIndex != nil }
@@ -30,14 +30,14 @@ enum StatsReport {
             "シリーズ: \(set.series.count) 組 / \(sizes.reduce(0, +)) 冊(組の大きさ 最大 \(sizes.max() ?? 0)、2 冊の組 \(sizes.filter { $0 == 2 }.count))",
             "  組になった理由: " + evidence.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: "、"),
         ]
-        let judged = doc.judgements.compactMap(\.verdict)
-        if !doc.judgements.isEmpty {
+        let judged = judgements.compactMap(\.verdict)
+        if !judgements.isEmpty {
             let accepted = judged.filter(\.isSeries)
             let seconds = judged.reduce(0.0) { $0 + $1.seconds }
             lines += [
-                "端末内モデルの判定: \(judged.count) 組(判定できなかった: \(doc.judgements.filter { $0.error != nil }.count) 組)",
+                "端末内モデルの判定: \(judged.count) 組(判定できなかった: \(judgements.filter { $0.error != nil }.count) 組)",
                 "  シリーズと判定: \(accepted.count)(\(ratio(accepted.count, judged.count)))、確からしさ \(Dictionary(grouping: accepted, by: \.confidence.rawValue).mapValues(\.count))",
-                "  名前を規則から変えた: \(zip(doc.judgements, doc.judgements.map(\.verdict)).filter { j, v in v.map { $0.isSeries && !$0.seriesName.isEmpty && $0.seriesName != j.ruleName } ?? false }.count) 組、外した本: \(accepted.reduce(0) { $0 + $1.excludedIDs.count }) 冊",
+                "  名前を規則から変えた: \(zip(judgements, judgements.map(\.verdict)).filter { j, v in v.map { $0.isSeries && !$0.seriesName.isEmpty && $0.seriesName != j.ruleName } ?? false }.count) 組、外した本: \(accepted.reduce(0) { $0 + $1.excludedIDs.count }) 冊",
                 String(format: "  所要時間: 合計 %.0f 秒、1 組あたり %.1f 秒", seconds, judged.isEmpty ? 0 : seconds / Double(judged.count)),
             ]
         }

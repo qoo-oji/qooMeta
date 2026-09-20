@@ -14,7 +14,6 @@ let usage = """
 使い方:
   qoometa scan <フォルダ> --out <提案.json>
       書庫ファイルを集め、名前を解析し、規則でシリーズを提案する(集計を出す)
-      (ファイル名は同人誌のフォーマットで読む。本の種別の語彙は config.json の mediaTypes)
   qoometa judge --in <提案.json> [--out <提案.json>] [--limit N]
       規則のシリーズを端末内モデル(Apple Intelligence)で判定する(macOS 26 以降)
   qoometa stats --in <提案.json> [--rules-only] [--explain]
@@ -41,6 +40,8 @@ let usage = """
   qoometa rules show
       既定値に利用者の変更を重ねた結果と、変更が効いている所を出す
 
+--in には、scan が作った提案ファイルのほか、**アプリの作業ファイル**(直した内容つき)も渡せる
+  (stats・export・formats・bench。アプリで直したまま一括で書き出し・集計し直せる)。
 どのコマンドにも --presets <割り当て.json> を付けられる(フォルダごとにどのプリセットで読むか。
   { "default": "commercial", "folders": { "相対パス": "doujinshi" } }。蔵書の名前を含むのでリポジトリの外に置く)。
 どのコマンドにも --rules <変更.json> を付けられる(既定値に重ねる利用者の変更。差分か rules-bundle)。
@@ -96,21 +97,6 @@ func checkedOutputURL(_ path: String, _ args: Arguments) throws -> URL {
     return url
 }
 
-/// 利用者ごとの設定。**蔵書の言葉(本の種別の名前など)を含むので、リポジトリの外に置く**
-/// (`~/Library/Application Support/qooMeta-dev/config.json`)。
-struct Config: Decodable {
-    /// 本の種別(`@mediatype`)の語彙。ファイル名の先頭の丸括弧がこのどれかなら本の種別、そうでなければイベント。
-    var mediaTypes: [String]?
-
-    static let url = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/qooMeta-dev/config.json")
-
-    static func load() throws -> Config {
-        guard FileManager.default.fileExists(atPath: url.path) else { return Config() }
-        return try JSONDecoder().decode(Config.self, from: Data(contentsOf: url))
-    }
-}
-
 func run() async throws {
     let raw = Array(CommandLine.arguments.dropFirst())
     guard let command = raw.first else { print(usage); return }
@@ -130,7 +116,7 @@ func run() async throws {
         let files = try FolderScanner.scan(root: URL(fileURLWithPath: root))
         let doc = ScanDocument(createdAt: Date(), rootPath: URL(fileURLWithPath: root).standardizedFileURL.path, files: files)
         try doc.save(out)
-        StatsReport.lines(proposer.proposals(doc, useAI: false).final, doc: doc).forEach { print($0) }
+        StatsReport.lines(proposer.proposals(.scan(doc), useAI: false).final, judgements: doc.judgements).forEach { print($0) }
 
     case "judge":
         let input = try args.require("in")
@@ -141,7 +127,7 @@ func run() async throws {
         }
         var doc = try ScanDocument.load(input)
         let proposer = try makeProposer(rules, presetsPath: args.options["presets"])
-        let set = proposer.proposals(doc, useAI: false).rulesOnly
+        let set = proposer.proposals(.scan(doc), useAI: false).rulesOnly
         let limit = Int(args.options["limit"] ?? "") ?? Int.max
         let titles = Dictionary(set.proposals.map { ($0.id, $0.metadata.title) }, uniquingKeysWith: { a, _ in a })
         let done = Set(doc.judgements.filter { $0.verdict != nil }.map(\.memberIDs))
@@ -163,25 +149,25 @@ func run() async throws {
             }
         }
         try doc.save(out)
-        StatsReport.lines(proposer.proposals(doc, useAI: true).final, doc: doc).forEach { print($0) }
+        StatsReport.lines(proposer.proposals(.scan(doc), useAI: true).final, judgements: doc.judgements).forEach { print($0) }
 
     case "stats":
-        let doc = try ScanDocument.load(try args.require("in"))
+        let doc = try InputDocument.load(try args.require("in"))
         var proposer = try makeProposer(rules, presetsPath: args.options["presets"])
         proposer.explanations = args.flags.contains("explain")
-        StatsReport.lines(proposer.proposals(doc, useAI: useAI).final, doc: doc).forEach { print($0) }
+        StatsReport.lines(proposer.proposals(doc, useAI: useAI).final, judgements: doc.judgements).forEach { print($0) }
 
     case "report":
         let doc = try ScanDocument.load(try args.require("in"))
         var proposer = try makeProposer(rules, presetsPath: args.options["presets"])
         proposer.explanations = true
-        let (rulesOnly, set) = proposer.proposals(doc, useAI: useAI)
+        let (rulesOnly, set) = proposer.proposals(.scan(doc), useAI: useAI)
         let out = try checkedOutputURL(try args.require("out"), args)
         try ReviewReport.html(set, doc: doc, rulesOnly: rulesOnly).write(to: out, atomically: true, encoding: .utf8)
         print("見直し表を書きました(\(set.series.count) 組)")
 
     case "export":
-        let doc = try ScanDocument.load(try args.require("in"))
+        let doc = try InputDocument.load(try args.require("in"))
         let set = try makeProposer(rules, presetsPath: args.options["presets"]).proposals(doc, useAI: useAI).final
         let out = try checkedOutputURL(try args.require("out"), args)
         // 書き出し先は --to。以前の --format stackroom|qooviewer も受け付ける。
@@ -208,17 +194,10 @@ func run() async throws {
         let data: Data
         switch target.format {
         case .stackroomXML:
-            let files = Dictionary(doc.files.map { f in
-                (f.relativePath, Exporter.FileFacts(path: f.path, fileExtension: f.fileExtension, dateAdded: f.created ?? f.modified))
-            }, uniquingKeysWith: { a, _ in a })
-            data = try Exporter.stackroomXML(set, files: files, mapping: mapping, options: .init(
+            data = try Exporter.stackroomXML(set, files: doc.fileFacts, mapping: mapping, options: .init(
                 bookType: Int(args.options["book-type"] ?? "") ?? 0, defaultDateAdded: doc.createdAt))
         case .qooViewerJSON:
-            let identities = Dictionary(doc.files.map { f in
-                (f.relativePath, Exporter.FileIdentity(path: f.path, inodeNumber: f.inodeNumber,
-                                                       volumeDeviceNumber: f.volumeDeviceNumber, volumeUUID: f.volumeUUID))
-            }, uniquingKeysWith: { a, _ in a })
-            data = try Exporter.qooViewerJSON(set, identities: identities, mapping: mapping)
+            data = try Exporter.qooViewerJSON(set, identities: doc.identities, mapping: mapping)
         }
         try data.write(to: out, options: .atomic)
         print("書き出しました(\(target.label)): \(set.proposals.count) 冊"
@@ -226,7 +205,7 @@ func run() async throws {
 
     case "series-list":
         let doc = try ScanDocument.load(try args.require("in"))
-        let set = try makeProposer(rules, presetsPath: args.options["presets"]).proposals(doc, useAI: useAI).final
+        let set = try makeProposer(rules, presetsPath: args.options["presets"]).proposals(.scan(doc), useAI: useAI).final
         let out = try checkedOutputURL(try args.require("out"), args)
         // --exclude-from <以前の一覧.csv>: そこに載っているファイル名の本は出さない。
         var excluded = Set<String>()
@@ -241,15 +220,17 @@ func run() async throws {
               + (excluded.isEmpty ? "" : "(以前の一覧の \(excluded.count) 件の名前と一致した \(inSeries.count - written.count) 冊を除いた)"))
 
     case "formats":
-        let doc = try ScanDocument.load(try args.require("in"))
-        // --preset: どのプリセットで読むか(既定は規則ファイルの defaultPreset)。--presets でフォルダごとに分けたときは、
-        // 割り当てのとおりに数える。
+        let doc = try InputDocument.load(try args.require("in"))
+        // --preset: どのプリセットで読むか(既定は規則ファイルの defaultPreset)。--presets でフォルダごとに分けたときと、
+        // 作業ファイルに割り当てがあるときは、そのとおりに数える。
         let map = try args.options["presets"].map { try ScanDocument.PresetMap.load($0) }
-        FormatReport.lines(doc.files.map { (name: $0.baseName, preset: map?.preset(for: $0.relativePath) ?? args.options["preset"]) },
-                           presets: rules.formats).forEach { print($0) }
+        let names = doc.inputs(useAI: false, presets: map).map {
+            (name: $0.name, preset: $0.preset ?? args.options["preset"])
+        }
+        FormatReport.lines(names, presets: rules.formats).forEach { print($0) }
 
     case "bench":
-        let doc = try ScanDocument.load(try args.require("in"))
+        let doc = try InputDocument.load(try args.require("in"))
         try await bench(doc, proposer: try makeProposer(rules, presetsPath: args.options["presets"]))
 
     case "evaluate":
@@ -314,8 +295,8 @@ func makeProposer(_ rules: CompiledRules, presetsPath: String? = nil) throws -> 
 }
 
 /// 一括の提案と、1 冊の追加・変更にかかる時間(docs/api.md「性能」の目安を確かめる)。
-func bench(_ doc: ScanDocument, proposer: Proposer) async throws {
-    let inputs = doc.inputs(useAI: false)
+func bench(_ doc: InputDocument, proposer: Proposer) async throws {
+    let inputs = doc.inputs(useAI: false, presets: proposer.presets)
     func seconds(_ body: () throws -> Void) rethrows -> Double {
         let start = Date()
         try body()
