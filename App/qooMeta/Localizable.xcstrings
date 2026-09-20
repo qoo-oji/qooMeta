@@ -2457,6 +2457,23 @@
         }
       }
     },
+    "Derived from the volume as written, by the rules for reading a volume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Derived from the volume as written, by the rules for reading a volume"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数(表示)から、巻の読み方の規則で導いた数です"
+          }
+        }
+      }
+    },
     "Description": {
       "extractionState": "manual",
       "localizations": {
@@ -2657,6 +2674,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "渡さない"
+          }
+        }
+      }
+    },
+    "Double-click to edit this book’s value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to edit this book’s value"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 回押すと、この本の値を直せます"
+          }
+        }
+      }
+    },
+    "Double-click to edit. Several authors are separated by 、": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to edit. Several authors are separated by 、"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 回押すと直せます。著者が複数のときは「、」で区切ります"
+          }
+        }
+      }
+    },
+    "Double-click to settle the series for this book. Empty puts it in no series": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to settle the series for this book. Empty puts it in no series"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 回押すと、この本のシリーズを決められます。空にすると、どのシリーズにも入れません"
+          }
+        }
+      }
+    },
+    "Double-click to settle the volume for this book. Empty clears it": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to settle the volume for this book. Empty clears it"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 回押すと、この本の巻数を決められます。空にすると巻数を消します"
           }
         }
       }
@@ -3388,6 +3473,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "ジャンル"
+          }
+        }
+      }
+    },
+    "Give the book a series name first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Give the book a series name first"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先にシリーズ名を決めてください"
           }
         }
       }
@@ -6316,6 +6418,23 @@
         }
       }
     },
+    "Set the series to “%@”?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the series to “%@”?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シリーズを「%@」にしますか?"
+          }
+        }
+      }
+    },
     "Set the volume": {
       "extractionState": "manual",
       "localizations": {
@@ -7196,6 +7315,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "qooMeta が見分けた結果を**どう扱うか**の設定です。正解が 1 つあるわけではないので、蔵書に合わせて選びます。"
+          }
+        }
+      }
+    },
+    "This also changes %1$lld books you did not pick: %2$lld gain a series and %3$lld lose one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This also changes %1$lld books you did not pick: %2$lld gain a series and %3$lld lose one."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択していない %1$lld 冊も変わります(新しくシリーズが付く %2$lld 冊、外れる %3$lld 冊)"
           }
         }
       }
