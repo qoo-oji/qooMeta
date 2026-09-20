@@ -30,7 +30,8 @@ struct QooMetaApp: App {
         Window("Series and volume extraction", id: SeriesRulesView.windowID) {
             SeriesRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
         }
-        .defaultSize(width: 980, height: 680)
+        // 左(やりたいこと)と右(設定)が、最初から窮屈でない幅。
+        .defaultSize(width: 1080, height: 760)
 
         // 環境設定(⌘,)。いまは画面の言語だけ。規則とプリセットは中身が大きいので、別の窓のまま。
         Settings {

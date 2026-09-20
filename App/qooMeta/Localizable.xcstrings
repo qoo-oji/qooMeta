@@ -4939,6 +4939,23 @@
         }
       }
     },
+    "Pick what is going wrong and the settings that bear on it appear on the right.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick what is going wrong and the settings that bear on it appear on the right."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "困っていることを選ぶと、それに効く設定が右に出ます。"
+          }
+        }
+      }
+    },
     "Publication forms (download edition, …)": {
       "extractionState": "manual",
       "localizations": {

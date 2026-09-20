@@ -77,6 +77,10 @@ struct SeriesRulesView: View {
                 // **やりたいことから入る。** 設定の名前を並べても、自分の困りごとと結び付かない
                 // (2026-09-20、利用者の指摘)。ここを選べば、それに効く設定だけが右に出る。
                 Section("What do you want to change?") {
+                    // 窓を開いた人が最初に読む 1 行。ここが何をする場所かを言っておかないと、
+                    // 項目の意味も読み取れない(2026-09-20、設計の見直し)。
+                    Text("Pick what is going wrong and the settings that bear on it appear on the right.")
+                        .font(.caption).foregroundStyle(.secondary)
                     ForEach(Goal.all) { goal in
                         Label(LocalizedStringKey(goal.title), systemImage: goal.symbol)
                             .tag(Selection.goal(goal.id))
