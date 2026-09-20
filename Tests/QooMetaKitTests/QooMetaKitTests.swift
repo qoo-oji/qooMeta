@@ -137,6 +137,53 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(entries[0]["inodeNumber"] as? Int == 11)
     }
 
+    /// 同じ Stackroom XML でも、ShelfRow へは読む欄だけを渡す(シリーズと巻の欄が無い。著者は先頭だけ)。
+    @Test func shelfRowGetsOnlyTheFieldsItReads() throws {
+        let data = try Exporter.stackroomXML(Self.proposals(), files: ["a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz")],
+                                             mapping: .standard(for: .shelfRow))
+        let root = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let book = try #require((root["Books"] as? [String: [String: Any]])?["1"])
+        #expect(book["Title"] as? String == "星降る夜の喫茶店 1")
+        #expect(book["Author"] as? String == "架空工房")        // 先頭だけ。
+        #expect(book["Genre"] as? String == "分類A")
+        #expect(book["Keyword B"] as? String == "1")           // 巻数(表示)は空いている欄へ。
+        #expect(book["Series"] == nil)
+        #expect(book["Volume"] == nil)
+        #expect(book["Neta"] == nil)                            // 取り込みでメモに入るので既定では渡さない。
+    }
+
+    /// 対応表は利用者が変えられる(イベントをキーワード A へ回す、など)。
+    @Test func theMappingCanBeChanged() throws {
+        let set = proposeSync([BookInput(id: "a.cbz", name: "(架空の催し) [架空工房] 月の庭 2 [付記]")],
+                              rules: .builtin, dictionaries: [:])
+        var mapping = FieldMapping.standard(for: .stackNest)
+        mapping.slots[.genre] = .keywordA      // ジャンルの位置に催しの名前が入る利用者。
+        mapping.slots[.info] = nil             // 情報は渡さない。
+        let data = try Exporter.stackroomXML(set, files: ["a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz")],
+                                             mapping: mapping)
+        let root = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let book = try #require((root["Books"] as? [String: [String: Any]])?["1"])
+        #expect(book["Keyword A"] as? String == "架空の催し")
+        #expect(book["Genre"] == nil)
+        #expect(book["Memo"] == nil)
+    }
+
+    /// 書き出しのプレビュー: どの欄が落ちるか(値のある冊数つき)。名前は含まない。
+    @Test func previewCountsWhatIsDropped() {
+        let set = Self.proposals()
+        let preview = Exporter.preview(set, mapping: .standard(for: .qooViewer))
+        #expect(preview.bookCount == 2)
+        let dropped = Dictionary(preview.droppedRows.map { ($0.key, $0.booksWithValue) }, uniquingKeysWith: { a, _ in a })
+        #expect(dropped[.genre] == 2)          // qooViewer にジャンルの欄は無い。
+        #expect(dropped[.source] == 1)   // 2 冊目は末尾に別の文字があり、原作として読まれない。
+        #expect(dropped[.volumeSort] == 2)
+        #expect(dropped[.title] == nil)        // 渡る欄は落ちない。
+        // 著者が 2 人いる本は、先頭だけが渡る。
+        #expect(preview.rows.first { $0.key == .authors }?.truncatedBooks == 2)
+        #expect(Exporter.preview(set, mapping: .standard(for: .stackNest)).rows
+            .first { $0.key == .authors }?.truncatedBooks == 0)
+    }
+
     @Test func comicInfoIsEscaped() throws {
         let set = Self.proposals()
         let book = try #require(set["b.cbr"])

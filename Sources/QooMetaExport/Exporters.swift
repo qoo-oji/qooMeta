@@ -54,20 +54,25 @@ public enum Exporter {
     /// 形は StackNest の `StackroomFormat`(BookRecord / LibraryDocument)が読む範囲に合わせる。
     /// 必須: ID, Title, Cover Image Path, Date Added, Book Type, File Type。`files` に無い本は書かない。
     public static func stackroomXML(_ set: ProposalSet, files: [String: FileFacts],
+                                    mapping: FieldMapping = .standard(for: .stackNest),
                                     options: StackroomOptions = StackroomOptions()) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList: stackroomDocument(set, files: files, options: options),
-                                           format: .xml, options: 0)
+        try PropertyListSerialization.data(
+            fromPropertyList: stackroomDocument(set, files: files, mapping: mapping, options: options),
+            format: .xml, options: 0)
     }
 
-    static func stackroomDocument(_ set: ProposalSet, files: [String: FileFacts], options: StackroomOptions) -> [String: Any] {
+    static func stackroomDocument(_ set: ProposalSet, files: [String: FileFacts], mapping: FieldMapping,
+                                  options: StackroomOptions) -> [String: Any] {
         var books: [String: Any] = [:]
         var number = 0
+        let keysBySlot = mapping.keysBySlot
         for book in set.proposals {
             guard let file = files[book.id] else { continue }
             number += 1
             var entry: [String: Any] = [
                 "ID": number,
-                "Title": book.metadata.title,
+                // Title は StackNest・ShelfRow が必須で読むので、対応表から外されていても空で入れる。
+                "Title": "",
                 "Path": file.path,
                 // 表紙の画像は用意しない。本そのものを指しておけば、StackNest は本のパスとして扱える
                 // (StackroomPathRecovery)。表紙は StackNest の「表紙の再生成」で作る。
@@ -78,17 +83,21 @@ public enum Exporter {
                 "My Rate": 0,
                 "Unseen": true,
             ]
-            let authors = authorValues(book.metadata)
-            if !authors.isEmpty { entry["Author"] = authors.joined(separator: ", ") }
-            if !book.metadata.genre.isEmpty { entry["Genre"] = book.metadata.genre }
-            if !book.metadata.source.isEmpty { entry["Neta"] = book.metadata.source }
-            // イベントと情報は、StackNest に合う欄が無いので空いている欄へ(段階 9 の対応表で選べるようにする)。
-            if !book.metadata.event.isEmpty { entry["Keyword A"] = book.metadata.event }
-            if !book.metadata.info.isEmpty { entry["Keyword B"] = book.metadata.info }
-            if !book.metadata.series.isEmpty { entry["Series"] = book.metadata.series }
-            // Volume は数値だけを持てるので、巻数(ソート用)を渡す。表示用は空いている欄へ。
-            if let volume = book.metadata.volumeSort { entry["Volume"] = volume }
-            if !book.metadata.volume.isEmpty { entry["Keyword C"] = book.metadata.volume }
+            // どの欄をどこへ渡すかは対応表が決める(書いていない欄は落ちる)。
+            for (slot, key) in keysBySlot {
+                guard let xmlKey = slot.stackroomKey else { continue }
+                let values = key.values(book.metadata)
+                guard let first = values.first, !first.isEmpty else { continue }
+                if slot == .volume {
+                    // Volume は数の欄。数に読めない表記は渡さない(落ちる欄としてプレビューに出る)。
+                    if let number = Double(first) { entry[xmlKey] = number }
+                } else if key == .authors {
+                    entry[xmlKey] = mapping.target.takesAllAuthors
+                        ? authorValues(book.metadata).joined(separator: ", ") : first
+                } else {
+                    entry[xmlKey] = first
+                }
+            }
             books[String(number)] = entry
         }
         return ["Books": books, "Playlists": [Any]()]
@@ -133,17 +142,17 @@ public enum Exporter {
 
     /// qooViewer の保存データ JSON(formatVersion 4 の `metadata` だけ)。qooViewer の「保存データの読み込み」で取り込める。
     /// 照合はファイルノード(iノード番号 + ボリューム)が主で、パス(bookID)は最終手段(qooViewer の LibraryJSONSchema.swift)。
-    public static func qooViewerJSON(_ set: ProposalSet, identities: [String: FileIdentity]) throws -> Data {
+    public static func qooViewerJSON(_ set: ProposalSet, identities: [String: FileIdentity],
+                                     mapping: FieldMapping = .standard(for: .qooViewer)) throws -> Data {
+        let keysBySlot = mapping.keysBySlot
         let entries = set.proposals.compactMap { book -> QooViewerEntry? in
             guard let file = identities[book.id] else { return nil }
+            // qooViewer の著者欄は 1 つなので、どの欄を渡しても先頭だけを入れる。
+            func value(_ slot: ExportSlot) -> String { keysBySlot[slot]?.values(book.metadata).first ?? "" }
             return QooViewerEntry(
                 bookID: file.path, inodeNumber: file.inodeNumber, volumeDeviceNumber: file.volumeDeviceNumber,
                 volumeUUID: file.volumeUUID,
-                // qooViewer の著者欄は 1 つなので、著者の並びの先頭を入れる。
-                author: book.metadata.authors.first ?? "",
-                title: book.metadata.title,
-                series: book.metadata.series,
-                seriesIndex: book.metadata.volume)
+                author: value(.author), title: value(.title), series: value(.series), seriesIndex: value(.seriesIndex))
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

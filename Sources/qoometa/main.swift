@@ -21,8 +21,11 @@ let usage = """
       集計を表示する(名前は出さない)。--explain はシリーズにならなかった本を組にしなかった規則も数える
   qoometa report --in <提案.json> --out <見直し表.html> [--rules-only]
       手元で開く見直し表を書く(名前を含む)
-  qoometa export --in <提案.json> --format stackroom|qooviewer --out <ファイル> [--book-type N] [--rules-only]
-      StackNest が取り込める Stackroom XML、または qooViewer の保存データ JSON を書く
+  qoometa export --in <提案.json> --to stacknest|shelfrow|qooviewer --out <ファイル> [--mapping <対応表.json>]
+                 [--book-type N] [--rules-only]
+      書き出し先のアプリが取り込める形を書く(StackNest・ShelfRow は Stackroom XML、qooViewer は保存データ JSON)。
+      どの欄をどこへ渡すかは対応表で決まる(既定は docs/metadata.md の表。--mapping で変えられる)。
+      落ちる欄と冊数は、書き出す前に表示する(名前は出さない)
   qoometa series-list --in <提案.json> --out <一覧.csv> [--rules-only] [--exclude-from <以前の一覧.csv>]
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
   qoometa formats --in <提案.json> [--preset <名前>]
@@ -181,25 +184,45 @@ func run() async throws {
         let doc = try ScanDocument.load(try args.require("in"))
         let set = try makeProposer(rules, presetsPath: args.options["presets"]).proposals(doc, useAI: useAI).final
         let out = try checkedOutputURL(try args.require("out"), args)
+        // 書き出し先は --to。以前の --format stackroom|qooviewer も受け付ける。
+        let targetName = args.options["to"] ?? args.options["format"] ?? ""
+        let target: ExportTarget = switch targetName {
+        case "stacknest", "stackroom": .stackNest
+        case "shelfrow": .shelfRow
+        case "qooviewer": .qooViewer
+        default: throw CLIError("--to は stacknest・shelfrow・qooviewer のどれか")
+        }
+        var mapping = FieldMapping.standard(for: target)
+        if let path = args.options["mapping"] {
+            let read = try JSONDecoder().decode(FieldMapping.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+            guard read.target == target else { throw CLIError("対応表の書き出し先(\(read.target.rawValue))が --to と違う") }
+            mapping = read
+        }
+        // 落ちる欄は、書き出す前に数で見せる(名前は出さない)。
+        let preview = Exporter.preview(set, mapping: mapping)
+        for row in FieldMapping.Key.allCases.map({ key in preview.rows.first { $0.key == key }! }) {
+            let where_ = row.slot.map { "→ \($0.label)" } ?? "落ちる"
+            let extra = row.truncatedBooks > 0 ? "、先頭だけ渡す \(row.truncatedBooks) 冊" : ""
+            print("  \(row.key.label): \(where_)(値のある本 \(row.booksWithValue) 冊\(extra))")
+        }
         let data: Data
-        switch try args.require("format") {
-        case "stackroom":
+        switch target.format {
+        case .stackroomXML:
             let files = Dictionary(doc.files.map { f in
                 (f.relativePath, Exporter.FileFacts(path: f.path, fileExtension: f.fileExtension, dateAdded: f.created ?? f.modified))
             }, uniquingKeysWith: { a, _ in a })
-            data = try Exporter.stackroomXML(set, files: files, options: .init(
+            data = try Exporter.stackroomXML(set, files: files, mapping: mapping, options: .init(
                 bookType: Int(args.options["book-type"] ?? "") ?? 0, defaultDateAdded: doc.createdAt))
-        case "qooviewer":
+        case .qooViewerJSON:
             let identities = Dictionary(doc.files.map { f in
                 (f.relativePath, Exporter.FileIdentity(path: f.path, inodeNumber: f.inodeNumber,
                                                        volumeDeviceNumber: f.volumeDeviceNumber, volumeUUID: f.volumeUUID))
             }, uniquingKeysWith: { a, _ in a })
-            data = try Exporter.qooViewerJSON(set, identities: identities)
-        default:
-            throw CLIError("--format は stackroom か qooviewer")
+            data = try Exporter.qooViewerJSON(set, identities: identities, mapping: mapping)
         }
         try data.write(to: out, options: .atomic)
-        print("書き出しました: \(set.proposals.count) 冊(シリーズ付き \(set.proposals.filter { $0.seriesID != nil }.count))")
+        print("書き出しました(\(target.label)): \(set.proposals.count) 冊"
+              + "(シリーズ付き \(set.proposals.filter { $0.seriesID != nil }.count))")
 
     case "series-list":
         let doc = try ScanDocument.load(try args.require("in"))

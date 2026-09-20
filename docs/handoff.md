@@ -12,6 +12,8 @@
   作業ファイル(`Sources/QooMetaKit/Workfile.swift`)。画面は変更の索引(`ProposalIndex`)の上に載せ替えた
   (`App/qooMeta/Workspace.swift`。段階 5 の `SeriesDerivation` は画面からは使っていない)。
   フォルダを開く・作業ファイルを開く / 保存する・フォルダごとの型の並びの割り当ても画面にある。
+- **段階 9(書き出し)も済み**(2026-09-20)。書き出し先ごとの欄の対応表(`FieldMapping`)と、落ちる欄を数えるプレビュー
+  (`Exporter.preview`)。CLI は `--to stacknest|shelfrow|qooviewer`。**画面の書き出しは段階 11**。
 - 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
 - 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
   コミットやブランチの状態はここに書かない(`git log` を見る)。

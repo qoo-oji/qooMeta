@@ -93,10 +93,16 @@
    - 画面は、フォルダを開く(`FolderScanner`)・作業ファイルを開く / 保存する・フォルダごとに型の並びを選ぶ。
      一覧は**変更の索引**(`ProposalIndex`)の上に載せ替えた(直した本の単位だけを計算し直す。段階 5 の `SeriesDerivation` は使わない)。
    - 本体はファイルに触らないので(`check-kit-purity.sh`)、作業ファイルの読み書きは Data までが `QooMetaKit`、保存はアプリ。
-9. **書き出し**: qooViewer の JSON、StackNest・ShelfRow 向けの Stackroom XML(StackNest 向けのシリーズの分け方と仮の巻番号)。
+9. **書き出し**(済み。2026-09-20。`Sources/QooMetaExport/FieldMapping.swift`): qooViewer の JSON、StackNest・ShelfRow 向けの Stackroom XML。
    書き出しのプレビュー(欄が落ちるところに印)。書き出し先ごとの**欄の対応表**(既定を持ち、利用者が変えられる。metadata.md
    「書き出し先ごとの欄の対応」。読み方は 1 つで、書き出し先ごとのプリセットは持たない。2026-09-20 決定)。
-   - 終わりの条件: 合成したデータの書き出しを、各アプリの取り込みの形式と突き合わせるテスト。
+   - 書き出し先は `ExportTarget`(qooViewer・StackNest・ShelfRow)。StackNest と ShelfRow は同じ Stackroom XML だが、
+     読む欄が違うので対応表で分ける(ShelfRow はシリーズと巻の欄を持たず、著者は先頭だけ)。
+   - `Exporter.preview` は、欄ごとの行き先と、値があるのに落ちる冊数を数える(名前は出さない)。CLI は書き出す前にこれを出す。
+   - CLI は `qoometa export --to stacknest|shelfrow|qooviewer [--mapping <対応表.json>]`。
+   - 終わりの条件(通った): 合成したデータの書き出しを、各アプリの取り込みの形式と突き合わせるテスト
+     (Stackroom XML・qooViewer JSON・ShelfRow の欄・対応表の差し替え・プレビューの数)。
+   - 残し: 画面の書き出し(プレビューの窓)は段階 11。
 10. **CLI**: 集計だけを出す検証・一括処理。
 11. **アプリの残り**: スタンプ、適用前のプレビュー、型の編集の窓、規則の方針の設定(ジャンルで分けるかどうか、総集編をシリーズに
     含めるかどうかとオフセット …。**画面で変えた設定は規則の差分として持つ**。concept.md の原則 8)、
