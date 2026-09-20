@@ -186,8 +186,12 @@ struct Goal: Identifiable {
     let symbol: String
     /// 「こうすると、こうなります」の 1 行。
     let help: String
-    /// **まず試す設定。** 8 つの操作を平らに並べても、どれから触ればよいかは分からない
-    /// (2026-09-20、設計の見直し)。効きの大きいものだけを出し、残りは畳む。
+    /// **まず試す設定。** 操作を平らに並べても、どれから触ればよいかは分からない(2026-09-20、設計の見直し)。
+    ///
+    /// 選ぶ決め方: **利用者が足すもの(語の一覧)と、選ぶもの(方針)を先に出す。**
+    /// 既定で入っている入切は出さない ―― 巻数が読まれないときに読み手の入切を見せても、全部すでに入っているので
+    /// 手が止まる。直るのはたいてい語の一覧の側(2026-09-20、既定値を確かめた)。入切は「止めたい」ときの道具なので、
+    /// 「それでも直らないとき」に置く。
     let controls: [Control]
     /// それでも直らないときの、細かい調整。
     var more: [Control] = []
@@ -225,9 +229,10 @@ struct Goal: Identifiable {
         Goal(id: "volume", title: "A volume number is missing or wrong",
              symbol: "number",
              help: "Which shapes count as a volume number, and what may stand before or after it.",
-             controls: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"),
-                        .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position")], more: [.ruleToggle("sharedLeadingKanji"), .list("volumePrefixes"), .list("volumeCounters"),
-                    .list("kanjiCounters"), .list("positionFirst"), .list("positionMiddle"), .list("positionLast"),
+             controls: [.list("volumePrefixes"), .list("volumeCounters"), .list("kanjiCounters")], more: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"),
+                    .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position"),
+                    .ruleToggle("sharedLeadingKanji"),
+                    .list("positionFirst"), .list("positionMiddle"), .list("positionLast"),
                     .list("wholeOnlyCounters"), .parameter(rule: "number", name: "mergedSpan"),
                     .parameter(rule: "sharedLeadingKanji", name: "minBooks")]),
         Goal(id: "duplicate", title: "The same work shows up twice",
@@ -237,8 +242,8 @@ struct Goal: Identifiable {
         Goal(id: "name", title: "The series name is cut off, or carries something extra",
              symbol: "textformat",
              help: "How the name is tidied once the books are grouped: what is dropped from its end, and what is kept.",
-             controls: [.ruleToggle("includeClosingBrackets"), .ruleToggle("includeFollowing"),
-                        .ruleToggle("trimTrailing"), .ruleToggle("dropLastWord")], more: [.list("trimTrailing"), .list("keepFollowing"), .list("labelIntroducers"),
+             controls: [.list("trimTrailing"), .list("keepFollowing"), .list("labelIntroducers")], more: [.ruleToggle("includeClosingBrackets"), .ruleToggle("includeFollowing"),
+                    .ruleToggle("trimTrailing"), .ruleToggle("dropLastWord"),
                     .list("brackets"), .list("boundaryCharacters")]),
         Goal(id: "compilation", title: "A compilation is in the wrong place",
              symbol: "books.vertical",
@@ -257,7 +262,7 @@ struct Goal: Identifiable {
         Goal(id: "standalone", title: "Keep certain books out of every series",
              symbol: "square.slash",
              help: "Books whose title holds one of these words are left on their own. Write a whole title here to leave that one book out.",
-             controls: [.ruleToggle("standalone"), .list("standaloneWords")]),
+             controls: [.list("standaloneWords")], more: [.ruleToggle("standalone")]),
         Goal(id: "magazine", title: "Issues of a magazine are grouped the wrong way",
              symbol: "newspaper",
              help: "Whether a magazine becomes one series, or one series for each year.",
@@ -452,37 +457,29 @@ private struct PoliciesPane: View {
     var editing: RulesEditing
     var catalog: RuleCatalog
 
-    /// **困りごとの多い順**に並べる。エンジンの並び(版 → 総集編 → 分け方 → 巻)をそのまま出していたので、
-    /// いちばんよく直すもの(シリーズが分かれる・まとまりすぎる)が 3 番目に埋もれていた(2026-09-20、利用者の指摘)。
-    /// 見出しは「どの設定か」ではなく**どんなときに触るか**で書き、1 行の手引きを添える。
-    private static let groups: [(title: String, note: String, ids: [String])] = [
-        ("When books land in different series",
-         "Turn to these when books that belong together end up apart, or when books that do not belong together are put in one series.",
-         ["differentGenre", "differentRelation", "subtitled"]),
-        ("When the same work appears twice",
-         "Turn to these when one book shows up twice because one of the two carries a word for a version or a publication form.",
-         ["editions", "sources"]),
-        ("When a volume number is missing or wrong",
-         "Turn to these when a book has no volume number, or carries one it should not.",
-         ["unnumberedFirst", "magazines"]),
-        ("Compilations and side stories",
-         "Where a compilation goes, and what volume number it is given there.",
-         ["compilations", "compilationVolume"]),
+    /// ここは**すべての選択肢の置き場**。困りごとからの道筋は「やりたいこと」が受け持つので、見出しは主題だけにし、
+    /// 「どんなときに触るか」は書かない ―― 同じ案内を 2 か所に、少し違う言葉で置かない(2026-09-20、設計の見直し)。
+    /// 並びは、やりたいことと同じく**当たる頻度の順**。
+    private static let groups: [(title: String, ids: [String])] = [
+        ("How series are split", ["differentGenre", "differentRelation", "subtitled"]),
+        ("The same work twice", ["editions", "sources"]),
+        ("Volumes", ["unnumberedFirst", "magazines"]),
+        ("Compilations and side stories", ["compilations", "compilationVolume"]),
     ]
 
     var body: some View {
         let known = Set(Self.groups.flatMap(\.ids))
         Form {
             Section {
-                Text("These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books. The ones nearer the top are the ones most often turned to.")
+                Text("These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books.")
                     .font(.callout).foregroundStyle(.secondary)
+                Label("If you know what you want to change, “What do you want to change?” at the top of the list gets you there faster.", systemImage: "arrow.up.left.circle")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(Self.groups, id: \.title) { group in
                 // 見出しは**鍵として**渡す。`Section(String)` の口に渡すと、訳を引かずにそのまま出る
                 // (画面に英語のまま出ていた。2026-09-20、利用者の指摘)。
                 Section {
-                    // 見出しの下に、どんなときに触るかを 1 行。設定の名前だけでは、自分の困りごとと結び付かない。
-                    Text(key: group.note).font(.caption).foregroundStyle(.secondary)
                     let rule = catalog.entries.first { $0.id == "compilation" }
                     ForEach(catalog.policies.filter { group.ids.contains($0.id) }) { policy in
                         // 総集編の置き場所は、敷居(1 冊でもシリーズにするか)と 1 つにまとめて出す。
@@ -841,18 +838,24 @@ private struct AddMarkerView: View {
             : trimmed.hasPrefix("$") ? "A name cannot start with “$”".ui
             : trimmed.count > 100 ? "That name is too long".ui : nil
         Form {
+            // **名前は札で、語ではない。** ここへ除きたい語そのものを書いてしまうのを防ぐため、何を書く欄なのかと、
+            // 語は次の画面で足すことを先に言う(2026-09-20、設計の見直し)。
+            Text("Name the rule after what it is for. The words it acts on are added on the next screen, once it exists.")
+                .font(.callout).foregroundStyle(.secondary)
             TextField("Name of the rule", text: $name, prompt: Text("For example: art books are not editions"))
-            Picker("Treatment", selection: $treat) {
+            Picker("What the words in it mean", selection: $treat) {
                 ForEach(RuleChanges.markerTreatments, id: \.self) { Text(key: RuleLabels.treatment($0).title).tag($0) }
             }
             Text(key: RuleLabels.treatment(treat).help).font(.caption).foregroundStyle(.secondary)
+            Label("A new rule goes to the top of the list, where it is looked at before the others.", systemImage: "arrow.up")
+                .font(.caption).foregroundStyle(.secondary)
             if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
                 Button("Add") { add(trimmed, treat) }.keyboardShortcut(.defaultAction).disabled(trimmed.isEmpty || problem != nil)
             }
         }
-        .padding(14).frame(width: 340)
+        .padding(14).frame(width: 380)
     }
 }
 
@@ -906,7 +909,7 @@ private struct ReadersPane: View {
         let readers = catalog.entries.filter { $0.stage == "volume.readers" }
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "The part after the series name is tried **from the top reader down**, and the first reader that can read it settles the volume.")
+                OrderExplanation(text: "The part left after the series name is tried **from the top down**, and the first way of reading that can make sense of it settles the volume. Turning one off is how you stop it reading something it should not.")
                 OrderedRuleList(rules: readers, selection: $selection, subtitle: { _ in "" },
                                 toggle: { id, on in editing.change { $0.setEnabled(on, rule: id) } },
                                 move: { ids in editing.change { $0.setReaderOrder(ids) } })
@@ -968,22 +971,37 @@ private struct RuleDetail: View {
 
 // MARK: - 組み方と名前(順番の決まった工程)
 
-private struct StepsPane: View {
+fileprivate struct StepsPane: View {
     var editing: RulesEditing
     var catalog: RuleCatalog
     @State private var selection: String?
 
-    private static let stages = ["grouping", "grouping.sharedPrefix.conditions", "naming", "volume.inference"]
+    /// 工程の並び。**番号と「何が何になるか」を出す** ―― 規則の名前が縦に並ぶだけでは、これが順に働く工程だと
+    /// 読み取れない(2026-09-20、設計の見直し)。条件の段は、2 段目にぶら下がるので番号を振らない。
+    fileprivate struct Stage {
+        let id: String
+        /// 工程の番号(ぶら下がる段は nil)。
+        let step: Int?
+        /// 何が何になるか。
+        let flow: String?
+    }
+
+    fileprivate static let stages: [Stage] = [
+        Stage(id: "grouping", step: 1, flow: "Titles → books that look like one series"),
+        Stage(id: "grouping.sharedPrefix.conditions", step: nil, flow: nil),
+        Stage(id: "naming", step: 2, flow: "A group of books → the name of their series"),
+        Stage(id: "volume.inference", step: 3, flow: "Books still without a number → a volume"),
+    ]
 
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "These rules are **stages**: each one takes what the one before it produced. They act in the order written and cannot be reordered.")
+                OrderExplanation(text: "The way from a title to a series name and a volume, in three steps. Each step takes what the one before it produced; they cannot be reordered.")
                 List(selection: $selection) {
-                    ForEach(Self.stages, id: \.self) { stage in
-                        let rules = catalog.entries.filter { $0.stage == stage }
+                    ForEach(Self.stages, id: \.id) { stage in
+                        let rules = catalog.entries.filter { $0.stage == stage.id }
                         if !rules.isEmpty {
-                            Section(LocalizedStringKey(RuleLabels.stages[stage] ?? stage)) {
+                            Section {
                                 ForEach(rules) { rule in
                                     HStack(spacing: 8) {
                                         if rule.canDisable {
@@ -1000,6 +1018,8 @@ private struct StepsPane: View {
                                     }
                                     .tag(rule.id)
                                 }
+                            } header: {
+                                StageHeader(stage: stage)
                             }
                         }
                     }
@@ -1007,13 +1027,39 @@ private struct StepsPane: View {
             }
             .frame(minWidth: 320, idealWidth: 360)
             Group {
-                if let rule = catalog.entries.first(where: { $0.id == selection && Self.stages.contains($0.stage) }) {
+                let stageIDs = Set(Self.stages.map(\.id))
+                if let rule = catalog.entries.first(where: { $0.id == selection && stageIDs.contains($0.stage) }) {
                     RuleDetail(editing: editing, catalog: catalog, rule: rule)
                 } else {
                     ContentUnavailableView("Select a rule", systemImage: "arrow.triangle.branch")
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// 工程 1 つの見出し: 番号・名前・何が何になるか。ぶら下がる段は番号を振らず、字下げして続きだと分かるようにする。
+private struct StageHeader: View {
+    fileprivate let stage: StepsPane.Stage
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if let step = stage.step {
+                Text(verbatim: "\(step)")
+                    .font(.callout.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 16, alignment: .trailing)
+            } else {
+                Image(systemName: "arrow.turn.down.right").font(.caption).foregroundStyle(.tertiary)
+                    .frame(width: 16, alignment: .trailing)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(key: RuleLabels.stages[stage.id] ?? stage.id)
+                if let flow = stage.flow {
+                    Text(key: flow).font(.caption).foregroundStyle(.secondary).textCase(nil)
+                }
+            }
         }
     }
 }
@@ -1027,19 +1073,23 @@ private struct ListsPane: View {
 
     var body: some View {
         let known = RuleLabels.listOrder.compactMap { id in catalog.lists.first { $0.id == id } }
-        let lists = known + catalog.lists.filter { !RuleLabels.listOrder.contains($0.id) }
+        let extra = catalog.lists.filter { !RuleLabels.listOrder.contains($0.id) }
+        let lists = known + extra
         HSplitView {
-            List(lists, selection: $selection) { list in
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(key: RuleLabels.list(list.id).title)
-                        Text(list.id).font(.caption2.monospaced()).foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 0) {
+                OrderExplanation(text: "The rules do not hold their words themselves; they point at a list here. One list can serve several rules, and what you add to it acts everywhere it is used.")
+                List(selection: $selection) {
+                    // 何のための語かでまとめる。平らに 21 個並べると、目当ての一覧を探すのに全部を読むことになる。
+                    ForEach(RuleLabels.listGroups, id: \.title) { group in
+                        let rows = group.ids.compactMap { id in lists.first { $0.id == id } }
+                        if !rows.isEmpty {
+                            Section(LocalizedStringKey(group.title)) { ForEach(rows) { ListRow(list: $0) } }
+                        }
                     }
-                    Spacer()
-                    Text(verbatim: "\(list.items.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                    ModifiedDot(isModified: !list.added.isEmpty || !list.removed.isEmpty)
+                    if !extra.isEmpty {
+                        Section("Lists you added") { ForEach(extra) { ListRow(list: $0) } }
+                    }
                 }
-                .tag(list.id)
             }
             .frame(minWidth: 280, idealWidth: 320)
             Group {
@@ -1200,6 +1250,24 @@ struct Chip: View {
         .padding(.leading, 9).padding(.trailing, 5).padding(.vertical, 3)
         .background(isAdded ? AnyShapeStyle(.tint.opacity(0.22)) : AnyShapeStyle(.quaternary), in: .capsule)
         .help(isAdded ? "Added word" : "")
+    }
+}
+
+/// 語の一覧 1 行。名前・中身の数・変えた印。ID は差分(JSON)を書く人のために小さく添える。
+private struct ListRow: View {
+    var list: RuleCatalog.ListEntry
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(key: RuleLabels.list(list.id).title)
+                Text(list.id).font(.caption2.monospaced()).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Text(verbatim: "\(list.items.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+            ModifiedDot(isModified: !list.added.isEmpty || !list.removed.isEmpty)
+        }
+        .tag(list.id)
     }
 }
 

@@ -83,7 +83,7 @@ enum RuleLabels {
     ]
 
     static let parameters: [String: String] = [
-        "treat": "Treatment", "words": "Words", "patterns": "Regular expressions",
+        "treat": "What the words in it mean", "words": "Words", "patterns": "Regular expressions",
         "singleWhenMainExists": "Make a series of a single compilation when the main series exists",
         "volumeOffset": "Offset for compilations and side stories",
         "minPrefix": "Fewest characters when the shared text is cut mid-word",
@@ -125,13 +125,18 @@ enum RuleLabels {
         "brackets": Item(title: "Bracket pairs", help: "Closing bracket → opening bracket"),
     ]
 
-    /// 一覧を画面に並べる順(よく直すものを上に)。
-    static let listOrder = [
-        "plainWords", "standaloneWords", "editionWords", "sourceWords", "compilationWords",
-        "volumePrefixes", "volumeCounters", "wholeOnlyCounters", "kanjiCounters", "positionFirst", "positionMiddle", "positionLast",
-        "notFirstMarkers", "notFirstPrefixes", "labelIntroducers",
-        "ignoredInComparison", "boundaryCharacters", "trimTrailing", "keepFollowing", "variantKanji", "brackets",
+    /// 一覧を画面に並べる順(よく直すものを上に)と、**何のための語か**でのまとまり。
+    /// 21 個が見出しも無く平らに並んでいて、目当ての一覧を探すのに全部を読む必要があった(2026-09-20、設計の見直し)。
+    static let listGroups: [(title: String, ids: [String])] = [
+        ("Words found in a title", ["plainWords", "standaloneWords", "editionWords", "sourceWords", "compilationWords"]),
+        ("Words that make a volume number", ["volumePrefixes", "volumeCounters", "wholeOnlyCounters", "kanjiCounters",
+                                             "positionFirst", "positionMiddle", "positionLast"]),
+        ("Words that rule out volume 1", ["notFirstMarkers", "notFirstPrefixes"]),
+        ("Characters that tidy a series name", ["labelIntroducers", "trimTrailing", "keepFollowing", "brackets"]),
+        ("Characters used when two titles are compared", ["ignoredInComparison", "boundaryCharacters", "variantKanji"]),
     ]
+
+    static let listOrder = listGroups.flatMap(\.ids)
 
     static func rule(_ id: String) -> Item { rules[id] ?? Item(title: id) }
 
