@@ -24,8 +24,24 @@ final class AppSettings {
     static let url = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/qooMeta/settings.json")
 
+    /// 設定はアプリに 1 組(どの窓も、規則の窓も、同じものを見る)。
+    static let shared = AppSettings()
+
     init() {
         load()
+    }
+
+    /// 画面で変えた規則(差分を、操作しやすい形で)。
+    var changes: RuleChanges {
+        rulesDiff.isEmpty ? .none : ((try? RuleChanges(data: Data(rulesDiff.utf8))) ?? .none)
+    }
+
+    /// 規則を 1 か所変える。組み立ててみて誤りがあれば、変えずに理由を返す(画面がその場で示す)。
+    @discardableResult
+    func update(_ body: (inout RuleChanges) -> Void) -> [String] {
+        var next = changes
+        body(&next)
+        return setRulesDiff(next.isEmpty ? "" : String(decoding: next.data(), as: UTF8.self))
     }
 
     func mapping(for target: ExportTarget) -> FieldMapping { mappings[target] ?? .standard(for: target) }

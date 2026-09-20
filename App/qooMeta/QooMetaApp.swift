@@ -11,6 +11,12 @@ struct QooMetaApp: App {
         }
         .defaultSize(width: 1280, height: 800)
         .commands { WorkspaceCommands() }
+
+        // 規則はアプリの設定(どの一覧にも共通)なので、一覧の窓とは別の窓で直す。
+        Window("規則", id: RulesEditorView.windowID) {
+            RulesEditorView(settings: .shared)
+        }
+        .defaultSize(width: 980, height: 680)
     }
 }
 
@@ -65,7 +71,7 @@ final class AppModel {
     var error: String?
     var isOpening = false
     /// アプリの設定(規則の差分・スタンプ・書き出しの対応表)。作業ファイルとは分ける。
-    let settings = AppSettings()
+    let settings = AppSettings.shared
 
     /// 架空のデータ(`-demo`)。実際の蔵書は画面に出さない確かめ方(CLAUDE.md)。
     func openDemoIfAsked() async {
@@ -152,8 +158,13 @@ final class AppModel {
 /// 作業ファイルへそのまま持っていける形で Workspace 側に積む。
 struct WorkspaceCommands: Commands {
     @FocusedValue(\.appModel) private var model: AppModel?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("規則…") { openWindow(id: RulesEditorView.windowID) }
+                .keyboardShortcut(",")
+        }
         CommandGroup(replacing: .newItem) {
             Button("フォルダを開く…") { model?.openFolder() }
                 .keyboardShortcut("o")

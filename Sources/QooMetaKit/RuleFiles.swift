@@ -319,6 +319,10 @@ struct RuleCompiler {
             }
             return result
         }
+        func plain(_ v: JSONValue?) -> PlainText {
+            PlainText(words: separators(v?["words"]) ?? [], patterns: separators(v?["patterns"]) ?? [])
+        }
+        let filePlain = plain(root["plain"])
         let fileSeparators = separators(root["separators"]) ?? FilenameFormats.defaultSeparators
         let fileDefaults = defaults(root["defaults"])
         var presets: [String: FilenameFormats] = [:]
@@ -328,7 +332,7 @@ struct RuleCompiler {
                 guard let text = RuleLoader.formatText(entry).stringValue else { continue }
                 do {
                     compiled.append(try FilenameFormat(text, separators: separators(entry["separators"]),
-                                                       defaults: defaults(entry["defaults"])))
+                                                       defaults: defaults(entry["defaults"]), plain: plain(entry["plain"])))
                 } catch {
                     report(.invalidValue, "presets.\(name).formats[\(i)]", error.description)
                 }
@@ -336,7 +340,8 @@ struct RuleCompiler {
             presets[name] = FilenameFormats(formats: compiled,
                                             separators: separators(preset["separators"]) ?? fileSeparators,
                                             defaults: fileDefaults.merging(defaults(preset["defaults"])) { _, inner in inner },
-                                            label: preset["label"]?.stringValue, note: preset["note"]?.stringValue)
+                                            label: preset["label"]?.stringValue, note: preset["note"]?.stringValue,
+                                            plain: filePlain.adding(plain(preset["plain"])))
         }
         let defaultName = root["defaultPreset"]?.stringValue ?? "mixed"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }

@@ -18,7 +18,9 @@
   `config.json` は消した。
 - **段階 11 は途中**(2026-09-20)。済んだのはスタンプ・適用前のプレビュー・書き出しの画面と、アプリの設定
   (`App/qooMeta/Settings.swift`。規則の差分・スタンプ・書き出しの対応表を
-  `~/Library/Application Support/qooMeta/settings.json` に持つ)。**残りは規則と型を編集する画面(JSON の編集)**。
+  `~/Library/Application Support/qooMeta/settings.json` に持つ)。**規則(series-rules)を編集する窓は作った**
+  (2026-09-20。下の「規則の窓」)。**型の並び(ファイル名フォーマットのプリセット)を編集する画面も、同じ窓に作った。**
+  残りは、利用者が窓を見てよいと言うこと(エージェントは画面を見ていない。組み立てと起動だけ確かめた)。
 - 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
 - **次にやること(利用者の指示、2026-09-20)**: ① **JSON の構成そのもののブラッシュアップ** → ② **JSON を編集する画面**
   (段階 11 の残り = 規則の方針・語の一覧・型の並びの編集)。①→② の順にする(画面は JSON の形の上に載るため)。
@@ -46,11 +48,49 @@
 | `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、**書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`)** |
 | `Sources/QooMetaScan/` | フォルダの走査(本体はファイルに触らないので、ここと CLI・アプリだけがファイルを見る) |
 | `Sources/qoometa/` | CLI。`InputDocument` が提案ファイルと作業ファイルのどちらも読む |
-| `App/qooMeta/` | 画面。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表) |
+| `App/qooMeta/` | 画面。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表)、**`RulesEditorView`(規則の窓)・`RuleLabels`(その言葉)** |
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
-- 確かめ: `swift build`・`swift test`(120 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
+- 確かめ: `swift build`・`swift test`(124 件)・`.build/release/qoometa rules test`(例 92 件)・`bash scripts/ci/check-all.sh`。
+
+## 規則の窓(2026-09-20、利用者の指示)
+
+タイトルからシリーズ名と巻を導く規則を、利用者が見て・足して・消して・直すための窓(`App/qooMeta/RulesEditorView.swift`、
+表示の言葉は `RuleLabels.swift`。型の並びの 1 枚は `PresetEditorView.swift`)。メニュー「規則…」(⌘,)か、一覧の窓のツールバーから開く。設定はアプリに 1 組
+(`AppSettings.shared`)で、変えた内容は開いている一覧にすぐ効く(`WorkspaceView` が規則の内容のハッシュを見て読み直す)。
+
+- **画面が持つのは既定値との差分だけ**。操作はすべて `RuleChanges`(QooMetaKit)を通し、1 か所変えるたびに組み立て直す。
+  誤りがあれば変えずに、理由を窓の下の帯に出す。画面が行う操作は `theRulesWindowOperationsCompile` のテストが同じ順でなぞる。
+- 並びは JSON の形に合わせた: 方針 / **語の規則(順番あり)** / **巻の読み手(順番あり)** / 組み方と名前(順番の決まった工程。
+  並べ替えられない)/ 語の一覧 / 差分(JSON。直に書く・読み込む・書き出す)。
+- 語の規則: ドラッグか上下のボタンで並べ替え、チェックで止め、「規則を足す」で新しい規則(名前 = ID、扱いを選ぶ。先頭に入る)。
+  足した規則だけ消せて、扱いを変えられる。同梱の規則の語は、指している一覧をその場で直す。
+- 語の一覧: 語の札を × で外し、欄で足す。足した語は色が付き、外した既定の語は下に残って押すと戻る。目に見えない文字
+  (空白・タブ)は見える形で出す。対応表(異体字・括弧)は「左 → 右」で足す。
+- 総集編の設定は、方針(置き場所・巻数)と規則(オフセット・1 冊でもシリーズにするか)を**方針の画面の 1 か所**に見せる
+  (下のメモの 4 は、これで片付いた)。
+- QooMetaKit に足した口: `RuleChanges.addMarker`・`removeMarker`・`setMarkerOrder`・`resetReaderOrder`・`resetValue`・
+  `setPair`・`removePair`・`isAddedMarker`、`RuleCatalog.Entry.isUserAdded`。
+- **型の並び(プリセット)の編集**(`App/qooMeta/PresetEditorView.swift`。窓の先頭の 1 枚。利用者の指示):
+  - 直すのは**下書き**で、「保存」か「名前をつけて保存」を押すまで設定に入らない(型は書きかけのあいだ読めない形になるため)。
+    型の書き間違いは行ごとに印を出し、誤りがあるあいだは保存できない。移るときに保存していない変更があれば確かめる。
+  - **保存**: いまのプリセットを上書き(同梱のプリセットも直せる)。**名前をつけて保存**: 下書きを新しいプリセットにする
+    (**同じ名前は作れない**。元のプリセットは変わらない)。**初期化**: 同梱のプリセットを同梱の中身に戻す。**削除**: 自分のプリセットだけ。
+  - 中身: 見出し・説明、型の並び(番号 = 優先順位。上下で並べ替え、足す・消す)、型ごとの区切りと既定の欄(行の右のボタン)、
+    プリセットの区切りと既定の欄、**試し読み**(名前を打つと、下書きでどの行の型に合い、どの欄に読めるかをその場で見せる)。
+    左下で、既定のプリセットと、すべてのプリセットの既定の区切りを決める。
+  - QooMetaKit に足した口(`PresetCatalog.swift`): `CompiledRules.presetCatalog`(今の値と同梱の既定値)、
+    `RuleChanges.setPreset(_:original:)`(同梱のプリセットは**違う所だけ**を差分に書き、同じに戻れば差分から消える。
+    自分のプリセットは全体を書く)・`removePreset`(初期化と削除)・`setDefaultPreset`・`setSeparators`。
+    画面の操作は `thePresetEditorOperationsCompile` のテストが同じ順でなぞる。
+- **型として読まない文字列(`plain`)**(2026-09-20、利用者の指摘): 名前の中のこの部分は、型の照合のあいだだけただの文字として
+  扱う(括弧でも型の括弧に当たらず、値には残る)。`PlainText`(FilenameFormat.swift)。ファイル全体・プリセット・型に書けて
+  **足し合わさる**。同梱の既定は丸括弧の中の西暦(「月の庭 (2026)」の「(2026)」を原作や巻数にしない)。タイトルの途中の括弧には
+  もともと要らない(`@title` には何でも入る)。効くのは型の照合だけで、シリーズと巻を導く規則には効かない。
+  プリセットの編集画面の 3 か所(左下・プリセット・型のボタン)で直せ、試し読みにも効く。手元の蔵書 A の集計と指紋は同じ
+  (末尾が西暦の丸括弧の名前が無い)。
+- **まだ**: 変える前後で結果がどう変わるかの見せ方(いまは一覧の窓がすぐ変わるだけ)。
 
 ## 同人誌のプリセットを 2 つに分けた(2026-09-20、利用者の指示)
 
@@ -152,7 +192,7 @@ rules.md の `markers`。
    (`"words": ["@list:editionWords", "フルカラー", "カラー", "モノクロ"]`)、重複を消すのが素直。
 2. ~~プリセットがただの文字列の配列~~(片付いた。第 5 版で `label`・`note` も持てる)。
 3. ~~`filename-formats.json` の `retiredIDs`・`aliases`~~(片付いた。第 5 版で外した)。
-4. **総集編の設定が 2 か所に分かれている**: 切り替えは方針 `compilationVolume`、足す数は規則 `grouping.compilation.volumeOffset`。
+4. (片付いた。規則の窓の「方針」で 1 か所に見せている)~~総集編の設定が 2 か所に分かれている~~: 切り替えは方針 `compilationVolume`、足す数は規則 `grouping.compilation.volumeOffset`。
    方針は「決まった値から選ぶ」ものなので分かれるのは設計どおりだが、画面では 1 か所に見せる。
 5. **docs が古い**: `rules-format-design.md` の方針の表が `compilationVolume` を `none`/`afterRange` のままにしている
    (いまは `offset` が既定)。`grouping.compilation` の `volumeOffset`・`conditions` も表に無い。

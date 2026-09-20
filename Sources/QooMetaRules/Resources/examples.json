@@ -45,14 +45,14 @@
     {
       "id": "parse-numeric-trailing-paren-is-the-volume",
       "files": [
-        "(種別A) [架空工房] 月の庭 (2019)",
+        "(種別A) [架空工房] 月の庭 (101)",
         "(種別A) [架空工房] 月の庭 (12)",
         "(種別A) [架空工房] 月の庭 (13)"
       ],
       "expect": [
         {
           "title": "月の庭",
-          "volume": "2019",
+          "volume": "101",
           "source": null
         },
         {
@@ -2311,6 +2311,29 @@
           "series": "夜の森 総集編",
           "volume": "2",
           "volumeSort": 2
+        }
+      ],
+      "covers": []
+    },
+    {
+      "id": "year-in-parentheses-stays-in-the-title",
+      "files": [
+        "(架空の分類) [架空工房] 月の庭 (2026)",
+        "(架空の分類) [架空工房] 風の丘 旧版（2022年）＋新版（2025年） (架空の原作)",
+        "[架空工房] 星の海 (12)"
+      ],
+      "expect": [
+        {
+          "title": "月の庭 (2026)",
+          "source": null
+        },
+        {
+          "title": "風の丘 旧版（2022年）＋新版（2025年）",
+          "source": "架空の原作"
+        },
+        {
+          "title": "星の海",
+          "volume": "12"
         }
       ],
       "covers": []

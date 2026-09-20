@@ -201,6 +201,129 @@ import QooMetaRules
         #expect(text.contains("$remove") && !text.contains("$add"))
     }
 
+    /// 規則の窓が行う操作を、そのまま差分にして組み立てられること(画面は、この口だけを通して規則を変える)。
+    @Test func theRulesWindowOperationsCompile() throws {
+        func compile(_ changes: RuleChanges) throws -> CompiledRules {
+            let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data()))
+            return try #require(c.rules, "\(c.errors)")
+        }
+        func markers(_ rules: CompiledRules) -> [RuleCatalog.Entry] { rules.catalog.entries.filter { $0.stage == "markers" } }
+        var changes = RuleChanges.none
+
+        // 語の規則を足す(先頭に入る)→ 語と正規表現をその場に書く → 順番を決める。
+        changes.addMarker(id: "画集は版にしない", treat: "keep")
+        #expect(changes.isAddedMarker("画集は版にしない"))
+        changes.setValue(.array([.string("新装版画集")]), rule: "画集は版にしない", parameter: "words")
+        changes.setValue(.array([.string("愛蔵版[ァ-ヶー]+集")]), rule: "画集は版にしない", parameter: "patterns")
+        changes.setMarkerOrder(["plain", "画集は版にしない", "edition", "source", "compilationMark", "standalone"])
+        var rules = try compile(changes)
+        #expect(markers(rules).map(\.id) == ["plain", "画集は版にしない", "edition", "source", "compilationMark", "standalone"])
+        let added = try #require(markers(rules).first { $0.id == "画集は版にしない" })
+        #expect(added.isUserAdded && added.parameter("words")?.current == .array([.string("新装版画集")]))
+        #expect(markers(rules).first { $0.id == "plain" }?.isUserAdded == false)
+
+        // 足した規則を止める・扱いを変える。同梱の規則の正規表現を直す(配列は置き換えとして書かれる)。値を既定に戻す。
+        changes.setEnabled(false, rule: "画集は版にしない")
+        changes.setValue(.string("standalone"), rule: "画集は版にしない", parameter: "treat")
+        changes.setValue(.array([.string("[DＤ][LＬ]版"), .string("電書版")]), rule: "source", parameter: "patterns")
+        rules = try compile(changes)
+        #expect(markers(rules).first { $0.id == "画集は版にしない" }?.isEnabled == false)
+        #expect(markers(rules).first { $0.id == "source" }?.parameter("patterns")?.isModified == true)
+        changes.resetValue(rule: "source", parameter: "patterns")
+        #expect(markers(try compile(changes)).first { $0.id == "source" }?.isModified == false)
+
+        // 足した規則を消すと、順番の変更からも消える。消したあとの順番は、残りの規則だけで読める。
+        changes.removeMarker(id: "画集は版にしない")
+        #expect(!String(decoding: changes.data(), as: UTF8.self).contains("画集"))
+        #expect(markers(try compile(changes)).map(\.id) == ["plain", "edition", "source", "compilationMark", "standalone"])
+        changes.setMarkerOrder(nil)
+        #expect(changes.isEmpty)
+        // 同梱の規則は消せない。
+        changes.removeMarker(id: "edition")
+        #expect(markers(try compile(changes)).count == 5)
+
+        // 対応表の一覧(異体字)に足す・外す・外した字を戻す。数と真偽のパラメータ、巻の読み手の順。
+        changes.setPair("舊", "旧", in: "variantKanji")
+        changes.removePair("嶋", from: "variantKanji")
+        changes.setValue(.number(200), rule: "compilation", parameter: "volumeOffset")
+        changes.setValue(.bool(false), rule: "compilation", parameter: "singleWhenMainExists")
+        changes.setReaderOrder(["kanji", "ordinal", "number", "greek", "roman", "position"])
+        rules = try compile(changes)
+        let variants = try #require(rules.catalog.lists.first { $0.id == "variantKanji" })
+        #expect(variants.added == ["舊→旧"] && variants.removed == ["嶋→島"])
+        #expect(rules.catalog.entries.filter { $0.stage == "volume.readers" }.first?.id == "kanji")
+        changes.setPair("嶋", "島", in: "variantKanji")
+        changes.resetReaderOrder()
+        rules = try compile(changes)
+        #expect(rules.catalog.lists.first { $0.id == "variantKanji" }?.removed.isEmpty == true)
+        #expect(rules.catalog.entries.filter { $0.stage == "volume.readers" }.first?.id == "ordinal")
+    }
+
+    /// プリセットの編集画面が行う操作: 同梱のプリセットを直す・初期化する、名前をつけて新しいプリセットにする、消す。
+    @Test func thePresetEditorOperationsCompile() throws {
+        func compile(_ changes: RuleChanges) throws -> CompiledRules {
+            let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data()))
+            return try #require(c.rules, "\(c.errors)")
+        }
+        let start = CompiledRules.builtin.presetCatalog
+        #expect(start.entries.map(\.preset.name) == ["mixed", "doujinshi", "doujinshi-event", "commercial"])
+        #expect(start.entries.allSatisfy { $0.isBuiltIn && !$0.isModified })
+        #expect(start.defaultPreset == "mixed" && start.separators == [",", "，", "、"])
+        let commercial = try #require(start.entries.first { $0.id == "commercial" })
+        #expect(commercial.preset.label == "商業誌" && commercial.preset.formats.count == 10)
+
+        // 同梱のプリセットを直す: 型を先頭に足し、その型だけの区切りを決め、既定の欄を入れる。
+        var changes = RuleChanges.none
+        var edited = commercial.preset
+        edited.formats.insert(.init(text: "@series 第@volume巻 - @author", separators: ["×"]), at: 0)
+        edited.defaults["genre"] = "架空の分類甲"
+        changes.setPreset(edited, original: commercial.original)
+        var rules = try compile(changes)
+        var entry = try #require(rules.presetCatalog.entries.first { $0.id == "commercial" })
+        #expect(entry.isModified && entry.preset == edited)
+        let read = rules.formats["commercial"].read("月の庭 第3巻 - 甲×乙")
+        #expect(read.metadata.authors == ["甲", "乙"] && read.metadata.genre == "架空の分類甲" && read.metadata.title == "月の庭 第3巻")
+
+        // 型として読まない文字列を、同梱のプリセットと型に足す。ファイル全体の分も変えられる。
+        edited.plain = PlainText(words: ["(仮)"])
+        edited.formats[1].plain = PlainText(patterns: ["[(（]第\\d+版[)）]"])
+        changes.setPreset(edited, original: commercial.original)
+        changes.setPlain(PlainText(words: ["(再録)"], patterns: start.builtInPlain.patterns), builtIn: start.builtInPlain)
+        rules = try compile(changes)
+        #expect(rules.presetCatalog.entries.first { $0.id == "commercial" }?.preset == edited)
+        #expect(rules.presetCatalog.plain.words == ["(再録)"])
+        #expect(rules.formats["commercial"].read("[架空工房] 月の庭 (再録)").metadata.title == "月の庭 (再録)")
+        changes.setPlain(start.builtInPlain, builtIn: start.builtInPlain)
+
+        // 名前をつけて保存: 新しいプリセットは全体が差分に入る。既定のプリセットにも選べる。
+        var mine = edited
+        mine.name = "自分の棚"
+        mine.label = "自分の棚(著者は末尾)"
+        mine.separators = ["&"]
+        changes.setPreset(mine, original: nil)
+        changes.setDefaultPreset("自分の棚", builtIn: start.builtInDefaultPreset)
+        changes.setSeparators([",", "、"], builtIn: start.builtInSeparators)
+        rules = try compile(changes)
+        let catalog = rules.presetCatalog
+        #expect(catalog.entries.map(\.preset.name) == ["mixed", "doujinshi", "doujinshi-event", "commercial", "自分の棚"])
+        #expect(catalog.entries.last?.isBuiltIn == false && catalog.entries.last?.preset == mine)
+        #expect(catalog.defaultPreset == "自分の棚" && catalog.separators == [",", "、"])
+        #expect(rules.formats[nil].label == "自分の棚(著者は末尾)")
+
+        // 初期化: 同梱のプリセットは既定値に戻る(同じ中身を保存し直しても、差分から消える)。
+        changes.setPreset(commercial.preset, original: commercial.original)
+        entry = try #require(try compile(changes).presetCatalog.entries.first { $0.id == "commercial" })
+        #expect(!entry.isModified)
+        changes.setPreset(edited, original: commercial.original)
+        changes.removePreset("commercial")
+        #expect(try compile(changes).presetCatalog.entries.first { $0.id == "commercial" }?.isModified == false)
+
+        // 削除: 利用者のプリセットは消え、既定のプリセットの指定も同梱のものに戻る。
+        changes.removePreset("自分の棚")
+        changes.setSeparators(start.builtInSeparators, builtIn: start.builtInSeparators)
+        #expect(changes.isEmpty)
+    }
+
     @Test func singleKindDiffIsRead() throws {
         let changes = try RuleChanges(data: Data(#"{ "kind": "qoometa.series-rules", "schemaVersion": 2, "base": "builtin", "policies": { "subtitled": "separate" } }"#.utf8))
         #expect(!changes.isEmpty)

@@ -8,6 +8,7 @@ struct WorkspaceView: View {
     @State private var showsDetail = true
     @State private var showsPresets = false
     @State private var showsExport = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +30,10 @@ struct WorkspaceView: View {
                     .help("フォルダごとに、どの型の並びで名前を読むかを決める")
             }
             ToolbarItem {
+                Button { openWindow(id: RulesEditorView.windowID) } label: { Label("規則", systemImage: "list.bullet.indent") }
+                    .help("シリーズと巻を導く規則(方針・語の規則・語の一覧)を見て、直す")
+            }
+            ToolbarItem {
                 Button { showsExport = true } label: { Label("書き出す", systemImage: "square.and.arrow.up") }
                     .help("書き出し先を選び、落ちる欄を見てから書き出す")
             }
@@ -36,6 +41,8 @@ struct WorkspaceView: View {
                 Button { showsDetail.toggle() } label: { Label("詳細", systemImage: "sidebar.right") }
             }
         }
+        // 規則の窓で変えた内容は、開いている一覧にすぐ効かせる(すべての本を読み直す)。
+        .onChange(of: settings.rules.contentHash) { Task { await workspace.setRules(settings.rules) } }
         .sheet(isPresented: $showsPresets) { PresetAssignmentView(workspace: workspace) }
         .sheet(isPresented: $showsExport) { ExportView(workspace: workspace, settings: settings) }
         .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta(未保存の変更)" : "qooMeta")

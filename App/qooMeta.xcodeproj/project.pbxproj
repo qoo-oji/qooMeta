@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		10F407650B50A45F6D6689D5 /* PresetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */; };
+		13576D9FF44062450D846932 /* RulesEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3EE03AF2531EEA4BBC27956 /* RulesEditorView.swift */; };
 		3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */ = {isa = PBXBuildFile; productRef = F548B9A73E497C1459503F3C /* QooMetaRules */; };
+		4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71455F79C155AD9BA794D099 /* RuleLabels.swift */; };
 		5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */; };
 		93B52A0640283F3E27829F56 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B18F5A13C7BB642774DDFB1 /* DetailView.swift */; };
 		947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 74CE0620A1873D2F829A351F /* QooMetaKit */; };
@@ -25,10 +28,13 @@
 		026D669D5E2477C2E800ACEA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0874B8EB5ABA307C2EF67551 /* qooMeta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qooMeta.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
+		1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetEditorView.swift; sourceTree = "<group>"; };
 		3B18F5A13C7BB642774DDFB1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		6F4760B3275FF3971B539296 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
+		71455F79C155AD9BA794D099 /* RuleLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleLabels.swift; sourceTree = "<group>"; };
 		76D76B49E8894D1A02F1F09D /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		934559B81EEEF1E3B3E9DA44 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
+		B3EE03AF2531EEA4BBC27956 /* RulesEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesEditorView.swift; sourceTree = "<group>"; };
 		D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QooMetaApp.swift; sourceTree = "<group>"; };
 		EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
@@ -73,7 +79,10 @@
 				6F4760B3275FF3971B539296 /* DemoData.swift */,
 				3B18F5A13C7BB642774DDFB1 /* DetailView.swift */,
 				EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */,
+				1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */,
 				D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */,
+				71455F79C155AD9BA794D099 /* RuleLabels.swift */,
+				B3EE03AF2531EEA4BBC27956 /* RulesEditorView.swift */,
 				76D76B49E8894D1A02F1F09D /* Settings.swift */,
 				934559B81EEEF1E3B3E9DA44 /* Workspace.swift */,
 				F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */,
@@ -170,7 +179,10 @@
 				FF17B661D9ED57B280285700 /* DemoData.swift in Sources */,
 				93B52A0640283F3E27829F56 /* DetailView.swift in Sources */,
 				B60229BB9E92F064DE2EE985 /* ExportView.swift in Sources */,
+				10F407650B50A45F6D6689D5 /* PresetEditorView.swift in Sources */,
 				A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */,
+				4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */,
+				13576D9FF44062450D846932 /* RulesEditorView.swift in Sources */,
 				D9DBDC550F15D5AEB5EE9979 /* Settings.swift in Sources */,
 				A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */,
 				5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */,

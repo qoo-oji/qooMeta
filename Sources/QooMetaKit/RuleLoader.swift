@@ -184,7 +184,7 @@ struct RuleLoader {
         case .string:
             guard let s = value.stringValue, !s.isEmpty else { report(.invalidValue, path, "空でない文字列であるべきところ"); return }
             if s.count > Limits.patternLength { report(.tooLarge, path, "\(s.count) 文字") }
-        case .separators:
+        case .separators, .strings:
             checkListValue(value, .words, path)
         case .list(let kind):
             if let ref = value.stringValue {
@@ -480,7 +480,8 @@ struct RuleLoader {
         switch field.shape {
         case .string: return .null
         case .separators: return inheritedSeparators
-        case .presetDefaults: return .object([:])
+        case .presetDefaults, .object: return .object([:])
+        case .strings, .patterns: return .array([])
         default: return nil
         }
     }
@@ -520,7 +521,7 @@ struct RuleLoader {
             guard issues.count == before else { return base }
             if diff != base { changedPaths.append(path) }
             return diff
-        case .separators:
+        case .separators, .strings:
             return applyArrayOps(diff, to: base, path, allowsAt: false) { this, item, p in this.checkListItem(item, .words, p) }
         case .list(let kind):
             if let ref = diff.stringValue {

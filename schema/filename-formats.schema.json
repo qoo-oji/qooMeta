@@ -46,6 +46,9 @@
       "additionalProperties": {
         "$ref": "#/$defs/preset"
       }
+    },
+    "plain": {
+      "$ref": "#/$defs/plain"
     }
   },
   "$defs": {
@@ -78,6 +81,9 @@
             "$ref": "#/$defs/format"
           },
           "description": "型の並び。上から照合し、名前全体に一致した最初の型で読む"
+        },
+        "plain": {
+          "$ref": "#/$defs/plain"
         }
       }
     },
@@ -104,6 +110,9 @@
             },
             "defaults": {
               "$ref": "#/$defs/defaults"
+            },
+            "plain": {
+              "$ref": "#/$defs/plain"
             }
           }
         }
@@ -137,6 +146,28 @@
         "info": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "plain": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "型として読まない文字列。名前の中のこの部分は、型の照合のあいだだけただの文字として扱う(括弧でも型の括弧に当たらない。値には残る)。ファイル全体 → プリセット → 型 と足し合わさる",
+      "properties": {
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "正規表現(ICU)"
         }
       }
     }

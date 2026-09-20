@@ -30,6 +30,8 @@ enum RuleSchema {
         case string
         /// 著者の区切り(空でない文字列の並び。1 文字とは限らない)。
         case separators
+        /// 空でない文字列の並び(その場に書く。省いたときは空)。
+        case strings
         case object(Node)
         /// 巻の読み手(並び順が優先順位。差分では ID で指し、`$order` で並べ替える)。
         case readers
@@ -172,8 +174,13 @@ enum RuleSchema {
     /// 著者の区切り(`separators`)と既定の欄(`defaults`)は ファイル全体 → プリセット → 型 の 3 か所に同じ綴りで書け、
     /// **内側に書いたものが勝つ**。ファイル全体の `separators` だけは必ず書く(いちばん外側の値が無いと、読み方が決まらない)。
     static let formatStages = Node([
-        f("defaultPreset", .string), f("separators", .separators), optional("defaults", .presetDefaults), f("presets", .presets),
+        f("defaultPreset", .string), f("separators", .separators), optional("defaults", .presetDefaults),
+        optional("plain", .object(plainNode)), f("presets", .presets),
     ])
+
+    /// 型として読まない文字列(`plain`)。ファイル全体・プリセット・型の 3 か所に書け、**足し合わさる**(区切りや既定の欄と違い、
+    /// 内側が外側を打ち消さない。どの文字列を型として読まないかは、足していくものだから)。
+    static let plainNode = Node([optional("words", .strings), optional("patterns", .patterns)])
 
     /// 同梱のプリセットの名前(綴りの候補を出すのに使う。利用者は差分で別の名前のプリセットを足せる)。
     static let presetNames = ["mixed", "doujinshi", "doujinshi-event", "commercial"]
@@ -181,12 +188,13 @@ enum RuleSchema {
     /// 1 つのプリセット。要るのは `formats` だけで、ほかは省ける(省いた区切りと既定は、ファイル全体のものを使う)。
     static let presetNode = Node([
         optional("label", .string), optional("note", .string), optional("separators", .separators),
-        optional("defaults", .presetDefaults), f("formats", .formats),
+        optional("defaults", .presetDefaults), optional("plain", .object(plainNode)), f("formats", .formats),
     ])
 
     /// 1 つの型をオブジェクトで書いたとき。要るのは `format` だけ。
     static let formatEntryNode = Node([
         f("format", .string), optional("separators", .separators), optional("defaults", .presetDefaults),
+        optional("plain", .object(plainNode)),
     ])
 
     /// 既定を入れられる欄(シリーズと巻は中核が導くので入れられない。タイトルと著者は本ごとに違うので入れない)。

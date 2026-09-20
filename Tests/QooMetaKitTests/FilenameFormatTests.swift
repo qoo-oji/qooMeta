@@ -128,6 +128,29 @@ import Testing
         #expect(set.read("括弧の無い名前").metadata.genre == "架空の分類甲")
     }
 
+    /// 型として読まない文字列(`plain`): 照合のあいだだけただの文字として扱い、値には残す。
+    @Test func plainTextIsNotReadAsAField() throws {
+        let year = PlainText(patterns: ["[(（](?:19|20)\\d{2}年?[)）]"])
+        let formats = try ["[@author] @title (@volume)", "[@author] @title (@source)", "[@author] @title"].map { try FilenameFormat($0) }
+        let without = FilenameFormats(formats: formats)
+        let with = FilenameFormats(formats: formats, plain: year)
+        // 末尾の「(2026)」は、そのままだと巻数として読まれる。型として読まなければ、タイトルの一部として残る。
+        #expect(without.read("[架空工房] 月の庭 (2026)").metadata.volume == "2026")
+        let kept = with.read("[架空工房] 月の庭 (2026)")
+        #expect(kept.metadata.title == "月の庭 (2026)" && kept.metadata.volume.isEmpty && kept.metadata.source.isEmpty)
+        // 年のあとの丸括弧は、これまでどおり原作・巻数として読む。全角の括弧と「年」も同じ。
+        #expect(with.read("[架空工房] 月の庭 旧版（2022年）＋新版（2025年） (架空の原作)").metadata.source == "架空の原作")
+        #expect(with.read("[架空工房] 月の庭 旧版（2022年）＋新版（2025年） (架空の原作)").metadata.title == "月の庭 旧版（2022年）＋新版（2025年）")
+        #expect(with.read("[架空工房] 月の庭（2026年）(3)").metadata.volume == "3")
+        // 年ではない数字は、これまでどおり巻数。
+        #expect(with.read("[架空工房] 月の庭 (12)").metadata.volume == "12")
+        // 語でも書ける。型が自分の分を足すと、その型で照合するときにだけ効く(外側の分に足される)。
+        let own = FilenameFormats(formats: [try FilenameFormat("[@author] @title (@source)", plain: PlainText(words: ["(仮)"])),
+                                            try FilenameFormat("[@author] @title")], plain: year)
+        #expect(own.read("[架空工房] 月の庭 (仮)").metadata.title == "月の庭 (仮)")
+        #expect(own.read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
+    }
+
     @Test func spansPointAtTheValues() {
         let name = "[架空工房] 月の庭"
         let r = Self.read(name)

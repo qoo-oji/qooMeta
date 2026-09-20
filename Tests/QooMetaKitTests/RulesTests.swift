@@ -346,6 +346,27 @@ import QooMetaRules
         #expect(rules.changedPaths.contains("presets.my-shelf"))
     }
 
+    /// `plain`(型として読まない文字列)は ファイル全体 → プリセット → 型 と足し合わさる。同梱は、丸括弧の中の西暦。
+    @Test func plainTextAddsUpAcrossTheLevels() throws {
+        let builtin = try #require(Self.compile(nil).rules)
+        #expect(builtin.formats["doujinshi"].read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
+        #expect(builtin.formats["commercial"].read("[架空工房] 月の庭 (2026)").metadata.volume.isEmpty)
+        let c = Self.compile(Self.diff(#"""
+        "plain": { "words": { "$add": ["(仮)"] } },
+        "presets": { "doujinshi": { "plain": { "patterns": { "$add": ["[(（]第\\d+版[)）]"] } } } }
+        """#, kind: "qoometa.filename-formats"))
+        let rules = try #require(c.rules, "\(c.errors)")
+        let doujinshi = rules.formats["doujinshi"]
+        #expect(doujinshi.read("[架空工房] 月の庭 (第2版)").metadata.title == "月の庭 (第2版)")
+        #expect(doujinshi.read("[架空工房] 月の庭 (仮)").metadata.title == "月の庭 (仮)")
+        #expect(doujinshi.read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
+        // プリセットに足した分は、ほかのプリセットには効かない。
+        #expect(rules.formats["mixed"].read("[架空工房] 月の庭 (第2版)").metadata.source == "第2版")
+        // 危ない正規表現は、ほかの規則と同じく誤り。
+        let bad = Self.compile(Self.diff(#""plain": { "patterns": { "$add": ["(a+)+"] } }"#, kind: "qoometa.filename-formats"))
+        #expect(bad.errors.map(\.code) == [.unsafePattern])
+    }
+
     @Test func defaultPresetCanBeChangedButMustExist() throws {
         let ok = Self.compile(Self.diff(#""defaultPreset": "commercial""#, kind: "qoometa.filename-formats"))
         #expect(try #require(ok.rules).formats.defaultName == "commercial")

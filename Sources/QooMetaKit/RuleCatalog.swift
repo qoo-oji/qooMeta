@@ -40,6 +40,10 @@ public struct RuleCatalog: Sendable, Hashable {
         public let isEnabled: Bool
         public let isModified: Bool
         public let parameters: [Parameter]
+        /// 利用者が足した規則か(語の規則だけ。同梱の規則は消せず、足した規則は消せる)。
+        public var isUserAdded = false
+
+        public func parameter(_ name: String) -> Parameter? { parameters.first { $0.name == name } }
     }
 
     public struct ListEntry: Sendable, Hashable, Identifiable {
@@ -112,8 +116,10 @@ extension CompiledRules {
                     let defaults = before?[field.name]?.arrayValue ?? []
                     for rule in now?[field.name]?.arrayValue ?? [] {
                         guard let id = rule["id"]?.stringValue else { continue }
-                        entries.append(entry(id, stage: childPath, node: RuleSchema.markerNode, now: rule,
-                                             before: defaults.first { $0["id"]?.stringValue == id }))
+                        let original = defaults.first { $0["id"]?.stringValue == id }
+                        var added = entry(id, stage: childPath, node: RuleSchema.markerNode, now: rule, before: original)
+                        added.isUserAdded = original == nil
+                        entries.append(added)
                     }
                 default: break
                 }
@@ -169,6 +175,9 @@ public struct RuleChanges: Sendable, Hashable {
 
     public var isEmpty: Bool { series.isEmpty && formats.isEmpty }
 
+    /// 語の規則に選べる扱い(`keep`・`edition` …)。
+    public static var markerTreatments: [String] { RuleSchema.markerTreatments }
+
     /// 保存・持ち運び用(rules-bundle)。キーは並べ替える(同じ変更なら同じバイト列)。
     public func data() -> Data {
         var bundle: [String: JSONValue] = [
@@ -190,7 +199,7 @@ public struct RuleChanges: Sendable, Hashable {
     /// 規則を止める・動かす。知らない規則の ID なら何もしない(false を返す)。
     @discardableResult
     public mutating func setEnabled(_ enabled: Bool, rule: String) -> Bool {
-        guard let (inFormats, path) = Self.path(of: rule) else { return false }
+        guard let (inFormats, path) = path(of: rule) else { return false }
         if inFormats { Self.set(&formats, path + ["enabled"], .bool(enabled)) } else { Self.set(&series, path + ["enabled"], .bool(enabled)) }
         return true
     }
@@ -198,10 +207,17 @@ public struct RuleChanges: Sendable, Hashable {
     /// パラメータを変える。配列の値は丸ごと置き換える(`$replace`)。
     @discardableResult
     public mutating func setValue(_ value: JSONValue, rule: String, parameter: String) -> Bool {
-        guard let (inFormats, path) = Self.path(of: rule) else { return false }
-        let stored: JSONValue = if case .array = value { .object(["$replace": value]) } else { value }
+        guard let (inFormats, path) = path(of: rule) else { return false }
+        // 利用者が足した語の規則は、差分の中に全体が書いてある(重ねる相手が無い)ので、配列もそのまま書く。
+        let stored: JSONValue = if case .array = value, !isAddedMarker(rule) { .object(["$replace": value]) } else { value }
         if inFormats { Self.set(&formats, path + [parameter], stored) } else { Self.set(&series, path + [parameter], stored) }
         return true
+    }
+
+    /// パラメータ 1 つだけを既定値に戻す(足した語の規則には既定値が無いので、何もしない)。
+    public mutating func resetValue(rule: String, parameter: String) {
+        guard !isAddedMarker(rule), let (inFormats, path) = path(of: rule) else { return }
+        if inFormats { Self.remove(&formats, path + [parameter]) } else { Self.remove(&series, path + [parameter]) }
     }
 
     /// 巻の読み手の優先の順(挙げた読み手を先頭に寄せる)。
@@ -209,12 +225,69 @@ public struct RuleChanges: Sendable, Hashable {
         Self.set(&series, ["volume", "readers", "$order"], .array(ids.map(JSONValue.string)))
     }
 
+    // MARK: 語の規則(markers)
+
+    /// 利用者が差分の中に足した語の規則か。
+    public func isAddedMarker(_ id: String) -> Bool {
+        !RuleSchema.builtInMarkerIDs.contains(id) && series["markers"]?[id]?["treat"] != nil
+    }
+
+    /// 新しい語の規則を足す(並びの先頭に入る。位置は `setMarkerOrder` で決める)。
+    public mutating func addMarker(id: String, treat: String, words: [String] = [], patterns: [String] = []) {
+        Self.set(&series, ["markers", id], .object([
+            "treat": .string(treat), "words": .array(words.map(JSONValue.string)), "patterns": .array(patterns.map(JSONValue.string)),
+        ]))
+    }
+
+    /// 足した語の規則を消す(同梱の規則は消せない。止めるだけ)。
+    public mutating func removeMarker(id: String) {
+        guard isAddedMarker(id) else { return }
+        Self.remove(&series, ["markers", id])
+        if let order = series["markers"]?["$order"]?.arrayValue {
+            let rest = order.filter { $0.stringValue != id }
+            if rest.isEmpty { Self.remove(&series, ["markers", "$order"]) } else { Self.set(&series, ["markers", "$order"], .array(rest)) }
+        }
+    }
+
+    /// 語の規則の優先の順(並びの全体を渡す)。nil なら順番の変更を消す(同梱の順に、足した規則が先頭)。
+    public mutating func setMarkerOrder(_ ids: [String]?) {
+        if let ids { Self.set(&series, ["markers", "$order"], .array(ids.map(JSONValue.string))) }
+        else { Self.remove(&series, ["markers", "$order"]) }
+    }
+
+    /// 巻の読み手の順番の変更を消す。
+    public mutating func resetReaderOrder() { Self.remove(&series, ["volume", "readers", "$order"]) }
+
+    // MARK: 一覧(lists)
+
+    /// 対応表の一覧(異体字・括弧)に 1 組足す・外す。
+    public mutating func setPair(_ key: String, _ value: String, in list: String) {
+        var ops = series["lists"]?[list]?.objectValue ?? [:]
+        var set = ops["$set"]?.objectValue ?? [:]
+        set[key] = .string(value)
+        ops["$set"] = .object(set)
+        if let unset = ops["$unset"]?.arrayValue?.filter({ $0.stringValue != key }) { ops["$unset"] = unset.isEmpty ? nil : .array(unset) }
+        Self.set(&series, ["lists", list], .object(ops))
+    }
+
+    public mutating func removePair(_ key: String, from list: String) {
+        var ops = series["lists"]?[list]?.objectValue ?? [:]
+        if var set = ops["$set"]?.objectValue {
+            set[key] = nil
+            ops["$set"] = set.isEmpty ? nil : .object(set)
+        }
+        var unset = ops["$unset"]?.arrayValue ?? []
+        if !unset.contains(.string(key)) { unset.append(.string(key)) }
+        ops["$unset"] = .array(unset)
+        Self.set(&series, ["lists", list], .object(ops))
+    }
+
     public mutating func add(_ words: [String], to list: String) { edit(list, adding: words, removing: []) }
     public mutating func remove(_ words: [String], from list: String) { edit(list, adding: [], removing: words) }
 
     /// その規則だけ既定値に戻す。
     public mutating func reset(rule: String) {
-        guard let (inFormats, path) = Self.path(of: rule) else { return }
+        guard !isAddedMarker(rule), let (inFormats, path) = path(of: rule) else { return }
         if inFormats { Self.remove(&formats, path) } else { Self.remove(&series, path) }
     }
 
@@ -234,7 +307,12 @@ public struct RuleChanges: Sendable, Hashable {
         if ops.isEmpty { Self.remove(&series, ["lists", list]) } else { Self.set(&series, ["lists", list], .object(ops)) }
     }
 
-    /// 規則の ID → (フォーマットのファイルか, 差分の中の道筋)。
+    /// 規則の ID → (フォーマットのファイルか, 差分の中の道筋)。利用者が足した語の規則は、差分の中にある ID で見つける。
+    func path(of rule: String) -> (Bool, [String])? {
+        if isAddedMarker(rule) { return (false, ["markers", rule]) }
+        return Self.path(of: rule)
+    }
+
     static func path(of rule: String) -> (Bool, [String])? {
         func find(_ node: RuleSchema.Node, _ path: [String]) -> [String]? {
             for field in node.fields {

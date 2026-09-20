@@ -64,6 +64,55 @@ public enum FormatError: Error, Sendable, Hashable, CustomStringConvertible {
     }
 }
 
+/// 型として読まない文字列(filename-formats.json の `plain`)。名前の中のこの部分は、**型の照合のあいだだけ、ただの文字として扱う**:
+/// 括弧であっても型の括弧には当たらず、欄の区切りにもならない。値からは消えない(タイトルの一部として残る)。
+///
+/// 「月の庭 (2026)」の「(2026)」は年で、原作でも巻数でもない。これを型の側で見分ける手段が無かった(末尾の丸括弧は、
+/// 同人誌の並びでは原作、商業誌の並びでは巻数として読まれていた。利用者の指摘 2026-09-20)。
+public struct PlainText: Sendable, Hashable {
+    public var words: [String]
+    /// 正規表現(ICU)。
+    public var patterns: [String]
+    private let regex: NSRegularExpression?
+
+    public static let none = PlainText()
+
+    public init(words: [String] = [], patterns: [String] = []) {
+        self.words = words
+        self.patterns = patterns
+        let all = words.filter { !$0.isEmpty }.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+            + patterns.filter { !$0.isEmpty }
+        regex = all.isEmpty ? nil : try? NSRegularExpression(pattern: all.map { "(?:\($0))" }.joined(separator: "|"))
+    }
+
+    public var isEmpty: Bool { regex == nil }
+
+    /// 外側の分に内側の分を足したもの(`plain` は ファイル全体 → プリセット → 型 と**足し合わさる**。打ち消す使い道が無いため)。
+    public func adding(_ inner: PlainText) -> PlainText {
+        inner.isEmpty ? self : isEmpty ? inner : PlainText(words: words + inner.words.filter { !words.contains($0) },
+                                                           patterns: patterns + inner.patterns.filter { !patterns.contains($0) })
+    }
+
+    public static func == (a: PlainText, b: PlainText) -> Bool { a.words == b.words && a.patterns == b.patterns }
+    public func hash(into hasher: inout Hasher) { hasher.combine(words); hasher.combine(patterns) }
+
+    /// 名前の中の、型として読まない文字(文字 = Character の番号ごと)。1 つも無ければ nil(ふつうの名前は、ここで終わる)。
+    /// 正規表現は利用者が書き足せるので、照合に時間の上限を設ける(越えたら、無いものとして扱う)。
+    func mask(_ name: String, _ chars: [Character]) -> [Bool]? {
+        guard let regex, let matches = BudgetedRegex.matches(regex, in: name, budget: BudgetedRegex.defaultBudget),
+              !matches.isEmpty else { return nil }
+        // 正規表現の位置は UTF-16。文字の番号へ直す。
+        var starts: [Int] = []
+        var offset = 0
+        for c in chars { starts.append(offset); offset += c.utf16.count }
+        var mask = [Bool](repeating: false, count: chars.count)
+        for m in matches where m.range.length > 0 {
+            for i in chars.indices where starts[i] >= m.range.location && starts[i] < m.range.location + m.range.length { mask[i] = true }
+        }
+        return mask
+    }
+}
+
 /// 1 つの型。
 public struct FilenameFormat: Sendable, Hashable {
     enum Token: Sendable, Hashable {
@@ -85,12 +134,15 @@ public struct FilenameFormat: Sendable, Hashable {
     public var separators: [String]?
     /// この型で読んだ本にだけ入れる既定の欄(欄ごとにプリセットの既定より勝つ)。名前から読めた欄は触らない。
     public var defaults: [BookMetadata.Field: [String]]
+    /// この型で照合するときにだけ足す「型として読まない文字列」(プリセットの分に足される)。
+    public var plain: PlainText
 
     public init(_ text: String, separators: [String]? = nil,
-                defaults: [BookMetadata.Field: [String]] = [:]) throws(FormatError) {
+                defaults: [BookMetadata.Field: [String]] = [:], plain: PlainText = .none) throws(FormatError) {
         self.text = text
         self.separators = separators
         self.defaults = defaults
+        self.plain = plain
         tokens = try Self.compile(text)
     }
 
@@ -212,8 +264,12 @@ public struct FilenameFormat: Sendable, Hashable {
 
     /// 名前全体に一致すれば、欄の位置。欄は長く取るほうを先に試す(区切りが何度も現れるときは最後のもので分ける)。
     /// 失敗した (部品, 位置) を覚えるので、名前の長さに対して多項式の時間で終わる(正規表現の後戻りの爆発が無い)。
-    func match(_ name: [Character]) -> (match: Match?, progress: Progress) {
+    ///
+    /// `plain` は、型として読まない文字(`PlainText.mask`)。その文字は型の文字(括弧など)には当たらず、欄の値を括弧で
+    /// 止めることもない。数字だけの欄(`@volume`)には入らない。
+    func match(_ name: [Character], plain: [Bool]? = nil) -> (match: Match?, progress: Progress) {
         let folded = name.map(Self.fold)
+        func isPlain(_ p: Int) -> Bool { plain?[p] ?? false }
         var failed = Set<Int>()
         var best = Progress(tokens: 0, characters: 0)
         var fields: [(word: FormatWord, range: Range<Int>)] = []
@@ -225,16 +281,16 @@ public struct FilenameFormat: Sendable, Hashable {
             if failed.contains(t * width + p) { return false }
             switch tokens[t] {
             case .literal(let c):
-                if p < folded.count, folded[p] == c, step(t + 1, p + 1) { return true }
+                if p < folded.count, folded[p] == c, !isPlain(p), step(t + 1, p + 1) { return true }
             case .space:
                 var end = p
                 while end < folded.count, Self.isSpace(folded[end]) { end += 1 }
                 for e in stride(from: end, through: p, by: -1) where step(t + 1, e) { return true }
             case .field(let word, let excluded):
                 var end = p
-                while end < folded.count, !excluded.contains(folded[end]) {
+                while end < folded.count, isPlain(end) || !excluded.contains(folded[end]) {
                     // 数字だけの欄(`@volume`)は、数字と空白のあいだで止める。
-                    if word.onlyDigits, !folded[end].isNumber, !Self.isSpace(folded[end]) { break }
+                    if word.onlyDigits, isPlain(end) || (!folded[end].isNumber && !Self.isSpace(folded[end])) { break }
                     end += 1
                 }
                 for e in stride(from: end, to: p, by: -1) {
@@ -270,14 +326,18 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 先頭の丸括弧を催しの名前にしている蔵書では、ジャンルがどの名前にも書かれない。そういう蔵書は丸ごと同人誌なので、
     /// プリセットの側でジャンルを決められるようにする(2026-09-20、利用者の判断)。値は JSON が持ち、コードには書かない。
     public var defaults: [BookMetadata.Field: [String]]
+    /// 型として読まない文字列(ファイル全体の分とプリセットの分を足したもの。型の分は型が持つ)。
+    public var plain: PlainText
 
     public static let defaultSeparators = [",", "，", "、"]
 
     public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators,
-                defaults: [BookMetadata.Field: [String]] = [:], label: String? = nil, note: String? = nil) {
+                defaults: [BookMetadata.Field: [String]] = [:], label: String? = nil, note: String? = nil,
+                plain: PlainText = .none) {
         self.formats = formats
         self.separators = separators
         self.defaults = defaults
+        self.plain = plain
         self.label = label
         self.note = note
     }
@@ -357,8 +417,10 @@ public struct FilenameFormats: Sendable, Hashable {
     public func read(_ name: String) -> FormatReading {
         let chars = Array(name)
         var nearest: (index: Int, progress: FilenameFormat.Progress)?
+        let mask = plain.mask(name, chars)
         for (index, format) in formats.enumerated() {
-            let (match, progress) = format.match(chars)
+            // 型が自分の分を足していれば、その型のときだけ足した形で見る。
+            let (match, progress) = format.match(chars, plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(name, chars))
             if let match { return reading(chars, match, format: format, formatIndex: index) }
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。
             if progress.tokens > format.leadingFreeTokens, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
