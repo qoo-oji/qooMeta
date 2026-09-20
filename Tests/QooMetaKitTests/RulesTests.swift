@@ -35,14 +35,14 @@ import QooMetaRules
         let rules = try #require(c.rules)
         #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .greek, .roman, .position])
         #expect(rules.series.grouping.minPrefix == 4)
-        #expect(rules.formats[nil].formats.count == 26)
+        #expect(rules.formats[nil].formats.count == 10)  // 既定は商業誌
         // 同梱の JSON と、規則ファイルを読む前に使うコードの側の並びは同じ。
         for name in rules.formats.names {
             #expect(rules.formats[name].formats.map(\.text) == FormatPresets.bundled[name].formats.map(\.text))
         }
         // 同梱のプリセットは見出しを持たない(画面が訳して出す。2026-09-21)。
         #expect(rules.formats["commercial"].label == nil)
-        #expect(rules.formats.names == ["commercial", "doujinshi", "doujinshi-event", "mixed"])
+        #expect(rules.formats.names == ["commercial", "doujinshi", "doujinshi-event"])
         // 催しの型のプリセットだけが、名前に書かれないジャンルの既定を持つ。
         #expect(rules.formats["doujinshi-event"].defaults[.genre] == ["同人誌"])
         #expect(rules.formats["doujinshi"].defaults.isEmpty)
@@ -303,13 +303,13 @@ import QooMetaRules
         { "kind": "qoometa.rules-bundle", "schemaVersion": 2, "base": "builtin",
           "seriesRules": { "grouping": { "sharedPrefix": { "minPrefix": 5 } } },
           "filenameFormats": {
-            "presets": { "mixed": { "formats": { "$add": ["@title - @author"], "at": "end" } } },
+            "presets": { "commercial": { "formats": { "$add": ["@title - @author"], "at": "end" } } },
             "separators": { "$add": ["・"] }
           } }
         """)
         let rules = try #require(c.rules, "\(c.errors)")
         #expect(rules.series.grouping.minPrefix == 5)
-        #expect(rules.formats[nil].formats.last?.text == "@title - @author")
+        #expect(rules.formats["commercial"].formats.last?.text == "@title - @author")
         #expect(rules.formats[nil].separators.contains("・"))
     }
 
@@ -362,7 +362,7 @@ import QooMetaRules
         #expect(doujinshi.read("[架空工房] 月の庭 (仮)").metadata.title == "月の庭 (仮)")
         #expect(doujinshi.read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
         // プリセットに足した分は、ほかのプリセットには効かない。
-        #expect(rules.formats["mixed"].read("[架空工房] 月の庭 (第2版)").metadata.source == "第2版")
+        #expect(rules.formats["doujinshi-event"].read("[架空工房] 月の庭 (第2版)").metadata.source == "第2版")
         // 危ない正規表現は、ほかの規則と同じく誤り。
         let bad = Self.compile(Self.diff(#""plain": { "patterns": { "$add": ["(a+)+"] } }"#, kind: "qoometa.filename-formats"))
         #expect(bad.errors.map(\.code) == [.unsafePattern])
@@ -401,9 +401,9 @@ import QooMetaRules
 
     @Test func badFormatsAreReportedByIndex() {
         // 予約語ではない `@titl` は、型の番号付きで誤りになる。
-        let c = Self.compile(Self.diff(#""presets": { "mixed": { "formats": { "$add": ["[@author] @titl"] } } }"#,
+        let c = Self.compile(Self.diff(#""presets": { "commercial": { "formats": { "$add": ["[@author] @titl"] } } }"#,
                                        kind: "qoometa.filename-formats"))
-        #expect(c.errors.map(\.path) == ["presets.mixed.formats[0]"])
+        #expect(c.errors.map(\.path) == ["presets.commercial.formats[0]"])
     }
 
     @Test func contentHashFollowsTheContentOnly() throws {

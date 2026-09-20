@@ -237,11 +237,10 @@ func run() async throws {
         // 正解付きのデータ(1 行 1 冊の JSON)で提案を採点する。出すのは集計だけ。
         let labeled = Evaluator.parse(try String(contentsOfFile: try args.require("corpus"), encoding: .utf8))
         print("本 \(labeled.count) 冊")
-        // --preset: commercial(既定)/ doujinshi / mixed。公開データは商業の本なので、既定は商業誌のプリセット。
+        // --preset: commercial(既定)/ doujinshi。公開データは商業の本なので、既定は商業誌のプリセット。
         let formats: FilenameFormats = switch args.options["preset"] ?? "commercial" {
         case "doujinshi": .doujinshiPreset
         case "doujinshi-event": .doujinshiEventPreset
-        case "mixed": rules.formats[nil]
         default: .commercialPreset
         }
         let s = Evaluator.score(labeled, rules: rules, dictionaries: SystemDictionaries.all, formats: formats,

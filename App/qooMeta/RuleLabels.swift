@@ -155,8 +155,6 @@ extension RuleLabels {
     /// 同梱のプリセットの見出しと説明の鍵。**同梱の JSON には書かない**(JSON に日本語を書くと、英語で使う
     /// 利用者にそのまま出てしまう)。利用者が付けた見出しは、その人の言葉のまま出す。
     static let presets: [String: Item] = [
-        "mixed": Item(title: "General",
-                      help: "Reads doujinshi and commercial naming side by side. A trailing parenthesis of digits is the volume; anything else is the source work."),
         "doujinshi": Item(title: "Doujinshi (genre first)",
                           help: "The trailing parenthesis is the source work. A parenthesis inside the brackets holds the second author onwards."),
         "doujinshi-event": Item(title: "Doujinshi (event first)",

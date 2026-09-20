@@ -5,8 +5,10 @@ import QooMetaRules
 
 // 公開する API(docs/api.md)の約束。名前はすべて架空のもの。
 
-func inputs(_ names: [String]) -> [BookInput] {
-    names.enumerated().map { BookInput(id: String(format: "%03d", $0.offset), name: $0.element) }
+/// テストの名前は同人誌の命名で書いてあるので、断りがなければ同人誌のプリセットで読む
+/// (同梱の既定は商業誌。2026-09-21 に「混ざった蔵書」の並びをやめた)。
+func inputs(_ names: [String], preset: String? = "doujinshi") -> [BookInput] {
+    names.enumerated().map { BookInput(id: String(format: "%03d", $0.offset), name: $0.element, preset: preset) }
 }
 
 func seriesName(_ set: ProposalSet, _ id: String) -> String? {
@@ -17,14 +19,14 @@ let allDictionaries = SystemDictionaries.all
 
 @Suite struct ParseNameTests {
     @Test func fieldsAndFormat() {
-        let r = parseName("(種別A) [架空工房 (山田太郎)] 月の庭 第3巻 (作品A) [DL版]", rules: .builtin)
+        let r = parseName("(種別A) [架空工房 (山田太郎)] 月の庭 第3巻 (作品A) [DL版]", rules: .builtin, preset: "doujinshi")
         #expect(r.metadata.genre == "種別A")
         #expect(r.metadata.event.isEmpty)
         #expect(r.metadata.authors == ["架空工房", "山田太郎"])
         #expect(r.metadata.title == "月の庭 第3巻")
         #expect(r.metadata.source == "作品A")
         #expect(r.metadata.info == "DL版")
-        #expect(r.formatIndex == 2)
+        #expect(r.formatIndex == 0)
     }
 
     @Test func unmatchedNameIsAProvisionalTitle() {

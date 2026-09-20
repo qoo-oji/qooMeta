@@ -6,7 +6,7 @@ import Testing
 
 @Suite struct FilenameFormatTests {
     static func read(_ name: String, _ formats: [String]? = nil) -> FormatReading {
-        let set = formats.map { FilenameFormats(formats: $0.map { try! FilenameFormat($0) }) } ?? .preset
+        let set = formats.map { FilenameFormats(formats: $0.map { try! FilenameFormat($0) }) } ?? .doujinshiPreset
         return set.read(name)
     }
 
@@ -25,7 +25,7 @@ import Testing
 
     @Test func fullWidthBracketsAreTheSame() {
         let r = Self.read("（架空ジャンル）［架空工房（月見そば太郎）］星降る夜の喫茶店（架空の原作）")
-        #expect(r.formatIndex == FilenameFormats.presetTexts.firstIndex(of: "(@genre) [@author (@author)] @title (@source)"))
+        #expect(r.formatIndex == FilenameFormats.doujinshiPresetTexts.firstIndex(of: "(@genre) [@author (@author)] @title (@source)"))
         #expect(r.metadata.genre == "架空ジャンル")
         #expect(r.metadata.authors == ["架空工房", "月見そば太郎"])
         #expect(r.metadata.title == "星降る夜の喫茶店")
@@ -41,7 +41,7 @@ import Testing
 
     @Test func presetFillsEachPosition() {
         let r = Self.read("(架空ジャンル) [架空工房 (月見そば太郎)] 月の庭 3 (架空の原作) [付記]")
-        #expect(r.formatIndex == 2)
+        #expect(r.formatIndex == 0)
         #expect(r.metadata.title == "月の庭 3")
         #expect(r.metadata.source == "架空の原作")
         // 末尾の角括弧は捨てずに情報へ(@info)。
@@ -52,7 +52,7 @@ import Testing
 
     @Test func trailingSquareBracketIsInfo() {
         let r = Self.read("[架空工房] 月の庭 [付記]")
-        #expect(r.formatIndex == FilenameFormats.presetTexts.firstIndex(of: "[@author] @title [@info]"))
+        #expect(r.formatIndex == FilenameFormats.doujinshiPresetTexts.firstIndex(of: "[@author] @title [@info]"))
         #expect(r.metadata.info == "付記")
         #expect(r.metadata.title == "月の庭")
     }
@@ -73,7 +73,7 @@ import Testing
     }
 
     @Test func separatorsCanBeAdded() {
-        var set = FilenameFormats.preset
+        var set = FilenameFormats.doujinshiPreset
         #expect(set.read("[作画×原作] 月の庭").metadata.authors == ["作画×原作"])
         set.separators.append("×")
         #expect(set.read("[作画×原作] 月の庭").metadata.authors == ["作画", "原作"])
@@ -194,11 +194,10 @@ import Testing
     }
 
     @Test func bundledPresets() {
-        // 既定の並びは、形ごとに「数字だけの丸括弧 = 巻数」を先に試し、そうでなければ原作として読む。
-        #expect(FilenameFormats.presetTexts.count == 26)
-        #expect(FilenameFormats.presetTexts.first == "(@genre) [@author (@author)] @title (@volume) [@info]")
-        // 著者を末尾に付ける形は、角括弧の形より後ろ(両方に当たる名前は、これまでどおり角括弧の形で読む)。
-        #expect(FilenameFormats.presetTexts.suffix(3) == ["[@author] @title", "@series (@volume) - @author [@info]", "@series (@volume) - @author"])
+        // 同梱は同人誌用・催し用・商業誌用の 3 つだけ。命名の違う本を 1 度に読む並びは持たない
+        // (2026-09-21、利用者の判断。分けたいものは、そもそも一緒に読み込まない)。
+        #expect(FormatPresets.bundled.names == ["commercial", "doujinshi", "doujinshi-event"])
+        #expect(FormatPresets.bundled.defaultName == "commercial")
         // 同人誌用は末尾の丸括弧が原作、商業誌用は巻数(著者の中の丸括弧も使わない)。
         #expect(FilenameFormats.doujinshiPresetTexts.count == 16)
         #expect(FilenameFormats.doujinshiPresetTexts.allSatisfy { !$0.contains("@volume") })
@@ -233,11 +232,13 @@ import Testing
         #expect(withGenre.read("[架空工房] 月の庭 (架空の原作)").metadata.source == "架空の原作")
     }
 
+    /// 末尾の数字だけの丸括弧は、商業誌用では巻数、同人誌用では原作。プリセットで読み方が分かれる。
     @Test func numericTrailingParenIsTheVolume() {
-        let r = Self.read("[架空工房] 月の庭（１２）")
+        let r = FilenameFormats.commercialPreset.read("[架空工房] 月の庭（１２）")
         #expect(r.metadata.volume == "12")  // 全角の数字は半角に畳む
         #expect(r.metadata.title == "月の庭")
         #expect(Self.read("[架空工房] 月の庭 (架空の原作)").metadata.source == "架空の原作")
+        #expect(Self.read("[架空工房] 月の庭（１２）").metadata.source == "１２")
     }
 
     @Test func longNamesFinishQuickly() {

@@ -392,22 +392,6 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 角括弧で始まる形と両方に当たる名前は、これまでどおり角括弧の形で読むように、並びの末尾に置く。
     static let trailingAuthorTexts = ["@series (@volume) - @author [@info]", "@series (@volume) - @author"]
 
-    /// 同梱の既定の並び: 命名の違う本が混ざった蔵書をそのまま読むための 1 本。形ごとに、**数字だけの末尾の丸括弧は巻数**
-    /// (`(@volume)`)を先に試し、そうでなければ原作(`(@source)`)として読む。`@volume` は数字だけに当たるので、
-    /// 「(12)」は巻数、「(架空の原作)」は原作になる。
-    public static let presetTexts: [String] = {
-        var texts: [String] = []
-        for genre in ["(@genre) ", ""] {
-            for author in ["[@author (@author)]", "[@author]"] {
-                for tail in [" (@volume) [@info]", " (@volume)", " (@source) [@info]", " (@source)", " [@info]", ""] {
-                    texts.append("\(genre)\(author) @title\(tail)")
-                }
-            }
-        }
-        return texts + trailingAuthorTexts
-    }()
-
-    public static let preset = FilenameFormats(formats: presetTexts.map { try! FilenameFormat($0) })
     public static let doujinshiPreset = FilenameFormats(formats: doujinshiPresetTexts.map { try! FilenameFormat($0) })
     public static let doujinshiEventPreset = FilenameFormats(formats: doujinshiEventPresetTexts.map { try! FilenameFormat($0) },
                                                              defaults: doujinshiEventDefaults)
@@ -505,7 +489,7 @@ public struct FormatReading: Sendable, Hashable {
 /// 名前を付けた型の並び(プリセット)。**フォルダごとに使い分けられる**ように、本ごとに名前で選ぶ
 /// (2026-09-20、利用者の指示。商業誌と同人誌が混ざったフォルダ構成のため)。
 public struct FormatPresets: Sendable, Hashable {
-    /// 名前 → 型の並び(同梱は `mixed`・`doujinshi`・`doujinshi-event`・`commercial`)。
+    /// 名前 → 型の並び(同梱は `doujinshi`・`doujinshi-event`・`commercial`)。
     public var presets: [String: FilenameFormats]
     /// 本がプリセットを選ばなかったときに使う名前。
     public var defaultName: String
@@ -517,7 +501,7 @@ public struct FormatPresets: Sendable, Hashable {
 
     /// 名前で選ぶ(無い名前なら既定、それも無ければ同梱の既定)。
     public subscript(name: String?) -> FilenameFormats {
-        presets[name ?? defaultName] ?? presets[defaultName] ?? .preset
+        presets[name ?? defaultName] ?? presets[defaultName] ?? .commercialPreset
     }
 
     public var names: [String] { presets.keys.sorted() }
@@ -527,7 +511,7 @@ public struct FormatPresets: Sendable, Hashable {
 
     /// 同梱のプリセット(コードの側の既定。規則ファイルを読む前に使う)。
     public static let bundled = FormatPresets(
-        presets: ["mixed": .preset, "doujinshi": .doujinshiPreset, "doujinshi-event": .doujinshiEventPreset,
+        presets: ["doujinshi": .doujinshiPreset, "doujinshi-event": .doujinshiEventPreset,
                   "commercial": .commercialPreset],
-        defaultName: "mixed")
+        defaultName: "commercial")
 }

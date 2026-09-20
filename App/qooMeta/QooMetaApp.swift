@@ -202,7 +202,13 @@ final class AppModel {
             PresetFit(id: $0.id, title: $0.preset.displayName, note: RuleLabels.preset($0.id).help,
                       matched: counts[$0.id] ?? 0)
         }
-        if chosenPreset == nil || counts[chosenPreset!] == nil { chosenPreset = settings.rules.formats.defaultName }
+        // 選び直しでなければ、**この蔵書でいちばん読めたもの**を選んでおく(既定を黙って当てない)。
+        // 同じ数なら、同梱の並びで先のものを採る。
+        if chosenPreset == nil || counts[chosenPreset!] == nil {
+            chosenPreset = presetFits.reduce(into: nil as PresetFit?) { best, fit in
+                if best == nil || fit.matched > best!.matched { best = fit }
+            }?.id ?? settings.rules.formats.defaultName
+        }
     }
 
     /// 段 2 を抜けて、選んだプリセットで一覧を組み立てる。

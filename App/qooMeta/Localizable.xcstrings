@@ -97,7 +97,7 @@
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%2$lld 件中 %1$lld 件を解析"
+                  "value": "%2$lld 冊中 %1$lld 冊を解析"
                 }
               }
             }
@@ -1505,6 +1505,23 @@
         }
       }
     },
+    "Clear the filters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear the filters"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "絞り込みを解除"
+          }
+        }
+      }
+    },
     "Clear the volume": {
       "extractionState": "manual",
       "localizations": {
@@ -2895,23 +2912,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "フルカラー版・完全版・〇〇語版 …"
-          }
-        }
-      }
-    },
-    "General": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "General"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "総合"
           }
         }
       }
@@ -4412,23 +4412,6 @@
         }
       }
     },
-    "Reads doujinshi and commercial naming side by side. A trailing parenthesis of digits is the volume; anything else is the source work.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reads doujinshi and commercial naming side by side. A trailing parenthesis of digits is the volume; anything else is the source work."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同人誌と商業誌の命名が混ざっていても、そのまま読む。数字だけの末尾の丸括弧は巻数、そうでなければ原作"
-          }
-        }
-      }
-    },
     "Reads the leading parenthesis as the name of the event. The genre, which no name carries, is filled in by default.": {
       "extractionState": "manual",
       "localizations": {
@@ -5699,7 +5682,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ShelfRow が取り込む Stackroom XML。取り込みが読むのはタイトル・著者・キーワード A / B・メモ(Neta)だけで、ジャンル・シリーズ・巻数の欄は読まれない。"
+            "value": "ShelfRow が取り込む Stackroom XML です。取り込みが読むのはタイトル・著者・キーワード A / B・メモ(Neta)だけで、ジャンル・シリーズ・巻数の欄は読まれません。"
           }
         }
       }
@@ -5716,7 +5699,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "StackNest が取り込む Stackroom XML。**新しいライブラリを作る**形式で、既存のライブラリへは足せない。メモの欄は取り込みに無い。"
+            "value": "StackNest が取り込む Stackroom XML です。新しいライブラリを作る形式で、既存のライブラリには足せません。メモの欄は取り込みにありません。"
           }
         }
       }
@@ -5903,7 +5886,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "qooViewer の保存データ JSON(「保存データの読み込み」で取り込む)。持てる欄はタイトル・著者・シリーズ・巻数の表記だけ。"
+            "value": "qooViewer の保存データ JSON です(「保存データの読み込み」で取り込みます)。持てる欄はタイトル・著者・シリーズ・巻数の表記だけです。"
           }
         }
       }

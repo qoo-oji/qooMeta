@@ -343,7 +343,7 @@ struct RuleCompiler {
                                             label: preset["label"]?.stringValue, note: preset["note"]?.stringValue,
                                             plain: filePlain.adding(plain(preset["plain"])))
         }
-        let defaultName = root["defaultPreset"]?.stringValue ?? "mixed"
+        let defaultName = root["defaultPreset"]?.stringValue ?? "commercial"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }
         return FormatPresets(presets: presets, defaultName: defaultName)
     }

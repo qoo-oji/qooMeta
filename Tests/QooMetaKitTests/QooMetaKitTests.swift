@@ -97,8 +97,8 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
 @Suite struct ExporterTests {
     static func proposals() -> ProposalSet {
         proposeSync([
-            BookInput(id: "a.cbz", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 1 (オリジナル)"),
-            BookInput(id: "b.cbr", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 上 (オリジナル) <&>"),
+            BookInput(id: "a.cbz", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 1 (オリジナル)", preset: "doujinshi"),
+            BookInput(id: "b.cbr", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 上 (オリジナル) <&>", preset: "doujinshi"),
         ], rules: .builtin, dictionaries: [:])
     }
 

@@ -6,6 +6,7 @@
   "examples": [
     {
       "id": "parse-full-name",
+      "preset": "doujinshi",
       "files": [
         "(種別A) [架空工房 (山田太郎、佐藤花子)] 星降る夜の喫茶店 2 (オリジナル) [付録つき]"
       ],
@@ -21,7 +22,7 @@
           "source": "オリジナル",
           "info": "付録つき",
           "series": null,
-          "format": 3
+          "format": 1
         }
       ],
       "covers": []
@@ -90,6 +91,7 @@
     },
     {
       "id": "parse-full-width-brackets-keep-width",
+      "preset": "doujinshi",
       "files": [
         "［架空工房］ ＡＢＣの冒険！（オリジナル）"
       ],
@@ -1646,6 +1648,7 @@
     },
     {
       "id": "different-relations-are-not-a-series",
+      "preset": "doujinshi",
       "files": [
         "(種別A) [架空工房] NEON 夜の街 (作品A)",
         "(種別A) [架空工房] NEON 朝の港 (作品B)"
@@ -1667,6 +1670,7 @@
     },
     {
       "id": "unlabeled-relation-joins-the-largest-group",
+      "preset": "doujinshi",
       "files": [
         "[架空工房] 月の庭 2 (作品A)",
         "[架空工房] 月の庭 3 (作品A)",
@@ -2317,10 +2321,10 @@
     },
     {
       "id": "year-in-parentheses-stays-in-the-title",
+      "preset": "doujinshi",
       "files": [
         "(架空の分類) [架空工房] 月の庭 (2026)",
-        "(架空の分類) [架空工房] 風の丘 旧版（2022年）＋新版（2025年） (架空の原作)",
-        "[架空工房] 星の海 (12)"
+        "(架空の分類) [架空工房] 風の丘 旧版（2022年）＋新版（2025年） (架空の原作)"
       ],
       "expect": [
         {
@@ -2330,10 +2334,25 @@
         {
           "title": "風の丘 旧版（2022年）＋新版（2025年）",
           "source": "架空の原作"
-        },
+        }
+      ],
+      "covers": []
+    },
+    {
+      "id": "year-in-parentheses-is-not-a-volume",
+      "preset": "commercial",
+      "files": [
+        "[架空工房] 星の海 (12)",
+        "[別の工房] 風の丘 (2026)"
+      ],
+      "expect": [
         {
           "title": "星の海",
           "volume": "12"
+        },
+        {
+          "title": "風の丘 (2026)",
+          "volume": null
         }
       ],
       "covers": []

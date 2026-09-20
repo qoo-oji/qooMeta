@@ -266,9 +266,9 @@ import QooMetaRules
             return try #require(c.rules, "\(c.errors)")
         }
         let start = CompiledRules.builtin.presetCatalog
-        #expect(start.entries.map(\.preset.name) == ["mixed", "doujinshi", "doujinshi-event", "commercial"])
+        #expect(start.entries.map(\.preset.name) == ["doujinshi", "doujinshi-event", "commercial"])
         #expect(start.entries.allSatisfy { $0.isBuiltIn && !$0.isModified })
-        #expect(start.defaultPreset == "mixed" && start.separators == [",", "，", "、"])
+        #expect(start.defaultPreset == "commercial" && start.separators == [",", "，", "、"])
         let commercial = try #require(start.entries.first { $0.id == "commercial" })
         #expect(commercial.preset.label.isEmpty && commercial.preset.formats.count == 10)
 
@@ -305,7 +305,7 @@ import QooMetaRules
         changes.setSeparators([",", "、"], builtIn: start.builtInSeparators)
         rules = try compile(changes)
         let catalog = rules.presetCatalog
-        #expect(catalog.entries.map(\.preset.name) == ["mixed", "doujinshi", "doujinshi-event", "commercial", "自分の棚"])
+        #expect(catalog.entries.map(\.preset.name) == ["doujinshi", "doujinshi-event", "commercial", "自分の棚"])
         #expect(catalog.entries.last?.isBuiltIn == false && catalog.entries.last?.preset == mine)
         #expect(catalog.defaultPreset == "自分の棚" && catalog.separators == [",", "、"])
         #expect(rules.formats[nil].label == "自分の棚(著者は末尾)")
@@ -420,10 +420,10 @@ import QooMetaRules
         #expect(inputs[0].preset == "doujinshi")
         #expect(inputs[1].preset == "commercial")
         #expect(inputs[2].preset == "commercial")
-        let nested = Workfile.PresetAssignment(defaultPreset: "mixed", folders: ["A": "commercial", "A/B": "doujinshi"])
+        let nested = Workfile.PresetAssignment(defaultPreset: "commercial", folders: ["A": "commercial", "A/B": "doujinshi"])
         #expect(nested.preset(for: "A/B/本.zip") == "doujinshi")
         #expect(nested.preset(for: "A/C/本.zip") == "commercial")
-        #expect(nested.preset(for: "D/本.zip") == "mixed")
+        #expect(nested.preset(for: "D/本.zip") == "commercial")
     }
 
     @Test func foldersAndErrors() throws {

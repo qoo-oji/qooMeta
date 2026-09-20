@@ -41,12 +41,18 @@ struct WorkspaceView: View {
 // MARK: - 絞り込み
 
 /// 一覧の上の絞り込み: ジャンル → 著者(ジャンルで候補が絞られる。値ごとの冊数と「(空)」つき)と、本の状態。
+/// **いつも見えている**ので、一覧のどこを見ているかが分かる。
 struct FilterBar: View {
     @Bindable var workspace: Workspace
 
+    private var isFiltering: Bool {
+        workspace.genreFilter != nil || workspace.authorFilter != nil || workspace.stateFilter != .all
+    }
+
     var body: some View {
         HStack(spacing: 16) {
-            Picker("Genre", selection: Binding(get: { workspace.genreFilter }, set: { workspace.setGenreFilter($0) })) {
+            Picker("Genre", selection: Binding(get: { workspace.genreFilter },
+                                               set: { workspace.setGenreFilter($0) })) {
                 Text("All").tag(ValueKey?.none)
                 ForEach(workspace.genreValues, id: \.key) { row in
                     Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count)).tag(ValueKey?.some(row.key))
@@ -67,6 +73,14 @@ struct FilterBar: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            if isFiltering {
+                Button("Clear the filters") {
+                    workspace.setGenreFilter(nil)
+                    workspace.authorFilter = nil
+                    workspace.stateFilter = .all
+                }
+                .buttonStyle(.link)
+            }
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -106,6 +120,15 @@ struct BookTableView: View {
                 .customizationID(field.rawValue)
             }
         }
+        .modifier(HideTopScrollEdgeEffect())
+    }
+}
+
+/// 表の上の「ふち」の効果(macOS 26 から)を消す。段のバーの下に暗い帯が掛かり、表の見出しが読めなくなる
+/// ―― 窓の上に自前の帯(段のバー)を置いているため(2026-09-21、実機で確かめた)。
+private struct HideTopScrollEdgeEffect: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) { content.scrollEdgeEffectHidden(true, for: .top) } else { content }
     }
 }
 

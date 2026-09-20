@@ -3,7 +3,7 @@
   "kind": "qoometa.filename-formats",
   "schemaVersion": 5,
   "revision": "2026.09.21",
-  "defaultPreset": "mixed",
+  "defaultPreset": "commercial",
   "separators": [
     ",",
     "，",
@@ -16,36 +16,6 @@
     ]
   },
   "presets": {
-    "mixed": {
-      "formats": [
-        "(@genre) [@author (@author)] @title (@volume) [@info]",
-        "(@genre) [@author (@author)] @title (@volume)",
-        "(@genre) [@author (@author)] @title (@source) [@info]",
-        "(@genre) [@author (@author)] @title (@source)",
-        "(@genre) [@author (@author)] @title [@info]",
-        "(@genre) [@author (@author)] @title",
-        "(@genre) [@author] @title (@volume) [@info]",
-        "(@genre) [@author] @title (@volume)",
-        "(@genre) [@author] @title (@source) [@info]",
-        "(@genre) [@author] @title (@source)",
-        "(@genre) [@author] @title [@info]",
-        "(@genre) [@author] @title",
-        "[@author (@author)] @title (@volume) [@info]",
-        "[@author (@author)] @title (@volume)",
-        "[@author (@author)] @title (@source) [@info]",
-        "[@author (@author)] @title (@source)",
-        "[@author (@author)] @title [@info]",
-        "[@author (@author)] @title",
-        "[@author] @title (@volume) [@info]",
-        "[@author] @title (@volume)",
-        "[@author] @title (@source) [@info]",
-        "[@author] @title (@source)",
-        "[@author] @title [@info]",
-        "[@author] @title",
-        "@series (@volume) - @author [@info]",
-        "@series (@volume) - @author"
-      ]
-    },
     "doujinshi": {
       "formats": [
         "(@genre) [@author (@author)] @title (@source) [@info]",

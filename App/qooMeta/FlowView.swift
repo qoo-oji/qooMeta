@@ -30,6 +30,9 @@ struct FlowView: View {
                 }
             }
         }
+        // 窓のツールバーの背景(すりガラス)が、段のバーより下まで掛かって表の見出しを塗り潰していた。
+        // 段のバーが仕切りになるので、ツールバーの背景は隠す(2026-09-21、実機で確かめた)。
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .confirmationDialog("Start over with other books?",
                             isPresented: Binding(get: { model.pendingPick != nil },
                                                  set: { if !$0 { model.pendingPick = nil } })) {
@@ -153,6 +156,7 @@ private struct ChooseBooksStep: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
+                .containerRelativeFrame(.vertical, alignment: .center)
             }
             StepFooter {
                 Button("Next") { model.go(to: .parse) }
@@ -188,6 +192,7 @@ private struct ChoosePresetStep: View {
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
                 .padding(24)
+                .containerRelativeFrame(.vertical, alignment: .center)
             }
             StepFooter(back: { model.go(to: .choose) }) {
                 Button("Next") { model.startReview() }

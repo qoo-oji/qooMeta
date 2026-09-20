@@ -339,7 +339,7 @@
 {
   "kind": "qoometa.filename-formats",
   "schemaVersion": 5,
-  "defaultPreset": "mixed",
+  "defaultPreset": "commercial",
   "separators": [",", "，", "、"],
   "presets": {
     "commercial": {
