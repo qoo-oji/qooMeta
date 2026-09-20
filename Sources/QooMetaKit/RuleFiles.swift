@@ -309,15 +309,23 @@ struct RuleCompiler {
     mutating func formats(_ root: JSONValue) -> FormatPresets? {
         let separators = words(root["separators"], [:])
         var presets: [String: FilenameFormats] = [:]
-        for (name, list) in root["presets"]?.objectValue ?? [:] {
+        for (name, preset) in root["presets"]?.objectValue ?? [:] {
+            // プリセットは「型の並び + 既定の欄」。型の並びだけを配列で書いた短い形も読む。
+            let list = preset.arrayValue != nil ? preset : (preset["formats"] ?? .array([]))
             var compiled: [FilenameFormat] = []
             for (i, text) in words(list, [:]).enumerated() {
                 do { compiled.append(try FilenameFormat(text)) } catch {
-                    report(.invalidValue, "presets.\(name)[\(i)]", error.description)
+                    report(.invalidValue, "presets.\(name).formats[\(i)]", error.description)
                 }
             }
+            var defaults: [BookMetadata.Field: [String]] = [:]
+            for (field, value) in preset["defaults"]?.objectValue ?? [:] {
+                guard let field = BookMetadata.Field(rawValue: field), let text = value.stringValue, !text.isEmpty else { continue }
+                defaults[field] = [text]
+            }
             presets[name] = FilenameFormats(formats: compiled,
-                                            separators: separators.isEmpty ? FilenameFormats.defaultSeparators : separators)
+                                            separators: separators.isEmpty ? FilenameFormats.defaultSeparators : separators,
+                                            defaults: defaults)
         }
         let defaultName = root["defaultPreset"]?.stringValue ?? "mixed"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }

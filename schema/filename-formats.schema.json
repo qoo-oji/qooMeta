@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
-  "title": "qooMeta のファイル名のフォーマット(第 3 版)",
-  "description": "既定値の全体、または base: builtin の差分。説明は docs/rules.md",
+  "title": "qooMeta のファイル名のフォーマット(第 4 版)",
+  "description": "既定値の全体、または base: builtin の差分。説明は docs/filename-format.md",
   "type": "object",
   "required": [
     "kind",
@@ -17,7 +17,7 @@
       "const": "qoometa.filename-formats"
     },
     "schemaVersion": {
-      "const": 3
+      "const": 4
     },
     "revision": {
       "type": "string"
@@ -40,16 +40,67 @@
       },
       "description": "著者の値を分ける文字列(既定は , ， 、)"
     },
+    "defaultPreset": {
+      "type": "string",
+      "description": "本がプリセットを選ばなかったときに使う名前"
+    },
+    "presets": {
+      "type": "object",
+      "description": "名前を付けた型の並び。本ごと(実際にはフォルダごと)に選ぶ",
+      "additionalProperties": {
+        "$ref": "#/$defs/preset"
+      }
+    }
+  },
+  "$defs": {
+    "preset": {
+      "description": "1 つのプリセット。型の並びだけなら配列で書いてもよい",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/formats"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formats": {
+              "$ref": "#/$defs/formats"
+            },
+            "defaults": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "名前に書かれていない欄に入れる値(名前から読めたときは触らない)",
+              "properties": {
+                "genre": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "event": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "info": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "formats": {
       "type": "array",
       "items": {
         "type": "string",
         "minLength": 1
       },
-      "description": "型の並び。上から照合し、名前全体に一致した最初の型で読む。予約語は @title @author @genre @event @source @info @ignore"
-    }
-  },
-  "$defs": {
+      "description": "型の並び。上から照合し、名前全体に一致した最初の型で読む。予約語は @title @author @genre @event @source @info @series @volume @ignore"
+    },
     "retiredIDs": {
       "type": "array",
       "items": {

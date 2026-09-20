@@ -216,12 +216,19 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 著者の値を分ける文字列(並びの欄は著者だけ)。既定は `,` と `、`(全角のカンマも `,` と同じ)。
     /// `×` `&` `・` は 1 つの名義の中にも現れ、取り違えると著者の先頭(中核の比べる単位)が壊れるので既定に入れない。
     public var separators: [String]
+    /// 名前に書かれていない欄に入れる既定の値(プリセットごと)。**名前から読めたときは触らない。**
+    ///
+    /// 先頭の丸括弧を催しの名前にしている蔵書では、ジャンルがどの名前にも書かれない。そういう蔵書は丸ごと同人誌なので、
+    /// プリセットの側でジャンルを決められるようにする(2026-09-20、利用者の判断)。値は JSON が持ち、コードには書かない。
+    public var defaults: [BookMetadata.Field: [String]]
 
     public static let defaultSeparators = [",", "，", "、"]
 
-    public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators) {
+    public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators,
+                defaults: [BookMetadata.Field: [String]] = [:]) {
         self.formats = formats
         self.separators = separators
+        self.defaults = defaults
     }
 
     /// 同梱のプリセット(docs/filename-format.md の 5)。**同人誌用と商業誌用に分ける**(2026-09-20、利用者の判断。末尾の丸括弧が
@@ -230,17 +237,30 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 同人誌用: ターゲットの既定(qooViewer の 12 通り)の `@ignore` の位置へ欄を割り当て(末尾の角括弧は `@info`)、
     /// 末尾が角括弧だけの形を足した 16 通り。タイトル・著者が壊れる型(`@title` だけ、`@title - @author`、
     /// `@title [@author]`)は入れない。
-    public static let doujinshiPresetTexts: [String] = {
+    public static let doujinshiPresetTexts = doujinshiTexts(leading: "(@genre) ")
+
+    /// 同人誌用(頒布会の名前で管理する利用者向け)。**先頭の丸括弧を `@event` として読む**ほかは同じ 16 通り。
+    ///
+    /// ジャンルの型と催しの型は、先頭の同じ位置を奪い合う(どちらも「(…)」)ので、**1 つの並びには同居できない**
+    /// (先に当たったほうで読んでしまう)。どちらで管理しているかは蔵書ごと・フォルダごとに決まっているので、
+    /// 並びを分けて本ごとに選べるようにする(2026-09-20、利用者の判断)。
+    public static let doujinshiEventPresetTexts = doujinshiTexts(leading: "(@event) ")
+
+    /// 催しの型のプリセットが入れる既定の欄(同梱の規則ファイルにも同じものがある)。
+    public static let doujinshiEventDefaults: [BookMetadata.Field: [String]] = [.genre: ["同人誌"]]
+
+    /// 同人誌用の 16 通り。先頭の丸括弧に当てる欄だけが違う(`leading` を空にした 8 通りは、どちらにも入れる)。
+    static func doujinshiTexts(leading: String) -> [String] {
         var texts: [String] = []
-        for genre in ["(@genre) ", ""] {
+        for head in [leading, ""] {
             for author in ["[@author (@author)]", "[@author]"] {
                 for tail in [" (@source) [@info]", " (@source)", " [@info]", ""] {
-                    texts.append("\(genre)\(author) @title\(tail)")
+                    texts.append("\(head)\(author) @title\(tail)")
                 }
             }
         }
         return texts
-    }()
+    }
 
     /// 商業誌用: 末尾の丸括弧は巻数(数字だけのときに当たる)。原作と、著者の中の丸括弧(同人誌固有)は使わない。
     /// 先頭の丸括弧は、同人誌用と同じくジャンルとして読む(商業の本にもレーベルや分類を書く利用者がいる)。
@@ -271,6 +291,8 @@ public struct FilenameFormats: Sendable, Hashable {
 
     public static let preset = FilenameFormats(formats: presetTexts.map { try! FilenameFormat($0) })
     public static let doujinshiPreset = FilenameFormats(formats: doujinshiPresetTexts.map { try! FilenameFormat($0) })
+    public static let doujinshiEventPreset = FilenameFormats(formats: doujinshiEventPresetTexts.map { try! FilenameFormat($0) },
+                                                             defaults: doujinshiEventDefaults)
     public static let commercialPreset = FilenameFormats(formats: commercialPresetTexts.map { try! FilenameFormat($0) })
 
     /// 名前を読む。合わなければ、名前全体を仮のタイトルにし、最も近い型を添える。
@@ -284,9 +306,19 @@ public struct FilenameFormats: Sendable, Hashable {
             if progress.tokens > 0, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
         }
         let title = TextRules.normalizeDisplay(name)
-        return FormatReading(metadata: BookMetadata(title: title), formatIndex: nil,
-                             spans: title.isEmpty ? [] : [FormatReading.Span(word: .title, range: 0..<chars.count)],
-                             nearest: nearest.map { FormatReading.Nearest(formatIndex: $0.index, matchedCharacters: $0.progress.characters) })
+        var reading = FormatReading(metadata: BookMetadata(title: title), formatIndex: nil,
+                                    spans: title.isEmpty ? [] : [FormatReading.Span(word: .title, range: 0..<chars.count)],
+                                    nearest: nearest.map { FormatReading.Nearest(formatIndex: $0.index, matchedCharacters: $0.progress.characters) })
+        // どの型にも合わなかった名前にも既定の欄は入れる(その蔵書がどういう本かは、型に合ったかどうかで変わらない)。
+        applyDefaults(&reading.metadata)
+        return reading
+    }
+
+    /// 名前から読めなかった欄に、プリセットの既定を入れる。
+    func applyDefaults(_ metadata: inout BookMetadata) {
+        for (field, values) in defaults where metadata.values(field).isEmpty {
+            metadata.set(field, to: values)
+        }
     }
 
     func reading(_ chars: [Character], _ match: FilenameFormat.Match, formatIndex: Int) -> FormatReading {
@@ -307,6 +339,7 @@ public struct FilenameFormats: Sendable, Hashable {
                 metadata.set(field, to: [value])
             }
         }
+        applyDefaults(&metadata)
         return FormatReading(metadata: metadata, formatIndex: formatIndex, spans: spans, nearest: nil)
     }
 
@@ -345,7 +378,7 @@ public struct FormatReading: Sendable, Hashable {
 /// 名前を付けた型の並び(プリセット)。**フォルダごとに使い分けられる**ように、本ごとに名前で選ぶ
 /// (2026-09-20、利用者の指示。商業誌と同人誌が混ざったフォルダ構成のため)。
 public struct FormatPresets: Sendable, Hashable {
-    /// 名前 → 型の並び(同梱は `mixed`・`doujinshi`・`commercial`)。
+    /// 名前 → 型の並び(同梱は `mixed`・`doujinshi`・`doujinshi-event`・`commercial`)。
     public var presets: [String: FilenameFormats]
     /// 本がプリセットを選ばなかったときに使う名前。
     public var defaultName: String
@@ -364,6 +397,7 @@ public struct FormatPresets: Sendable, Hashable {
 
     /// 同梱のプリセット(コードの側の既定。規則ファイルを読む前に使う)。
     public static let bundled = FormatPresets(
-        presets: ["mixed": .preset, "doujinshi": .doujinshiPreset, "commercial": .commercialPreset],
+        presets: ["mixed": .preset, "doujinshi": .doujinshiPreset, "doujinshi-event": .doujinshiEventPreset,
+                  "commercial": .commercialPreset],
         defaultName: "mixed")
 }

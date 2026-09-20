@@ -36,6 +36,8 @@ public struct Example: Sendable {
     public var genres: [String]?
     /// この例で選ぶ方針(書いた方針だけを、渡された規則の上で置き換える)。
     public var policies: [String: String] = [:]
+    /// この例で名前を読む型の並び(プリセット)。書かなければ既定。
+    public var preset: String?
 }
 
 public struct ExampleBook: Sendable {
@@ -124,7 +126,8 @@ struct ExampleReader {
     }
 
     mutating func example(_ value: JSONValue, _ path: String) -> Example? {
-        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary", "policies"]) else { return nil }
+        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary", "policies", "preset"])
+        else { return nil }
         let id = string(o["id"], join(path, "id")) ?? ""
         if id.isEmpty, o["id"] != nil { error(join(path, "id"), .invalidValue, "空の ID") }
 
@@ -176,7 +179,16 @@ struct ExampleReader {
                 }
             }
         }
-        return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres, policies: policies)
+        var preset: String?
+        if let p = o["preset"], let name = string(p, join(path, "preset")) {
+            if RuleSchema.presetNames.contains(name) { preset = name }
+            else {
+                error(join(path, "preset"), .unknownKey, name,
+                      suggestion: Spelling.suggestion(for: name, among: RuleSchema.presetNames))
+            }
+        }
+        return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres,
+                       policies: policies, preset: preset)
     }
 
     mutating func expectation(_ value: JSONValue, _ path: String) -> Expectation? {
@@ -231,7 +243,7 @@ public enum ExampleRunner {
                 rulesByPolicies[example.policies] = applied
             }
             let inputs = example.books.enumerated().map { i, book in
-                BookInput(id: String(format: "%04d", i + 1), name: book.name)
+                BookInput(id: String(format: "%04d", i + 1), name: book.name, preset: example.preset)
             }
             let set = proposeSync(inputs, rules: rulesByPolicies[example.policies]!, dictionaries: dictionaries)
             var mismatches: [String] = []

@@ -1154,6 +1154,48 @@
       ]
     },
     {
+      "id": "event-preset-reads-the-leading-parenthesis-as-the-event",
+      "preset": "doujinshi-event",
+      "files": [
+        "(架空の催し12) [架空工房] 月の庭 1 (架空の原作)",
+        "[架空工房] 月の庭 2 (架空の原作)"
+      ],
+      "expect": [
+        {
+          "event": "架空の催し12",
+          "genre": "同人誌",
+          "title": "月の庭 1",
+          "source": "架空の原作",
+          "series": "月の庭"
+        },
+        {
+          "event": null,
+          "genre": "同人誌",
+          "series": "月の庭"
+        }
+      ],
+      "covers": [
+        "doujinshi"
+      ]
+    },
+    {
+      "id": "genre-preset-reads-the-same-name-as-the-genre",
+      "preset": "doujinshi",
+      "files": [
+        "(架空の催し12) [架空工房] 月の庭 1 (架空の原作)"
+      ],
+      "expect": [
+        {
+          "genre": "架空の催し12",
+          "event": null,
+          "title": "月の庭 1"
+        }
+      ],
+      "covers": [
+        "doujinshi"
+      ]
+    },
+    {
       "id": "edition-word-before-compilation-is-not-a-compilation",
       "files": [
         "[架空工房] 月の庭 1",

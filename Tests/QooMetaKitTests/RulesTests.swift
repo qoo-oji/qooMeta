@@ -16,8 +16,8 @@ import QooMetaRules
     }
 
     static func diff(_ body: String, kind: String = "qoometa.series-rules") -> String {
-        // 形式の版はファイルごと(filename-formats は第 3 版)。
-        let version = kind == "qoometa.filename-formats" ? 3 : 2
+        // 形式の版はファイルごと(filename-formats は第 4 版)。
+        let version = kind == "qoometa.filename-formats" ? 4 : 2
         return #"{ "kind": "\#(kind)", "schemaVersion": \#(version), "base": "builtin", "# + body + " }"
     }
 
@@ -36,7 +36,10 @@ import QooMetaRules
         #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .greek, .roman, .position])
         #expect(rules.series.grouping.minPrefix == 4)
         #expect(rules.formats[nil].formats.count == 24)
-        #expect(rules.formats.names == ["commercial", "doujinshi", "mixed"])
+        #expect(rules.formats.names == ["commercial", "doujinshi", "doujinshi-event", "mixed"])
+        // 催しの型のプリセットだけが、名前に書かれないジャンルの既定を持つ。
+        #expect(rules.formats["doujinshi-event"].defaults[.genre] == ["同人誌"])
+        #expect(rules.formats["doujinshi"].defaults.isEmpty)
         #expect(rules.changedPaths.isEmpty)
     }
 
@@ -218,7 +221,7 @@ import QooMetaRules
         { "kind": "qoometa.rules-bundle", "schemaVersion": 2, "base": "builtin",
           "seriesRules": { "grouping": { "sharedPrefix": { "minPrefix": 5 } } },
           "filenameFormats": {
-            "presets": { "mixed": { "$add": ["@title - @author"], "at": "end" } },
+            "presets": { "mixed": { "formats": { "$add": ["@title - @author"], "at": "end" } } },
             "separators": { "$add": ["・"] }
           } }
         """)
@@ -230,9 +233,9 @@ import QooMetaRules
 
     @Test func badFormatsAreReportedByIndex() {
         // 予約語ではない `@titl` は、型の番号付きで誤りになる。
-        let c = Self.compile(Self.diff(#""presets": { "mixed": { "$add": ["[@author] @titl"] } }"#,
+        let c = Self.compile(Self.diff(#""presets": { "mixed": { "formats": { "$add": ["[@author] @titl"] } } }"#,
                                        kind: "qoometa.filename-formats"))
-        #expect(c.errors.map(\.path) == ["presets.mixed[0]"])
+        #expect(c.errors.map(\.path) == ["presets.mixed.formats[0]"])
     }
 
     @Test func contentHashFollowsTheContentOnly() throws {

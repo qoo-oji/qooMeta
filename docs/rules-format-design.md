@@ -271,36 +271,42 @@
 
 ## ファイル名のフォーマット(`qoometa.filename-formats`)
 
+**この節は 2026-09-20 に書き直した**(第 4 版)。ここにあった第 2 版の案(`@circle`・`@relation`・`@keywordA`、
+`profiles`・`protectedTokens`)は、qooLibrary に引っ張られた形で、段階 6 で捨てた。書き方は
+[filename-format.md](filename-format.md) が本体で、ここには形式だけを書く。
+
 ```json
 {
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 2,
-  "reservedWords": {
-    "@genre":    { "engine": "@mediatype", "field": "genre" },
-    "@event":    { "engine": "@event",     "field": "event" },
-    "@circle":   { "engine": "@studio",    "field": "circle" },
-    "@author":   { "engine": "@author",    "field": "authors", "split": ["、", ",", "，", "&", "＆", "/", "／"] },
-    "@title":    { "engine": "@title",     "field": "title" },
-    "@relation": { "engine": "@genre",     "field": "relation" },
-    "@keywordA": { "engine": "@keyword",   "field": "keyword" }
-  },
-  "profiles": [
-    {
-      "id": "doujinshi",
-      "delimiters": [["[", "]"], ["(", ")"]],
-      "protectedTokens": ["\\((19[0-9]{2})\\)", "\\((20[0-9]{2})\\)", "\\((結|終|完|完結|完全版)\\)"],
-      "formats": ["(@genre) [@circle (@author)] @title (@relation) [@keywordA]", "[@circle] @title"]
+  "schemaVersion": 4,
+  "separators": [",", "，", "、"],
+  "defaultPreset": "mixed",
+  "presets": {
+    "doujinshi": {
+      "formats": [
+        "(@genre) [@author (@author)] @title (@source) [@info]",
+        "[@author] @title"
+      ]
+    },
+    "doujinshi-event": {
+      "formats": ["(@event) [@author] @title (@source)"],
+      "defaults": { "genre": "同人誌" }
     }
-  ],
-  "fallback": { "simpleBrackets": { "enabled": true } }
+  },
+  "retiredIDs": [],
+  "aliases": {}
 }
 ```
 
-- プロファイルは上から試し、最初にどれかのフォーマットが一致したプロファイルを採る。今は同人誌向けの 1 つ。
-  商業の単行本・雑誌向けのプロファイルは、規則の中身の課題として足していく(roadmap.md)。
-- 差分では、プロファイルを ID で指して `formats` に `$add` / `$remove` / `$replace` を書く。`formats` は順序が意味を持つので、
-  `$add` は `{ "$add": [...], "at": "start" | "end" }`(既定は `start`。利用者の形を先に試す)。
-- プロファイルに適用の条件を付ける拡張(フォルダごとなど)は後回し。
+- **予約語**は `@title @author @genre @event @source @info @series @volume @ignore`。欄への対応はコードが持つ(JSON では書き換えない)。
+- **プリセット**(名前を付けた型の並び)は本ごとに選ぶ。並びは上から試し、名前全体に一致した最初の型で読む。
+  同じ位置を奪い合う型(先頭の丸括弧が `@genre` の型と `@event` の型)は**同居できない**ので、プリセットを分ける。
+- **`defaults`**: 名前に書かれていない欄に入れる値(ジャンル・イベント・原作・情報)。名前から読めた欄は上書きしない。
+  催しの名前で管理する蔵書はジャンルがどの名前にも書かれないので、プリセットの側で決められるようにした(2026-09-20)。
+- プリセットは、型の並びだけなら配列で書いてもよい(`"doujinshi": ["…", "…"]`)。
+- 差分では、プリセットを名前で指す: `{ "presets": { "doujinshi": { "formats": { "$add": [...], "at": "end" } } } }`。
+  `formats` は順序が意味を持つので、`$add` は `{ "$add": [...], "at": "start" | "end" }`(既定は `start`。利用者の形を先に試す)。
+  `defaults` は欄ごとに置き換え(`null` でその欄の既定を消す)。
 
 ## 例のファイル(`qoometa.examples`)
 

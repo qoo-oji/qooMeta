@@ -132,6 +132,30 @@ import Testing
         #expect(FilenameFormats.commercialPresetTexts.allSatisfy { !$0.contains("@source") })
     }
 
+    /// 先頭の丸括弧を催しの名前にしている蔵書のための、もう 1 つの同人誌用プリセット。
+    /// ジャンルの型と同居できない(同じ位置を奪い合う)ので並びを分けてある。
+    @Test func eventPresetReadsTheLeadingParenthesisAsTheEvent() {
+        let formats = FilenameFormats.doujinshiEventPreset
+        #expect(formats.formats.count == 16)
+        #expect(formats.formats.first?.text == "(@event) [@author (@author)] @title (@source) [@info]")
+        let r = formats.read("(架空の催し12) [架空工房] 月の庭 1 (架空の原作)")
+        #expect(r.metadata.event == "架空の催し12")
+        #expect(r.metadata.title == "月の庭 1")
+        #expect(r.metadata.source == "架空の原作")
+        // 名前にジャンルは書かれないので、プリセットの既定が入る(値は規則の JSON が持つ)。
+        #expect(r.metadata.genre == "同人誌")
+        // 同じ名前を、ジャンルの型のプリセットで読むと催しではなくジャンルになる。
+        #expect(FilenameFormats.doujinshiPreset.read("(架空の催し12) [架空工房] 月の庭 1 (架空の原作)").metadata.genre == "架空の催し12")
+        // どの型にも合わない名前にも、既定は入る。
+        let unmatched = formats.read("括弧の無い名前")
+        #expect(unmatched.formatIndex == nil)
+        #expect(unmatched.metadata.genre == "同人誌")
+        // 名前から読めた欄は、既定で上書きしない。
+        var withGenre = FilenameFormats.doujinshiEventPreset
+        withGenre.defaults = [.source: ["オリジナル"]]
+        #expect(withGenre.read("[架空工房] 月の庭 (架空の原作)").metadata.source == "架空の原作")
+    }
+
     @Test func numericTrailingParenIsTheVolume() {
         let r = Self.read("[架空工房] 月の庭（１２）")
         #expect(r.metadata.volume == "12")  // 全角の数字は半角に畳む

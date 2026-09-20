@@ -31,6 +31,8 @@ enum RuleSchema {
         case readers
         /// 名前を付けた型の並び(`presets`)。差分では名前で指す。
         case presets
+        /// プリセットが入れる既定の欄(`defaults`)。書いた欄だけ。
+        case presetDefaults
         /// 型の並び(書いた順が優先順位。差分の `$add` は `at` で先頭か末尾かを選ぶ)。
         case formats
     }
@@ -153,7 +155,13 @@ enum RuleSchema {
     ])
 
     /// 同梱のプリセットの名前(差分では、この名前で並びを変える)。
-    static let presetNames = ["mixed", "doujinshi", "commercial"]
+    static let presetNames = ["mixed", "doujinshi", "doujinshi-event", "commercial"]
+
+    /// 1 つのプリセット: 型の並びと、名前に書かれていない欄に入れる既定。
+    static let presetNode = Node([f("formats", .formats), f("defaults", .presetDefaults)])
+
+    /// 既定を入れられる欄(シリーズと巻は中核が導くので入れられない。タイトルと著者は本ごとに違うので入れない)。
+    static let presetDefaultFields = ["genre", "event", "source", "info"]
 
     // MARK: - 規則の ID
 

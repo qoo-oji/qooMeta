@@ -59,8 +59,8 @@ struct RuleLoader {
         case nil: report(.missingKey, "kind")
         case let v?: report(.invalidValue, "kind", "文字列であるべきところが\(v.kindName)")
         }
-        // 形式の版はファイルごと(filename-formats は第 3 版、ほかは第 2 版)。
-        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 3.0 : 2.0
+        // 形式の版はファイルごと(filename-formats は第 4 版、ほかは第 2 版)。
+        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 4.0 : 2.0
         switch o["schemaVersion"] {
         case .number(let v)? where v == expectedVersion: break
         case .number(let v)?: report(.unsupportedSchemaVersion, "schemaVersion", JSONValue.number(v).rendered())
@@ -201,10 +201,23 @@ struct RuleLoader {
             guard let o = value.objectValue else { report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
             unknownKeys(o, path, allowed: RuleSchema.presetNames)
             for name in RuleSchema.presetNames {
-                if let list = o[name] { check(list, .formats, "\(path).\(name)", full: full) }
+                if let preset = o[name] { checkPreset(preset, "\(path).\(name)", full: full) }
                 else if full { report(.missingKey, "\(path).\(name)") }
             }
+        case .presetDefaults:
+            guard let o = value.objectValue else { report(.invalidValue, path, "欄の名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
+            unknownKeys(o, path, allowed: RuleSchema.presetDefaultFields)
+            for name in RuleSchema.presetDefaultFields {
+                guard let v = o[name] else { continue }
+                if (v.stringValue ?? "").isEmpty { report(.invalidValue, "\(path).\(name)", "空でない文字列であるべきところ") }
+            }
         }
+    }
+
+    /// 1 つのプリセット。型の並びだけを配列で書いてもよい(既定を持たないプリセットの短い書き方)。
+    mutating func checkPreset(_ value: JSONValue, _ path: String, full: Bool) {
+        if value.arrayValue != nil { check(value, .formats, path, full: full) }
+        else { checkObject(value, RuleSchema.presetNode, path, full: false) }
     }
 
     mutating func checkObject(_ value: JSONValue, _ node: RuleSchema.Node, _ path: String, full: Bool,
@@ -461,6 +474,21 @@ struct RuleLoader {
             }
         case .object(let node):
             return applyObject(diff, to: base, node, path)
+        case .presetDefaults:
+            guard let changes = diff.objectValue, case .object(var merged) = base else {
+                report(.invalidValue, path, "欄の名前をキーにしたオブジェクトであるべきところが\(diff.kindName)")
+                return base
+            }
+            for name in changes.keys.sorted() {
+                guard RuleSchema.presetDefaultFields.contains(name) else {
+                    skipUnknown(name, changes[name]!, path, candidates: RuleSchema.presetDefaultFields)
+                    continue
+                }
+                // null で既定を消せる(その欄を入れない)。
+                if changes[name]! == .null { merged[name] = nil } else { merged[name] = changes[name]! }
+                changedPaths.append("\(path).\(name)")
+            }
+            return .object(merged)
         case .readers:
             return applyReaders(diff, to: base, path)
         case .presets:
@@ -473,7 +501,10 @@ struct RuleLoader {
                     skipUnknown(name, changes[name]!, path, candidates: RuleSchema.presetNames)
                     continue
                 }
-                merged[name] = apply(changes[name]!, to: current, .formats, "\(path).\(name)")
+                // 既定値の側がオブジェクト(型の並び + 既定の欄)なら、その形で重ねる。配列だけの短い書き方にも合わせる。
+                merged[name] = current.arrayValue != nil
+                    ? apply(changes[name]!, to: current, .formats, "\(path).\(name)")
+                    : applyObject(changes[name]!, to: current, RuleSchema.presetNode, "\(path).\(name)")
             }
             return .object(merged)
         }

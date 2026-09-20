@@ -240,6 +240,7 @@ func run() async throws {
         // --preset: commercial(既定)/ doujinshi / mixed。公開データは商業の本なので、既定は商業誌のプリセット。
         let formats: FilenameFormats = switch args.options["preset"] ?? "commercial" {
         case "doujinshi": .doujinshiPreset
+        case "doujinshi-event": .doujinshiEventPreset
         case "mixed": rules.formats[nil]
         default: .commercialPreset
         }
