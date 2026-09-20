@@ -1,5 +1,21 @@
 import Foundation
 
+/// 本の名前の揃え方。**見た目は変えない**(全角・半角も、名前の中の空白もそのまま)。直すのは 2 つだけ。
+///
+/// - 合成済み(NFC)にする。macOS はファイル名を分解形(NFD)で返すことがあり、そのままだと濁点・半濁点を含む語が
+///   規則の語(画面で打つので NFC)と当たらない ―― 「(上)」は効くのに「(デカパイ)」は効かない、という出方になる
+///   (2026-09-20、利用者の指摘)。
+/// - 前後の空白を落とす。「… (原作) .cbz」のように拡張子の手前に空白がある名前は、拡張子を外すと末尾に空白が残る。
+///   括弧で終わる型は末尾に空白の部品を持たないので**すべて**外れ、丸括弧が題に飲み込まれる(2026-09-20、利用者の指摘)。
+///
+/// 名前が入ってくる所(走査・作業ファイルの読み込み)でかける。ここで揃えておかないと、画面に出る名前と
+/// 照合する名前が食い違い、利用者が画面から写した語が当たらない。
+public enum BookName {
+    public static func normalized(_ name: String) -> String {
+        name.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 /// 作業ファイル: いま開いている一覧(本の ID と名前)と、利用者の修正、フォルダごとの型の並び(プリセット)の割り当て。
 ///
 /// **ライブラリではない**(docs/concept.md)。qooMeta は蔵書を持たず、この作業ファイルは「いま直している途中の一覧」
@@ -47,7 +63,8 @@ public struct Workfile: Codable, Sendable, Hashable {
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
-            name = try c.decode(String.self, forKey: .name)
+            // 揃える前に保存した作業ファイルのために、読むときにもかける(走査の側で直すようにしたのは後から)。
+            name = BookName.normalized(try c.decode(String.self, forKey: .name))
             isFolder = try c.decodeIfPresent(Bool.self, forKey: .isFolder) ?? false
             confirmation = try c.decodeIfPresent(Confirmation.self, forKey: .confirmation) ?? .none
         }

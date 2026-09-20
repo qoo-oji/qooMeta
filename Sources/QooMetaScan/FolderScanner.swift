@@ -115,7 +115,8 @@ public enum FolderScanner {
             path: path,
             relativePath: relative,
             // フォルダの名前は丸ごとが本の名前(「第1.5巻」の「.5巻」を拡張子として落とさない)。
-            baseName: isFolder ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent,
+            // 形は `BookName.normalized` で揃える(合成済みにし、前後の空白を落とす。理由はそちらの説明)。
+            baseName: BookName.normalized(isFolder ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent),
             fileExtension: isFolder ? "" : url.pathExtension.lowercased(),
             size: isFolder ? nil : values?.fileSize.map(Int64.init),
             created: values?.creationDate,

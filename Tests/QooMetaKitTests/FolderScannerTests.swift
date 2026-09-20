@@ -45,6 +45,17 @@ import Testing
         #expect(epub.baseName == "[架空工房] 月の庭 2" && epub.fileExtension == "epub" && !epub.isFolder)
     }
 
+    /// 本の名前は形を揃えてから渡す: 合成済み(NFC)にし、前後の空白を落とす。
+    /// 拡張子の手前に空白がある名前(「… (原作) .cbz」)は、拡張子を外すと末尾に空白が残り、括弧で終わる型が全部外れる。
+    @Test func bookNamesAreNormalized() throws {
+        // 「ペ」を結合文字で書いた名前(macOS はファイル名をこの形で返すことがある)。
+        let decomposed = "[架空工房] 月の庭 (架空ヘ\u{309A}ージ) .cbz"
+        let root = try Self.tree(["棚/" + decomposed])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = try #require(try FolderScanner.scan(root: root).first)
+        #expect(file.baseName == "[架空工房] 月の庭 (架空ページ)")
+    }
+
     /// 起点そのものは本にしない: 起点の直下に画像のフォルダだけが並んでいても、1 つずつの本になる。
     @Test func theRootIsNeverABook() throws {
         let root = try Self.tree(["[架空工房] 月の庭 1/001.jpg", "[架空工房] 月の庭 2/001.jpg", "表紙.jpg"])

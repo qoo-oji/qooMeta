@@ -96,9 +96,19 @@ public struct PlainText: Sendable, Hashable {
     public init(words: [String] = [], patterns: [String] = []) {
         self.words = words
         self.patterns = patterns
-        let all = words.filter { !$0.isEmpty }.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+        // 語は合成済み(NFC)にしてから直値にする。照合する名前も合成済みに直す(`canonical`)ので、
+        // 濁点・半濁点が結合文字で書かれたファイル名(macOS は NFD で返すことがある)にも同じ語が当たる。
+        // 画面で打った語は NFC なので、直さないと「(デカパイ)」のような語だけが当たらない(2026-09-20、利用者の指摘)。
+        let all = words.filter { !$0.isEmpty }.sorted { $0.count > $1.count }
+            .map { NSRegularExpression.escapedPattern(for: $0.precomposedStringWithCanonicalMapping) }
             + patterns.filter { !$0.isEmpty }
         regex = all.isEmpty ? nil : try? NSRegularExpression(pattern: all.map { "(?:\($0))" }.joined(separator: "|"))
+    }
+
+    /// 照合に使う形。**文字(Character)ごとに**合成するので、文字の数も並びも変わらない ―― 名前の中の位置を
+    /// そのまま使える(文字列ごと合成すると、結合文字の分だけ位置がずれることがある)。
+    static func canonical(_ chars: [Character]) -> [String] {
+        chars.map { String($0).precomposedStringWithCanonicalMapping }
     }
 
     public var isEmpty: Bool { regex == nil }
@@ -115,20 +125,25 @@ public struct PlainText: Sendable, Hashable {
     /// この文字列の**全体**が、型として読まない語そのものか(「(2026)」など)。読み残しを数えるときに使う。
     public func covers(_ text: String) -> Bool {
         guard let regex else { return false }
-        let whole = NSRange(location: 0, length: (text as NSString).length)
-        return (BudgetedRegex.matches(regex, in: text, budget: BudgetedRegex.defaultBudget) ?? [])
+        let subject = text.precomposedStringWithCanonicalMapping
+        let whole = NSRange(location: 0, length: (subject as NSString).length)
+        return (BudgetedRegex.matches(regex, in: subject, budget: BudgetedRegex.defaultBudget) ?? [])
             .contains { $0.range == whole }
     }
 
     /// 名前の中の、型として読まない文字(文字 = Character の番号ごと)。1 つも無ければ nil(ふつうの名前は、ここで終わる)。
     /// 正規表現は利用者が書き足せるので、照合に時間の上限を設ける(越えたら、無いものとして扱う)。
-    func mask(_ name: String, _ chars: [Character]) -> [Bool]? {
-        guard let regex, let matches = BudgetedRegex.matches(regex, in: name, budget: BudgetedRegex.defaultBudget),
+    func mask(_ chars: [Character]) -> [Bool]? {
+        guard let regex else { return nil }
+        // 名前も合成済みにしてから当てる(語の側と形をそろえる)。`name` ではなく文字ごとに直したものを使うのは、
+        // 位置を元の名前の文字の番号のまま保つため。
+        let folded = Self.canonical(chars)
+        guard let matches = BudgetedRegex.matches(regex, in: folded.joined(), budget: BudgetedRegex.defaultBudget),
               !matches.isEmpty else { return nil }
         // 正規表現の位置は UTF-16。文字の番号へ直す。
         var starts: [Int] = []
         var offset = 0
-        for c in chars { starts.append(offset); offset += c.utf16.count }
+        for c in folded { starts.append(offset); offset += c.utf16.count }
         var mask = [Bool](repeating: false, count: chars.count)
         for m in matches where m.range.length > 0 {
             for i in chars.indices where starts[i] >= m.range.location && starts[i] < m.range.location + m.range.length { mask[i] = true }
@@ -452,7 +467,7 @@ public struct FilenameFormats: Sendable, Hashable {
         let format = formats[index]
         let groups = reading.spans.filter { $0.word == .title }
             .flatMap { Self.bracketGroups(in: name, within: $0.range) }
-        guard let mask = (format.plain.isEmpty ? plain : plain.adding(format.plain)).mask(String(name), name) else { return groups }
+        guard let mask = (format.plain.isEmpty ? plain : plain.adding(format.plain)).mask(name) else { return groups }
         return groups.filter { group in !group.allSatisfy { mask[$0] } }
     }
 
@@ -477,11 +492,11 @@ public struct FilenameFormats: Sendable, Hashable {
     public func read(_ name: String) -> FormatReading {
         let chars = Array(name)
         var nearest: (index: Int, progress: FilenameFormat.Progress)?
-        let mask = plain.mask(name, chars)
+        let mask = plain.mask(chars)
         for (index, format) in formats.enumerated() {
             // 型が自分の分を足していれば、その型のときだけ足した形で見る。
             let (match, progress) = format.match(chars, isVolume: isVolume,
-                                                 plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(name, chars))
+                                                 plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(chars))
             if let match { return reading(chars, match, format: format, formatIndex: index) }
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。
             if progress.tokens > format.leadingFreeTokens, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }

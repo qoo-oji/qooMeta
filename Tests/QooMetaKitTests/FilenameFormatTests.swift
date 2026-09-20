@@ -161,6 +161,24 @@ import Testing
         #expect(own.read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
     }
 
+    /// 濁点・半濁点が結合文字で書かれた名前(macOS のファイル名は NFD で返ることがある)にも、
+    /// 画面で打った語(NFC)が当たる。どちらの形で打っても同じ(2026-09-20、利用者の指摘)。
+    @Test func plainTextMatchesDecomposedNames() throws {
+        var set = Self.compiled("commercial")
+        set.formats = try ["[@author] @title (@source)", "[@author] @title"].map { try FilenameFormat($0) }
+        set.plain = PlainText(words: ["(架空版)"])
+        let name = "[架空工房] 月の庭 (架空版)"
+        for subject in [name.precomposedStringWithCanonicalMapping, name.decomposedStringWithCanonicalMapping] {
+            let check = set.check(subject)
+            // 除外した語は原作として読まれず、読み残しにも数えない。
+            #expect(set.read(subject).metadata.source.isEmpty)
+            #expect(check.outcome == .read)
+        }
+        // 語の側を結合文字で打っても同じ。
+        set.plain = PlainText(words: ["(架空版)".decomposedStringWithCanonicalMapping])
+        #expect(set.check(name).outcome == .read)
+    }
+
     @Test func spansPointAtTheValues() {
         let name = "[架空工房] 月の庭"
         let r = Self.read(name)
