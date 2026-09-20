@@ -143,7 +143,7 @@ enum RuleSchema {
 
     /// 語の規則(`markers` の 1 件)の扱い。タイトルの中の語を上の規則から順に探し、**上の規則が取った所には下の規則は反応しない**。
     /// - `keep`: そのまま読む(何もしない。下の規則から語を守るための規則で、例外はこれを上に置いて書く)
-    /// - `edition`・`source`: 版・入手経路の印(方針 editions・sources が扱いを決める)
+    /// - `edition`・`source`: 版・発行形態の印(方針 editions・sources が扱いを決める)
     /// - `compilation`: 総集編の語(方針 compilations が置き場所を決める)
     /// - `standalone`: この語のある本は、どのシリーズにも入れない(利用者が一覧で「シリーズに入れない」と直した本と同じ扱い)
     static let markerTreatments = ["keep", "edition", "source", "compilation", "standalone"]

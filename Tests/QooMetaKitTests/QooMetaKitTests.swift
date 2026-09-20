@@ -82,10 +82,11 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         let b = builtinEngine.markers.split("月の庭 3 DL版")
         #expect(b.base == "月の庭 3")
         #expect(b.sources == ["DL版"])
+        // 特装版・限定版・通常版は「どの版か」の違いなので、版の印(2026-09-20、利用者の判断)。
         let c = builtinEngine.markers.split("月の庭 (英語版) [特装版]")
         #expect(c.base == "月の庭")
-        #expect(c.editions == ["英語版"])
-        #expect(c.sources == ["特装版"])
+        #expect(Set(c.editions) == ["英語版", "特装版"])
+        #expect(c.sources.isEmpty)
     }
 
     @Test func rangeBeforeCompilationIsMovedAfterIt() {

@@ -123,13 +123,13 @@
     {
       "id": "parse-edition-and-source-markers",
       "files": [
-        "[架空工房] 月の庭【英語版】【特装版】",
+        "[架空工房] 月の庭【英語版】【DL版】",
         "[架空工房] 風の港 3 DL版",
         "[架空工房] 雨の窓【フルカラー版】"
       ],
       "expect": [
         {
-          "title": "月の庭【英語版】【特装版】",
+          "title": "月の庭【英語版】【DL版】",
           "editionMark": true,
           "sourceMark": true
         },
@@ -1035,7 +1035,7 @@
       "id": "same-work-from-different-sources-is-not-a-series",
       "files": [
         "[架空工房] 月の庭 DL版",
-        "[架空工房] 月の庭 通常版"
+        "[架空工房] 月の庭"
       ],
       "expect": [
         {
@@ -1044,7 +1044,7 @@
         },
         {
           "series": null,
-          "sourceMark": true
+          "sourceMark": false
         }
       ],
       "covers": [
@@ -1897,7 +1897,7 @@
       },
       "files": [
         "[架空工房] 月の庭 DL版",
-        "[架空工房] 月の庭 通常版"
+        "[架空工房] 月の庭"
       ],
       "expect": [
         {
@@ -1906,7 +1906,7 @@
         },
         {
           "series": "月の庭",
-          "sourceMark": true
+          "sourceMark": false
         }
       ],
       "covers": [

@@ -37,7 +37,7 @@ public enum BulkEdit {
     }
 
     /// 選んだ本のタイトルから、シリーズ名の候補を返す(共通部分を語の切れ目まで縮め、規則の名前の整え方に通したもの。
-    /// 無ければ nil)。版・入手経路の印は除いて比べる。1 冊なら、「タイトル + 巻」の頭か、タイトルそのもの。
+    /// 無ければ nil)。版・発行形態の印は除いて比べる。1 冊なら、「タイトル + 巻」の頭か、タイトルそのもの。
     public static func suggestedSeriesName(for ids: [String], in set: ProposalSet, rules: CompiledRules) -> String? {
         suggestedSeriesName(forTitles: ids.compactMap { set[$0]?.metadata.title }, rules: rules)
     }

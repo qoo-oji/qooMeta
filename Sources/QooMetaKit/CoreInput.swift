@@ -11,7 +11,7 @@ struct CoreBook: Sendable {
     let order: Int
     /// 表示のタイトル(巻の同じ本を並べる最後の手がかり)。
     let title: String
-    /// 比べるタイトル(版・入手経路の印を除き、総集編の語順を直したもの)。
+    /// 比べるタイトル(版・発行形態の印を除き、総集編の語順を直したもの)。
     let compareTitle: String
     /// 書き手のキー(比べる形)。空なら、書き手の空の本どうしで 1 つの単位になる。
     let writerKey: String
@@ -19,7 +19,7 @@ struct CoreBook: Sendable {
     let genre: String
     /// 原作(方針 differentRelation で組を分ける。方針の名前は規則ファイルの互換のためそのまま)。
     let source: String
-    /// 版・入手経路の印があったか(説明に書くだけ。組には効かない)。
+    /// 版・発行形態の印があったか(説明に書くだけ。組には効かない)。
     let hasEditionMarks: Bool
     let hasSourceMarks: Bool
     /// 「シリーズに入れない語」があったか(説明に書くだけ。効き目は `confirmation` に入れてある)。
@@ -37,7 +37,7 @@ extension RuleEngine {
         return genre.isEmpty ? book.writerKey : "\(book.writerKey)\u{1}\(genre)"
     }
 
-    /// タイトルから比べるタイトルを作る(版・入手経路の印を除き、総集編の語順を直す)。中核の一部で、前段が何であっても
+    /// タイトルから比べるタイトルを作る(版・発行形態の印を除き、総集編の語順を直す)。中核の一部で、前段が何であっても
     /// タイトルの値にこれをかける。印は、比べるタイトルから除かないとき(方針 separateBooks)も見分けて返す。
     func compareTitle(_ title: String) -> (text: String, editions: [String], sources: [String], standsAlone: Bool) {
         let split = markers.split(title)
