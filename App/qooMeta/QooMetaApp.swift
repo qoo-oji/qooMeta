@@ -27,7 +27,7 @@ struct QooMetaApp: App {
         // 3 ペインが最初から収まる幅(ルールセットの一覧 + 組の一覧 + 型 1 行が切れない幅)。
         .defaultSize(width: 1240, height: 820)
 
-        Window("Series and volume rules", id: SeriesRulesView.windowID) {
+        Window("Series and volume extraction", id: SeriesRulesView.windowID) {
             SeriesRulesView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
         }
         .defaultSize(width: 980, height: 680)
@@ -141,7 +141,7 @@ final class AppModel {
         }
         picked = Picked(root: URL(fileURLWithPath: root), files: files,
                         kinds: [(name: "CBZ", count: files.count)])
-        PickedNames.shared.set(files.map(\.baseName))
+        PickedForRules.shared.set(files.map(\.baseName))
         go(to: .parse)
     }
 
@@ -198,7 +198,7 @@ final class AppModel {
                             kinds: counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
                                 .map { (name: $0.key, count: $0.value) })
             // 選んだ名前は、ファイル名解析の窓でも使う(直した効果を、その蔵書の名前で見せるため)。
-            PickedNames.shared.set(found.files.map(\.baseName))
+            PickedForRules.shared.set(found.files.map(\.baseName))
             // 選び直したら、前の結果は捨てる(古い一覧が残っていると、どの蔵書の話か分からなくなる)。
             workspace = nil
             presetFits = []
@@ -285,7 +285,7 @@ final class AppModel {
                 let workspace = await Workspace.open(file, rules: settings.rules)
                 workspace.markSaved(to: url)
                 self.workspace = workspace
-                PickedNames.shared.set(file.books.map(\.name))
+                PickedForRules.shared.set(file.books.map(\.name))
                 picked = nil                 // 作業ファイルは、対象と解析方法を自分で持っている
                 step = .review
             } catch {
@@ -330,9 +330,13 @@ struct WorkspaceCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .appSettings) {
-            Button("File Name Parsing…") { openWindow(id: FileNameRulesView.windowID) }
+            Button("File Name Parsing…") {
+                // 段 2 で選んでいるルールセットを、窓にも選ばせる(選んでいなければ窓の今のまま)。
+                if let preset = model?.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
+                openWindow(id: FileNameRulesView.windowID)
+            }
                 .keyboardShortcut("1", modifiers: [.command, .option])
-            Button("Series and Volume Rules…") { openWindow(id: SeriesRulesView.windowID) }
+            Button("Series and Volume Extraction…") { openWindow(id: SeriesRulesView.windowID) }
                 .keyboardShortcut("2", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .newItem) {

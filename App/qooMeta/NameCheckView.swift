@@ -1,21 +1,34 @@
 import QooMetaKit
 import SwiftUI
 
-/// いま扱っている本の名前の置き場。**窓をまたいで使う**ので、場面(Scene)ではなくここに置く
-/// ―― ファイル名解析の窓は一覧の窓とは別の場面で、段 1 で選んだものを直には見られない。
+/// 流れの段 1・段 2 で選んだもののうち、**規則の窓が見たいもの**の置き場。窓をまたいで使うので、
+/// 場面(Scene)ではなくここに置く ―― ファイル名解析の窓は一覧の窓とは別の場面で、段で選んだものを直には見られない。
 ///
-/// 持つのは名前だけ(パスは持たない)。書き出しにも保存にも使わない、画面のための写し。
+/// 持つのは本の名前と、選んだルールセットの名前だけ(パスは持たない)。書き出しにも保存にも使わない、画面のための写し。
 @MainActor @Observable
-final class PickedNames {
-    static let shared = PickedNames()
+final class PickedForRules {
+    static let shared = PickedForRules()
 
     private(set) var names: [String] = []
     /// 中身が入れ替わったかを軽く見分ける印(名前の並びを毎回比べずに済ませる)。
     private(set) var token = 0
+    /// 段 2 で選んだルールセットの名前。
+    private(set) var ruleSet: String?
+    /// 規則の窓を開いた回数。**窓がもう開いているときにも選び直させる**ための印。
+    ///
+    /// 段 2 で同人誌のルールセットを選んでいるのに、そこから開いた窓では商業誌が選ばれている、という食い違いがあった
+    /// (2026-09-20、利用者の指摘)。開くたびに、いま選んでいるものへ合わせる。
+    private(set) var ruleSetToken = 0
 
     func set(_ names: [String]) {
         self.names = names
         token += 1
+    }
+
+    /// 規則の窓を開く直前に、いま選んでいるルールセットを渡す。
+    func open(ruleSet: String) {
+        self.ruleSet = ruleSet
+        ruleSetToken += 1
     }
 }
 
@@ -144,7 +157,7 @@ struct NameCheckPane: View {
 
     @State private var check = NameCheck()
     @State private var filter: Filter = .problems
-    @State private var picked = PickedNames.shared
+    @State private var picked = PickedForRules.shared
 
     enum Filter: String, CaseIterable, Identifiable {
         case problems, changed, all

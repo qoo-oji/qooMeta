@@ -31,9 +31,9 @@ struct SeriesRulesView: View {
 
         var title: String {
             switch self {
-            case .policies: "Policies"
-            case .markers: "Word rules"
-            case .readers: "Volume readers"
+            case .policies: "How books are treated"
+            case .markers: "Words in a title"
+            case .readers: "Reading the volume"
             case .steps: "Grouping and naming"
             case .lists: "Word lists"
             case .json: "Diff (JSON)"
@@ -85,7 +85,7 @@ struct SeriesRulesView: View {
                 StatusBar(editing: editing, half: .series, confirmsReset: $confirmsReset)
             }
         }
-        .navigationTitle("Series and volume rules")
+        .navigationTitle("Series and volume extraction")
         .navigationSubtitle(LocalizedStringKey(pane.title))
         .confirmationDialog("Reset every series rule to the default?", isPresented: $confirmsReset) {
             Button("Reset to the default", role: .destructive) { editing.reset(.series) }
@@ -186,7 +186,7 @@ private struct PoliciesPane: View {
     var catalog: RuleCatalog
 
     private static let groups: [(title: String, ids: [String])] = [
-        ("Editions and sources of the same work", ["editions", "sources"]),
+        ("Editions and publication forms of the same work", ["editions", "sources"]),
         ("Compilations and side stories", ["compilations", "compilationVolume"]),
         ("How series are split", ["differentRelation", "differentGenre", "subtitled"]),
         ("Volumes", ["unnumberedFirst", "magazines"]),
@@ -200,11 +200,24 @@ private struct PoliciesPane: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             ForEach(Self.groups, id: \.title) { group in
-                Section(group.title) {
-                    ForEach(catalog.policies.filter { group.ids.contains($0.id) }) { PolicyRow(editing: editing, policy: $0) }
-                    if group.ids.contains("compilations"), let rule = catalog.entries.first(where: { $0.id == "compilation" }) {
+                // 見出しは**鍵として**渡す。`Section(String)` の口に渡すと、訳を引かずにそのまま出る
+                // (画面に英語のまま出ていた。2026-09-20、利用者の指摘)。
+                Section(LocalizedStringKey(group.title)) {
+                    let rule = catalog.entries.first { $0.id == "compilation" }
+                    ForEach(catalog.policies.filter { group.ids.contains($0.id) }) { policy in
+                        // 総集編の置き場所は、敷居(1 冊でもシリーズにするか)と 1 つにまとめて出す。
+                        if policy.id == "compilations", let rule, let single = rule.parameters.first(where: { $0.name == CompilationPlacementRow.single }) {
+                            CompilationPlacementRow(editing: editing, policy: policy, rule: rule, single: single)
+                        } else {
+                            PolicyRow(editing: editing, policy: policy)
+                        }
+                    }
+                    if group.ids.contains("compilations"), let rule {
                         // 総集編の設定は、方針(置き場所・巻数)と規則(足す数)に分かれている。画面では 1 か所に見せる。
-                        ForEach(rule.parameters, id: \.name) { ParameterRow(editing: editing, entry: rule, parameter: $0) }
+                        // 敷居は置き場所と 1 つにまとめたので、ここでは出さない。
+                        ForEach(rule.parameters.filter { $0.name != CompilationPlacementRow.single }, id: \.name) {
+                            ParameterRow(editing: editing, entry: rule, parameter: $0)
+                        }
                     }
                 }
             }
@@ -214,6 +227,98 @@ private struct PoliciesPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// 総集編・番外編の置き場所。**方針(置き場所)と規則(1 冊でもシリーズにするか)を 1 つの選択に見せる**。
+///
+/// 2 つに分かれていると、どちらがどちらの条件なのか読み取れなかった(2026-09-20、利用者の指摘)。
+/// 敷居が効くのは「別のシリーズにする」ときなので、その選択肢を 2 つに割る。
+private struct CompilationPlacementRow: View {
+    static let single = "singleWhenMainExists"
+
+    var editing: RulesEditing
+    var policy: RuleCatalog.Policy
+    var rule: RuleCatalog.Entry
+    var single: RuleCatalog.Parameter
+
+    /// 画面に出す 1 つの選択。置き場所と敷居の組。
+    private enum Choice: String, CaseIterable, Identifiable {
+        case ownSeriesFromTwo, ownSeriesFromOne, inMainSeries, notInSeries
+        var id: String { rawValue }
+
+        var placement: String {
+            switch self {
+            case .ownSeriesFromTwo, .ownSeriesFromOne: "ownSeries"
+            case .inMainSeries: "inMainSeries"
+            case .notInSeries: "notInSeries"
+            }
+        }
+
+        /// 敷居を決める選択か(「別のシリーズ」のときだけ)。
+        var single: Bool? {
+            switch self {
+            case .ownSeriesFromTwo: false
+            case .ownSeriesFromOne: true
+            default: nil
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .ownSeriesFromTwo: "In a series of their own, “X Compilation” (two or more)"
+            case .ownSeriesFromOne: "In a series of their own, “X Compilation” (one is enough when the main series exists)"
+            case .inMainSeries: "In the main series"
+            case .notInSeries: "In no series at all"
+            }
+        }
+    }
+
+    private var current: Choice {
+        switch policy.current {
+        case "inMainSeries": .inMainSeries
+        case "notInSeries": .notInSeries
+        default: single.current.boolValue ?? true ? .ownSeriesFromOne : .ownSeriesFromTwo
+        }
+    }
+
+    private var isDefault: Choice {
+        switch policy.defaultChoice {
+        case "inMainSeries": .inMainSeries
+        case "notInSeries": .notInSeries
+        default: single.defaultValue.boolValue ?? true ? .ownSeriesFromOne : .ownSeriesFromTwo
+        }
+    }
+
+    var body: some View {
+        let label = RuleLabels.policies["compilations"] ?? RuleLabels.Item(title: "compilations")
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                ModifiedDot(isModified: policy.isModified || single.isModified)
+                Picker(selection: Binding(get: { current }, set: { choose($0) })) {
+                    ForEach(Choice.allCases) { choice in
+                        Text(verbatim: choice == isDefault ? "%@ (default)".ui(choice.title.ui) : choice.title.ui).tag(choice)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(key: label.title)
+                        if !label.help.isEmpty { Text(key: label.help).font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+            Text("A book put in the main series falls back to “X Compilation” when no main series was found — with one compilation enough to make it.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func choose(_ choice: Choice) {
+        editing.change { changes in
+            if choice.placement == policy.defaultChoice { changes.resetPolicy(policy.id) }
+            else { changes.setPolicy(choice.placement, for: policy.id) }
+            guard let wanted = choice.single else { return }
+            if JSONValue.bool(wanted) == single.defaultValue { changes.resetValue(rule: rule.id, parameter: single.name) }
+            else { _ = changes.setValue(.bool(wanted), rule: rule.id, parameter: single.name) }
+        }
     }
 }
 
@@ -536,7 +641,7 @@ private struct ReadersPane: View {
                 if let reader = readers.first(where: { $0.id == selection }) {
                     RuleDetail(editing: editing, catalog: catalog, rule: reader)
                 } else {
-                    ContentUnavailableView("Select a reader", systemImage: "textformat.123")
+                    ContentUnavailableView("Select a way to read the volume", systemImage: "textformat.123")
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)

@@ -334,6 +334,16 @@ final class Workspace {
         }
     }
 
+    /// 巻数を手で決める(選んだ本すべてに同じ表記を入れる)。シリーズ名の無い本は触らない
+    /// ―― 巻数はシリーズの中の番号なので、シリーズが決まっていないと意味を持たない。
+    func setVolumes(_ volume: String, for ids: Set<BookRow.ID>) {
+        let names = Dictionary(books.map { ($0.id, Self.currentSeriesName($0)) }, uniquingKeysWith: { a, _ in a })
+        edit("Set the volume".ui) { input in
+            guard ids.contains(input.id), let name = names[input.id], !name.isEmpty else { return }
+            input.confirmation = .series(name: name, volume: volume, fields: input.confirmation.fields)
+        }
+    }
+
     /// 巻だけを消す(「巻は無い」と確定する)。
     func clearVolumes(_ ids: Set<BookRow.ID>) {
         let names = Dictionary(books.map { ($0.id, Self.currentSeriesName($0)) }, uniquingKeysWith: { a, _ in a })

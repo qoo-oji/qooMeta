@@ -27,7 +27,15 @@ struct FormatsPane: View {
     @State private var confirmsReset = false
     @State private var confirmsDelete = false
 
+    @State private var picked = PickedForRules.shared
+
     private var isDirty: Bool { draft.preset != saved.preset }
+
+    /// 開いたときに選ぶルールセット: 段 2 で選んだもの(この並びに無ければ既定のもの)。
+    private var wanted: String {
+        if let name = picked.ruleSet, catalog.names.contains(name) { return name }
+        return catalog.defaultPreset
+    }
 
     var body: some View {
         let entry = catalog.entries.first { $0.id == selection }
@@ -80,7 +88,9 @@ struct FormatsPane: View {
             }
             .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onAppear { if selection == nil { load(catalog.defaultPreset) } }
+        .onAppear { if selection == nil { load(wanted) } }
+        // 窓がもう開いているときも、段 2 から開き直されたら選び直す(直している途中なら、いつもどおり確かめてから)。
+        .onChange(of: picked.ruleSetToken) { select(wanted) }
         // 保存・初期化のあと、保存してある中身が変わったら下書きを取り直す(直している途中の下書きは、そのまま)。
         .onChange(of: entry?.preset) { _, now in
             guard let now, now != saved.preset else { return }

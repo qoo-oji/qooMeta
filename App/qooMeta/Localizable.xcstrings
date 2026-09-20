@@ -97,7 +97,7 @@
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%2$lld 冊中 %1$lld 冊を読み切れました"
+                  "value": "%2$lld 冊中 %1$lld 冊を解析できました"
                 }
               }
             }
@@ -134,7 +134,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@(既定)"
+            "value": "%@(デフォルト)"
           }
         }
       }
@@ -399,6 +399,23 @@
         }
       }
     },
+    "A book put in the main series falls back to “X Compilation” when no main series was found — with one compilation enough to make it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book put in the main series falls back to “X Compilation” when no main series was found — with one compilation enough to make it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「本編のシリーズに入れる」を選んでも、本編のシリーズが見つからない本は「X 総集編」になります(そのときは 1 冊でもシリーズにします)。"
+          }
+        }
+      }
+    },
     "A book whose title holds one of these joins no series. The bundled list is empty": {
       "extractionState": "manual",
       "localizations": {
@@ -411,7 +428,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この語のある本は、どのシリーズにも入れません(同梱の一覧は空です)"
+            "value": "この語のあるタイトルの本は、どのシリーズにも入れません(標準の一覧は空です)"
           }
         }
       }
@@ -428,7 +445,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この語のある本は、どのシリーズにも入れません。1 冊だけ外すなら、その本の題名を書いてください"
+            "value": "この語のあるタイトルの本は、どのシリーズにも入れません。1 冊だけ外すなら、そのタイトルを書いてください"
           }
         }
       }
@@ -581,7 +598,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ルールセットは、ファイル名のフォーマットを並べたものです。上から順に試し、名前全体に合った最初のフォーマットで解析します。数字は、そのルールセットで読み切れたファイル名の数です(括弧が欄にならず値に残った名前は数えません)。"
+            "value": "ルールセットは、ファイル名のフォーマットを並べたものです。上から順に試し、名前全体に合った最初のフォーマットで解析します。数字は、そのルールセットで解析できたファイル名の数です(括弧が欄にならず値に残った名前は数えません)。"
           }
         }
       }
@@ -632,7 +649,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "番号の無い 1 冊"
+            "value": "巻の番号が無い 1 冊"
           }
         }
       }
@@ -1176,7 +1193,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "組の作り方(この順に働く)"
+            "value": "シリーズ候補の作り方(この順に働く)"
           }
         }
       }
@@ -1619,7 +1636,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻数の消去"
+            "value": "巻数の削除"
           }
         }
       }
@@ -1636,7 +1653,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻数を消去"
+            "value": "巻数を削除"
           }
         }
       }
@@ -2095,7 +2112,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズと巻数を導く"
+            "value": "シリーズと巻数の抽出"
           }
         }
       }
@@ -2197,7 +2214,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "数字(3・第3巻・Vol.3・36-37)"
+            "value": "算用数字(3・第3巻・Vol.3・36-37)"
           }
         }
       }
@@ -2321,23 +2338,6 @@
         }
       }
     },
-    "Does nothing. It shields the word from the rules below and from the volume readers — this is how an exception is written": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Does nothing. It shields the word from the rules below and from the volume readers — this is how an exception is written"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "何もしません。下の規則と巻の読み手から、この語を守ります(例外はこれを上に置いて書きます)"
-          }
-        }
-      }
-    },
     "Doujinshi (event first)": {
       "extractionState": "manual",
       "localizations": {
@@ -2372,19 +2372,19 @@
         }
       }
     },
-    "Download edition, digital edition, deluxe edition, …": {
+    "Download edition. The standard word list is empty; add your own": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download edition, digital edition, deluxe edition, …"
+            "value": "Download edition. The standard word list is empty; add your own"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "DL版・電子版・特装版 …"
+            "value": "DL版(語の一覧は標準では空です。必要なら足してください)"
           }
         }
       }
@@ -2435,24 +2435,24 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "比べるときはタイトルから外します。外して同じ題名になる本は、同じ作品の版違いです"
+            "value": "比べるときはタイトルから外します。外して同じタイトルになる本は、同じ作品の版違いです"
           }
         }
       }
     },
-    "Dropped from the title before books are compared. The contents are the same; only the way the book was obtained differs": {
+    "Dropped from the title before books are compared. The contents are the same; only the form it was published in differs": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dropped from the title before books are compared. The contents are the same; only the way the book was obtained differs"
+            "value": "Dropped from the title before books are compared. The contents are the same; only the form it was published in differs"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "比べるときはタイトルから外します。中身は同じで、手に入れた経路だけが違います"
+            "value": "比べるときはタイトルから外します。中身は同じで、発行の形(媒体・装丁)だけが違います"
           }
         }
       }
@@ -2508,36 +2508,36 @@
         }
       }
     },
-    "Editions (full colour, complete edition, …)": {
+    "Editions (full colour, deluxe edition, complete edition, …)": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Editions (full colour, complete edition, …)"
+            "value": "Editions (full colour, deluxe edition, complete edition, …)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "版違い(フルカラー版・完全版 …)"
+            "value": "版違い(フルカラー版・特装版・完全版 …)"
           }
         }
       }
     },
-    "Editions and sources of the same work": {
+    "Editions and publication forms of the same work": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Editions and sources of the same work"
+            "value": "Editions and publication forms of the same work"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "同じ作品の版・入手経路"
+            "value": "同じ作品の版・発行形態"
           }
         }
       }
@@ -2605,7 +2605,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方針・語の規則・語の一覧に加えた変更が、すべて消えます。"
+            "value": "「本の扱い」「タイトルの中の語」「語の一覧」に加えた変更が、すべて消えます。"
           }
         }
       }
@@ -2724,7 +2724,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "片方の題名全体が一致するときの最小文字数"
+            "value": "片方のタイトル全体が一致するときの最小文字数"
           }
         }
       }
@@ -3052,19 +3052,19 @@
         }
       }
     },
-    "Full colour edition, complete edition, English edition, …": {
+    "Full colour edition, deluxe edition, complete edition, English edition, …": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full colour edition, complete edition, English edition, …"
+            "value": "Full colour edition, deluxe edition, complete edition, English edition, …"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "フルカラー版・完全版・〇〇語版 …"
+            "value": "フルカラー版・特装版・完全版・〇〇語版 …"
           }
         }
       }
@@ -3132,7 +3132,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "後ろに巻があれば組にする"
+            "value": "後ろに巻数があれば、それでもまとめる"
           }
         }
       }
@@ -3149,7 +3149,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "組み方と名前"
+            "value": "まとめ方と名前"
           }
         }
       }
@@ -3166,7 +3166,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「X 3」の形の本を、巻を除いた頭でまとめます"
+            "value": "「X 3」の形の本を、巻数を除いた頭でまとめます"
           }
         }
       }
@@ -3200,7 +3200,24 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻の推定"
+            "value": "巻数の推定"
+          }
+        }
+      }
+    },
+    "How books are treated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How books are treated"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本の扱い"
           }
         }
       }
@@ -3217,7 +3234,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "必要な冊数"
+            "value": "何冊そろえば働くか"
           }
         }
       }
@@ -3286,6 +3303,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "「X 総集編」という別のシリーズにする"
+          }
+        }
+      }
+    },
+    "In a series of their own, “X Compilation” (one is enough when the main series exists)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In a series of their own, “X Compilation” (one is enough when the main series exists)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「X 総集編」という別のシリーズにする(本編のシリーズがあれば 1 冊でも)"
+          }
+        }
+      }
+    },
+    "In a series of their own, “X Compilation” (two or more)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In a series of their own, “X Compilation” (two or more)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「X 総集編」という別のシリーズにする(2 冊以上のとき)"
           }
         }
       }
@@ -3370,7 +3421,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "組に入れる"
+            "value": "まとまりに入れる"
           }
         }
       }
@@ -3596,6 +3647,23 @@
         }
       }
     },
+    "Left out of the extraction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left out of the extraction"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抽出時に除外する"
+          }
+        }
+      }
+    },
     "Let them share a series": {
       "extractionState": "manual",
       "localizations": {
@@ -3710,7 +3778,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズと巻数を導く規則(方針・語の規則・語の一覧)を確認・編集します"
+            "value": "シリーズ名と巻数の決め方(本の扱い・タイトルの中の語・語の一覧)を確認・編集します"
           }
         }
       }
@@ -3812,7 +3880,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "まとめる"
+            "value": "1 つのシリーズにする"
           }
         }
       }
@@ -4305,7 +4373,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "総集編・番外編のオフセット"
+            "value": "総集編・番外編に足す数"
           }
         }
       }
@@ -4424,7 +4492,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "順番あり"
+            "value": "上から順"
           }
         }
       }
@@ -4497,19 +4565,53 @@
         }
       }
     },
-    "Policies": {
+    "Publication forms (download edition, …)": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Policies"
+            "value": "Publication forms (download edition, …)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "方針"
+            "value": "発行形態違い(DL版 …)"
+          }
+        }
+      }
+    },
+    "Publication-form mark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publication-form mark"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "発行形態の印"
+          }
+        }
+      }
+    },
+    "Publication-form marks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publication-form marks"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "発行形態の印"
           }
         }
       }
@@ -4650,23 +4752,6 @@
         }
       }
     },
-    "Read as it is": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Read as it is"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "そのまま読む"
-          }
-        }
-      }
-    },
     "Read in full": {
       "extractionState": "manual",
       "localizations": {
@@ -4747,7 +4832,24 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ファイル名を読む"
+            "value": "ファイル名の解析"
+          }
+        }
+      }
+    },
+    "Reading the volume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the volume"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数の読み方"
           }
         }
       }
@@ -4849,7 +4951,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "版違いだけの組はシリーズにしない"
+            "value": "版違いだけのまとまりはシリーズにしない"
           }
         }
       }
@@ -4866,7 +4968,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ひらがなで終わる共通部分は組にしない"
+            "value": "ひらがなで終わる共通部分はシリーズ候補にしない"
           }
         }
       }
@@ -4883,7 +4985,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "1 種類の文字だけの共通部分は組にしない"
+            "value": "1 種類の文字だけの共通部分はシリーズ候補にしない"
           }
         }
       }
@@ -4900,7 +5002,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "一般的な英単語だけの題名は組にしない"
+            "value": "一般的な英単語だけのタイトルはシリーズ候補にしない"
           }
         }
       }
@@ -5019,7 +5121,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズと巻数の規則を、すべてデフォルトに戻しますか?"
+            "value": "シリーズと巻数の抽出を、すべてデフォルトに戻しますか?"
           }
         }
       }
@@ -5381,23 +5483,6 @@
         }
       }
     },
-    "Select a reader": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select a reader"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "読み手が選択されていません"
-          }
-        }
-      }
-    },
     "Select a rule": {
       "extractionState": "manual",
       "localizations": {
@@ -5428,6 +5513,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "ルールセットが選択されていません"
+          }
+        }
+      }
+    },
+    "Select a way to read the volume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a way to read the volume"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数の読み方が選択されていません"
           }
         }
       }
@@ -5483,36 +5585,19 @@
         }
       }
     },
-    "Series Rules": {
+    "Series and Volume Extraction…": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Series Rules"
+            "value": "Series and Volume Extraction…"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズの規則"
-          }
-        }
-      }
-    },
-    "Series and Volume Rules…": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Series and Volume Rules…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "シリーズと巻数の規則…"
+            "value": "シリーズと巻数の抽出…"
           }
         }
       }
@@ -5534,19 +5619,19 @@
         }
       }
     },
-    "Series and volume rules": {
+    "Series and volume extraction": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Series and volume rules"
+            "value": "Series and volume extraction"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズと巻数の規則"
+            "value": "シリーズと巻数の抽出"
           }
         }
       }
@@ -5619,6 +5704,23 @@
         }
       }
     },
+    "Set the volume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the volume"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数を設定"
+          }
+        }
+      }
+    },
     "Setting “%1$@” also changes %2$lld books you did not pick. %3$lld of the books you picked change: %4$lld gain a series and %5$lld lose one.": {
       "extractionState": "manual",
       "localizations": {
@@ -5631,7 +5733,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「%1$@」にすると、選んでいない %2$lld 冊も変わります(選んだ本で変わるのは %3$lld 冊。新しくシリーズが付く %4$lld 冊、外れる %5$lld 冊)"
+            "value": "「%1$@」にすると、選択していない %2$lld 冊も変わります(選択した本で変わるのは %3$lld 冊。新しくシリーズが付く %4$lld 冊、外れる %5$lld 冊)"
           }
         }
       }
@@ -5704,40 +5806,6 @@
         }
       }
     },
-    "Source mark": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Source mark"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "入手経路の印"
-          }
-        }
-      }
-    },
-    "Source marks": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Source marks"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "入手経路の印"
-          }
-        }
-      }
-    },
     "Source work": {
       "extractionState": "manual",
       "localizations": {
@@ -5751,23 +5819,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "原作"
-          }
-        }
-      }
-    },
-    "Sources (download, deluxe edition, …)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sources (download, deluxe edition, …)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "入手経路違い(DL版・特装版 …)"
           }
         }
       }
@@ -5801,7 +5852,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "空白と、題名の飾りに使われる記号"
+            "value": "空白と、タイトルの飾りに使われる記号"
           }
         }
       }
@@ -5818,7 +5869,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "原作の違いで組を分ける"
+            "value": "原作が違えばシリーズ候補を分ける"
           }
         }
       }
@@ -5835,7 +5886,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "1 段目: タイトル + 巻"
+            "value": "1 段目:「タイトル + 巻数」の形"
           }
         }
       }
@@ -5852,7 +5903,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "2 段目: 先頭の共通部分"
+            "value": "2 段目: タイトルの先頭が同じ本"
           }
         }
       }
@@ -5869,7 +5920,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "2 段目の、組にしない条件"
+            "value": "2 段目で、シリーズ候補にしない条件"
           }
         }
       }
@@ -6209,7 +6260,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シリーズ名より後ろの部分を、**上の読み手から順に**試し、最初に読めたものを巻数にします。"
+            "value": "シリーズ名より後ろの部分を、**上の読み方から順に**試し、最初に読めたものを巻数にします。"
           }
         }
       }
@@ -6282,23 +6333,6 @@
         }
       }
     },
-    "The same work in another edition (a duplicate)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The same work in another edition (a duplicate)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ作品の別の版(重複として扱う)"
-          }
-        }
-      }
-    },
     "The series name of “X side A” and “X side B” is “X”": {
       "extractionState": "manual",
       "localizations": {
@@ -6346,6 +6380,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "末尾の丸括弧は巻数です(数字だけのとき)。「シリーズ名 (巻数) - 著者」の形も解析します。"
+          }
+        }
+      }
+    },
+    "The word is not a mark of any kind: it stays in the title, and neither the rules below nor the ways of reading a volume touch it. Put such a rule above the one you want it to escape.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The word is not a mark of any kind: it stays in the title, and neither the rules below nor the ways of reading a volume touch it. Put such a rule above the one you want it to escape."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この語はどの印にもせず、タイトルの一部として残します。下の規則にも、巻数の読み方にも取られません。例外は、効かせたくない規則より上に置きます。"
           }
         }
       }
@@ -6719,7 +6770,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻の番号の後ろに付く単位"
+            "value": "巻数の後ろに付く単位"
           }
         }
       }
@@ -6736,7 +6787,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "残りが巻だけかを見るときの単位"
+            "value": "巻数だけかを見るときにだけ使う単位"
           }
         }
       }
@@ -6804,7 +6855,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻数(ソート)"
+            "value": "巻数(並べ替え用)"
           }
         }
       }
@@ -6843,23 +6894,6 @@
         }
       }
     },
-    "Volume readers": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Volume readers"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "巻の読み手"
-          }
-        }
-      }
-    },
     "Volumes": {
       "extractionState": "manual",
       "localizations": {
@@ -6872,7 +6906,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻"
+            "value": "巻数"
           }
         }
       }
@@ -6894,19 +6928,19 @@
         }
       }
     },
-    "What to do with a book that carries a source mark": {
+    "What to do with a book that carries a publication-form mark": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "What to do with a book that carries a source mark"
+            "value": "What to do with a book that carries a publication-form mark"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "入手経路の印が付いた本の扱い"
+            "value": "発行形態の印が付いた本の扱い"
           }
         }
       }
@@ -6957,7 +6991,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "同じ組になった本の原作(@source)が違うとき"
+            "value": "同じまとまりになった本の原作(@source)が違うとき"
           }
         }
       }
@@ -7081,19 +7115,19 @@
         }
       }
     },
-    "Whether it acts is set by the policies “Editions” and “Sources”": {
+    "Whether it acts is set by the policies “Editions” and “Publication forms”": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Whether it acts is set by the policies “Editions” and “Sources”"
+            "value": "Whether it acts is set by the policies “Editions” and “Publication forms”"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効かどうかは方針「版違い」「入手経路違い」で決まります"
+            "value": "有効かどうかは方針「版違い」「発行形態違い」で決まります"
           }
         }
       }
@@ -7178,7 +7212,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「X 〇〇編」を、巻でまとめた「X」の組に入れるかどうか"
+            "value": "「X 〇〇編」を、巻数でまとめた「X」のまとまりに入れるかどうか"
           }
         }
       }
@@ -7268,23 +7302,6 @@
         }
       }
     },
-    "Word rules": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Word rules"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "語の規則"
-          }
-        }
-      }
-    },
     "Words": {
       "extractionState": "manual",
       "localizations": {
@@ -7314,7 +7331,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "巻の番号の前に付く語"
+            "value": "巻数の前に付く語"
           }
         }
       }
@@ -7382,7 +7399,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "上・中・下、前編・後編"
+            "value": "位置を表す語(上・中・下、前編・後編)"
           }
         }
       }
@@ -7455,6 +7472,23 @@
         }
       }
     },
+    "Words in a title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Words in a title"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイトルの中の語"
+          }
+        }
+      }
+    },
     "Words in a title are looked for **from the top rule down**. A word an upper rule has taken is invisible to the rules below. An exception is written as a “read as it is” rule placed **above** the rule you want to hold back.": {
       "extractionState": "manual",
       "localizations": {
@@ -7472,19 +7506,19 @@
         }
       }
     },
-    "Words read as they are": {
+    "Words left out of the extraction": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Words read as they are"
+            "value": "Words left out of the extraction"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "そのまま読む語"
+            "value": "抽出時に除外する語"
           }
         }
       }
@@ -7569,7 +7603,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "1 巻とみなさない本の語"
+            "value": "1 巻とみなさない語"
           }
         }
       }
@@ -7604,6 +7638,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "悪化"
+          }
+        }
+      }
+    },
+    "Write a value and press the button beside it to settle it for the books you picked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write a value and press the button beside it to settle it for the books you picked."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "欄に書いて右のボタンを押すと、選択した本にその値が確定します。"
+          }
+        }
+      }
+    },
+    "Writes this volume into the books you picked. Books with no series name are left alone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writes this volume into the books you picked. Books with no series name are left alone"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した本の巻数をこの値にします。シリーズ名の無い本は変えません"
           }
         }
       }

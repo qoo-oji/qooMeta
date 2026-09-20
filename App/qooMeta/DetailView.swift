@@ -114,6 +114,7 @@ struct SeriesSection: View {
     @Bindable var workspace: Workspace
     let books: [BookRow]
     @State private var name = ""
+    @State private var volume = ""
     @State private var start = 1
     @State private var width = 2
     /// 適用前の確かめ(選んでいない本が巻き込まれるとき)。
@@ -147,13 +148,22 @@ struct SeriesSection: View {
                     }
                 }
             }
-            LabeledContent("Volume (as written)", value: uniform(.volume) ?? "<several values>")
             LabeledContent("Volume (for sorting)", value: uniformSort() ?? "<several values>")
+            // 手で直す所。読むだけの行と続けて置くと、直せることが分からなかった(2026-09-20、利用者の指摘)。
+            Text("Write a value and press the button beside it to settle it for the books you picked.")
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 TextField("Series name", text: $name, prompt: Text(workspace.suggestedSeriesName(for: ids) ?? "Series name"))
                     .onSubmit(applyName)
                 Button("Make one series") { applyName() }
                     .help("Confirms the books you picked as one series. Leave the field empty to use the suggested name")
+            }
+            HStack {
+                TextField("Volume (as written)", text: $volume, prompt: Text(uniform(.volume) ?? "<several values>"))
+                    .onSubmit(applyVolume)
+                Button("Set the volume") { applyVolume() }
+                    .disabled(volume.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .help("Writes this volume into the books you picked. Books with no series name are left alone")
             }
             HStack {
                 Button("Confirm") { workspace.acceptProposedSeries(ids) }
@@ -189,6 +199,14 @@ struct SeriesSection: View {
                 name = ""
             }
         }
+    }
+
+    /// 巻数を手で入れたとき。シリーズ名が決まっている本にだけ入る。
+    func applyVolume() {
+        let text = volume.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        workspace.setVolumes(text, for: ids)
+        volume = ""
     }
 
     func uniformSort() -> String? {

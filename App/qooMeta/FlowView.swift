@@ -190,7 +190,11 @@ private struct ChoosePresetStep: View {
                     Text("Books that fit no shape keep their whole name as a provisional title. You can fix them in the next step, or change how the names are read.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button { openWindow(id: FileNameRulesView.windowID) } label: {
+                        Button {
+                            // いまここで選んでいるルールセットを、窓にも選ばせる。
+                            if let preset = model.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
+                            openWindow(id: FileNameRulesView.windowID)
+                        } label: {
                             Label("Look at and edit the rule sets…", systemImage: "textformat.abc")
                         }
                         Text("A rule set you save there appears here at once.")

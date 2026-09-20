@@ -12,8 +12,8 @@ enum RuleLabels {
     // MARK: - 方針
 
     static let policies: [String: Item] = [
-        "editions": Item(title: "Editions (full colour, complete edition, …)", help: "What to do with a book that carries an edition mark"),
-        "sources": Item(title: "Sources (download, deluxe edition, …)", help: "What to do with a book that carries a source mark"),
+        "editions": Item(title: "Editions (full colour, deluxe edition, complete edition, …)", help: "What to do with a book that carries an edition mark"),
+        "sources": Item(title: "Publication forms (download edition, …)", help: "What to do with a book that carries a publication-form mark"),
         "compilations": Item(title: "Where compilations and side stories go", help: "Which series a book whose title holds a compilation word joins"),
         "compilationVolume": Item(title: "Volume number of a compilation in the main series", help: "Acts only when compilations join the main series"),
         "magazines": Item(title: "Magazines", help: "How names that carry a year and an issue are grouped"),
@@ -24,7 +24,9 @@ enum RuleLabels {
     ]
 
     static let choices: [String: [String: String]] = [
-        "editions": ["sameWork": "The same work in another edition (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
+        // 版違いも入手経路違いも、選ぶのは同じこと(同じ作品として扱うか)。**同じ言葉で書く** ―― 同じものを
+        // 2 通りに言うと、違いがあるように見える(2026-09-20、利用者の指摘)。
+        "editions": ["sameWork": "The same work (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
         "sources": ["sameWork": "The same work (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
         "compilations": ["ownSeries": "In a series of their own, “X Compilation”", "inMainSeries": "In the main series", "notInSeries": "In no series at all"],
         "compilationVolume": ["offset": "Add the offset (Compilation 2 becomes 102)", "none": "Give them no volume number", "afterRange": "Right after the last volume they collect (1–4 becomes 4.5)"],
@@ -38,17 +40,17 @@ enum RuleLabels {
     // MARK: - 規則
 
     static let treatments: [String: Item] = [
-        "keep": Item(title: "Read as it is", help: "Does nothing. It shields the word from the rules below and from the volume readers — this is how an exception is written"),
+        "keep": Item(title: "Left out of the extraction", help: "The word is not a mark of any kind: it stays in the title, and neither the rules below nor the ways of reading a volume touch it. Put such a rule above the one you want it to escape."),
         "edition": Item(title: "Edition mark", help: "Dropped from the title before books are compared. Books with the same title once it is dropped are the same work in another edition"),
-        "source": Item(title: "Source mark", help: "Dropped from the title before books are compared. The contents are the same; only the way the book was obtained differs"),
+        "source": Item(title: "Publication-form mark", help: "Dropped from the title before books are compared. The contents are the same; only the form it was published in differs"),
         "compilation": Item(title: "Compilation word", help: "Where such a book goes is set by the policy “Where compilations and side stories go”"),
         "standalone": Item(title: "Keep out of every series", help: "A book whose title holds this word joins no series"),
     ]
 
     static let rules: [String: Item] = [
-        "plain": Item(title: "Words read as they are", help: "Words such as “Full Colour Compilation” that are neither an edition mark nor a compilation"),
-        "edition": Item(title: "Edition marks", help: "Full colour edition, complete edition, English edition, …"),
-        "source": Item(title: "Source marks", help: "Download edition, digital edition, deluxe edition, …"),
+        "plain": Item(title: "Words left out of the extraction", help: "Words such as “Full Colour Compilation” that are neither an edition mark nor a compilation"),
+        "edition": Item(title: "Edition marks", help: "Full colour edition, deluxe edition, complete edition, English edition, …"),
+        "source": Item(title: "Publication-form marks", help: "Download edition. The standard word list is empty; add your own"),
         "compilationMark": Item(title: "Compilation words", help: "Compilation, side story, …"),
         "standalone": Item(title: "Words that keep a book out of every series", help: "A book whose title holds one of these joins no series. The bundled list is empty"),
         "compilation": Item(title: "Compilation series", help: "Collects compilations into a series named “X Compilation”"),
@@ -58,7 +60,7 @@ enum RuleLabels {
         "reject-single-script": Item(title: "Reject shared text written in one script", help: "When the shared text is cut mid-word and is all katakana or all kanji"),
         "reject-common-english": Item(title: "Reject titles made only of common English words", help: "When both titles are made only of words found in the dictionary"),
         "splitByRelation": Item(title: "Split a group by source work", help: "Whether it acts is set by the policy “Books with different source works”"),
-        "rejectSameWork": Item(title: "Reject groups that differ only by edition", help: "Whether it acts is set by the policies “Editions” and “Sources”"),
+        "rejectSameWork": Item(title: "Reject groups that differ only by edition", help: "Whether it acts is set by the policies “Editions” and “Publication forms”"),
         "includeClosingBrackets": Item(title: "Reach past an open bracket to its close", help: "So that a series name is not cut off in the middle of “【X】”"),
         "includeFollowing": Item(title: "Keep a following “!” or “?”", help: "Keeps the “!” of “Garden of the Moon!” in the series name"),
         "trimTrailing": Item(title: "Drop trailing separators", help: "The “-” or “~” left at the end of a series name"),
@@ -100,10 +102,10 @@ enum RuleLabels {
     // MARK: - 一覧
 
     static let lists: [String: Item] = [
-        "plainWords": Item(title: "Words read as they are", help: "Words that become neither an edition mark, nor a compilation, nor a volume"),
+        "plainWords": Item(title: "Words left out of the extraction", help: "Words that become neither an edition mark, nor a compilation, nor a volume"),
         "standaloneWords": Item(title: "Words that keep a book out of every series", help: "A book whose title holds one of these joins no series. To leave out a single book, write its title"),
         "editionWords": Item(title: "Edition marks"),
-        "sourceWords": Item(title: "Source marks"),
+        "sourceWords": Item(title: "Publication-form marks"),
         "compilationWords": Item(title: "Compilation words"),
         "volumePrefixes": Item(title: "Words before the volume number", help: "vol, 第, その … An English word may be followed by a full stop"),
         "volumeCounters": Item(title: "Units after the volume number", help: "巻, 話, 号 …"),

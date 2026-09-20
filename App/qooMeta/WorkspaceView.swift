@@ -25,8 +25,10 @@ struct WorkspaceView: View {
             }
             ToolbarItem {
                 Button { openWindow(id: SeriesRulesView.windowID) } label: {
-                    Label("Series Rules", systemImage: "list.bullet.indent")
+                    Label("Series and volume extraction", systemImage: "list.bullet.indent")
                 }
+                // 絵だけでは何の窓が開くか分からない(2026-09-20、利用者の指摘)。名前も出す。
+                .labelStyle(.titleAndIcon)
                 .help("Look at and correct the rules that derive the series and volume: policies, word rules and word lists")
             }
             ToolbarItem {
