@@ -16,9 +16,10 @@ struct RuleEngine: Sendable {
     init(rules: CompiledRules, dictionaries: [String: WordSet]) {
         self.rules = rules
         text = TextRules(rules.series)
-        volumes = VolumeExtractor(rules.series.volume, text: text)
-        markers = EditionMarkers(rules.series.editions, compilation: rules.series.compilation)
-        compilation = Compilation(rules.series.compilation, text: text)
+        let words = WordRules(rules.series.editions.wordRules)
+        volumes = VolumeExtractor(rules.series.volume, text: text, words: words)
+        markers = EditionMarkers(rules.series.editions, words: words)
+        compilation = Compilation(words: words, text: text)
         english = EnglishWords(dictionaries["english"])
     }
 }

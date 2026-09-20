@@ -50,7 +50,7 @@
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
-- 確かめ: `swift build`・`swift test`(115 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
+- 確かめ: `swift build`・`swift test`(119 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
 
 ## 同人誌のプリセットを 2 つに分けた(2026-09-20、利用者の指示)
 
@@ -119,9 +119,32 @@ StackNest・ShelfRow の取り込みのコードを読み、**qooMeta が書く 
 - 同梱の並びは、JSON とコード(`FilenameFormats.presetTexts` など。規則ファイルを読む前の予備)の 2 か所にある。
   同じであることはテスト(`bundledDefaultsCompileCleanly`)で守る。
 
-### 残り: `series-rules.json`(着手前のメモ。まだ直していない)
+### 済んだこと: 語の規則(`markers`)を、順番のある規則表にした(2026-09-20、利用者の指摘)
 
-1. **`editionPrefixWords` が `editionWords` とほぼ重複している**(`series-rules.json` の `lists`)。利用者が `editionWords` に
+「フルカラー総集編」の扱いが、総集編の規則にだけ付いた例外の条件になっていた(汎用性が無く、分かりにくい)。
+**段階の中の順番のある規則表(先に当たった規則が勝つ)** に直した。説明の本体は rules-format-design.md「規則の順番と例外」と
+rules.md の `markers`。
+
+- `markers` は配列になった: `plain`(`treat: keep` = そのまま読む語)→ `edition` → `source` → `compilationMark`。
+  **上の規則が取った所には、下の規則は反応しない。** 例外は「上に置いた `keep` の規則」。利用者は差分で新しい ID の規則を足し、
+  `$order` で位置を決められる(`RuleLoader.applyMarkers`)。語を見つけるコードは `WordRules`(EditionMarkers.swift)の 1 か所。
+- 廃止した ID: `reject-edition-prefix`・`editionPrefixWords`(下のメモの 1 はこれで片付いた)。総集編の語は
+  `grouping.compilation.words` から `markers` の `compilationMark` へ移した。`engineLevel` は 2。
+- 同梱の「そのまま読む語」は「フルカラー総集編」「フルカラー総集篇」「フルカラー版総集編」「フルカラー版総集篇」の 4 つだけ
+  (前は「版の語 14 × 総集編の語 4」の組み合わせすべてに効いていた。利用者が決めたのは「フルカラー総集編」なので、
+  そこまでに絞った。道具の側で偏りをかけない)。手元の蔵書 A の指紋は同じ(`ae41e4e8aede473b418c22c0`)、
+  公開データも同じ(0.767 / 0.993)、速さも同じ。
+- **ほかの段階は配列にしないと決めた**(利用者の指示「広げる価値があるところだけ」)。順番のある規則表が役に立つのは、規則が
+  同じものを取り合う段階(`markers` の語、`volume.readers` の巻の表記)だけ。`grouping`・`naming` は前の規則の結果を次が受け取る
+  工程で、並べ替えても良くなる順が無い。オブジェクトで書いた段階は JSON の順に働き、配列の段階だけ並べ替えられる
+  (rules-format-design.md「規則の順番と例外」)。
+- **「そのまま読む語」は巻の読み手にも効く**(利用者の問いを受けて足した。`VolumeExtractor.extract`): 読めた巻の表記が
+  「そのまま読む語」に重なるなら巻にしない(題名が「No.5」の本は、`plainWords` に足せば巻 5 にならない)。要ったのは配列を
+  増やすことではなく、「上で取られた語には、後ろの規則は反応しない」という同じ決まりを段階をまたいで通すことだった。
+
+### 残り: `series-rules.json`(着手前のメモ)
+
+1. (片付いた。上)~~`editionPrefixWords` が `editionWords` とほぼ重複している~~(`series-rules.json` の `lists`)。利用者が `editionWords` に
    語を足しても「フルカラー総集編」の判定には効かない。一覧の参照を配列の中にも書けるようにして
    (`"words": ["@list:editionWords", "フルカラー", "カラー", "モノクロ"]`)、重複を消すのが素直。
 2. ~~プリセットがただの文字列の配列~~(片付いた。第 5 版で `label`・`note` も持てる)。

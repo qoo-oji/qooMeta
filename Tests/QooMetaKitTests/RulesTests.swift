@@ -96,7 +96,7 @@ import QooMetaRules
         #expect(rules.series.naming.labelIntroducers.contains("arc"))
         #expect(rules.series.compare.variantKanji["舊"] == "旧")
         #expect(rules.series.compare.variantKanji["嶋"] == nil)
-        #expect(rules.series.compilation.keywords == ["総集編"])
+        #expect(rules.series.editions.wordRules.first { $0.treat == .compilation }?.words == ["総集編"])
         #expect(rules.changedPaths == ["lists.compilationWords", "lists.labelIntroducers", "lists.variantKanji"])
     }
 
@@ -132,7 +132,7 @@ import QooMetaRules
                       "compilationVolume": "afterRange", "magazines": "whole" }
         """)).rules)
         #expect(!rules.series.editions.stripsEditions)
-        #expect(rules.series.editions.source.isEmpty && rules.series.editions.sourcePatterns.isEmpty)
+        #expect(!rules.series.editions.wordRules.contains { $0.treat == .source })
         #expect(rules.series.compilation.placement == .inMainSeries)
         #expect(rules.series.compilation.volumeMode == .afterRange)
         #expect(rules.series.volume.magazinesWhole)
@@ -174,15 +174,66 @@ import QooMetaRules
         #expect(firstBookSeries == ["月影", ""])
     }
 
+    /// そのまま読む語(markers.plain)は、語に反応する規則のどれにも同じように効く。総集編だけの例外ではない。
+    @Test func plainWordsSilenceEveryWordRule() throws {
+        func series(_ names: [String], _ rules: CompiledRules) -> [String] {
+            let set = proposeSync(names.enumerated().map { BookInput(id: "\($0.offset)", name: $0.element) },
+                                  rules: rules, dictionaries: [:])
+            return names.indices.map { i in set["\(i)"]?.seriesID.flatMap { set.series($0)?.name } ?? "" }
+        }
+        // 既定では「完全版ガイド」の「完全版」は版の印として外れ、「月の庭 ガイド」になる。一覧に足せば、タイトルの一部として読む。
+        let names = ["[架空工房] 月の庭 完全版ガイド"]
+        let before = proposeSync([BookInput(id: "0", name: names[0])], rules: .builtin, dictionaries: [:])
+        #expect(before["0"]?.flags.contains(.edition) == true)
+        let added = try #require(Self.compile(Self.diff(#""lists": { "plainWords": { "$add": ["完全版ガイド"] } }"#)).rules)
+        let after = proposeSync([BookInput(id: "0", name: names[0])], rules: added, dictionaries: [:])
+        #expect(after["0"]?.flags.contains(.edition) == false)
+        // 同梱の一覧の語: 「フルカラー総集編」は総集編のシリーズ(「月の庭 総集編」)に入らない。規則を止めれば総集編として組まれる。
+        // 同梱の一覧の語: 「フルカラー総集編」は総集編のシリーズ(「月の庭 総集編」)に入らない。規則を止めれば総集編として組まれる。
+        let books = ["[架空工房] 月の庭 総集編 1", "[架空工房] 月の庭 総集編 2", "[架空工房] 月の庭 フルカラー総集編"]
+        func isCompilation(_ rules: CompiledRules) -> Bool {
+            proposeSync(books.enumerated().map { BookInput(id: "\($0.offset)", name: $0.element) }, rules: rules,
+                        dictionaries: [:])["2"]?.flags.contains(.compilation) == true
+        }
+        #expect(!isCompilation(.builtin))
+        let off = try #require(Self.compile(Self.diff(#""markers": { "plain": { "enabled": false } }"#)).rules)
+        #expect(isCompilation(off))
+        // 例外は「上に置いた、何もしない規則」。利用者は新しい ID で足せる(並びの先頭に入る)。位置は $order で決められる。
+        let mine = try #require(Self.compile(Self.diff(#"""
+        "markers": { "my-guides": { "treat": "keep", "words": ["完全版ガイド"] }, "$order": ["plain", "my-guides"] }
+        """#)).rules)
+        #expect(proposeSync([BookInput(id: "0", name: names[0])], rules: mine, dictionaries: [:])["0"]?.flags.contains(.edition) == false)
+        #expect(mine.catalog.entries.filter { $0.stage == "markers" }.map(\.id) == ["plain", "my-guides", "edition", "source", "compilationMark"])
+        // 版の規則より下に置いた「何もしない規則」は、版の印を止めない(順番が意味を持つ)。
+        let below = try #require(Self.compile(Self.diff(#"""
+        "markers": { "my-guides": { "treat": "keep", "words": ["完全版ガイド"] }, "$order": ["edition", "my-guides"] }
+        """#)).rules)
+        #expect(proposeSync([BookInput(id: "0", name: names[0])], rules: below, dictionaries: [:])["0"]?.flags.contains(.edition) == true)
+        // 同梱の ID の書き間違いは、新しい規則として黙って受け取らない。
+        #expect(Self.compile(Self.diff(#""markers": { "editon": { "enabled": false } }"#)).errors.first?.suggestion == "edition")
+        // 巻の読み手にも効く(語の規則より後ろの段階なので、取られた語には反応しない)。題名が「No.5」の本。
+        let numbered = ["[架空工房] 星の海 No.5", "[架空工房] 星の海 No.9"].enumerated().map { BookInput(id: "\($0.offset)", name: $0.element) }
+        #expect(proposeSync(numbered, rules: .builtin, dictionaries: [:])["0"]?.metadata.volume == "5")
+        let kept = try #require(Self.compile(Self.diff(#""lists": { "plainWords": { "$add": ["No.5"] } }"#)).rules)
+        let shielded = proposeSync(numbered, rules: kept, dictionaries: [:])
+        #expect(shielded["0"]?.metadata.volume != "5")
+        #expect(shielded["1"]?.metadata.volume == "9" || shielded["1"]?.seriesID == nil)
+
+        // 前の形の条件と一覧は廃止した ID(差分に残っていても、警告で読み飛ばす)。
+        let old = Self.compile(Self.diff(#""lists": { "editionPrefixWords": { "$add": ["x"] } }"#))
+        #expect(old.rules != nil)
+        #expect(old.warnings.map(\.code) == [.retiredID])
+    }
+
     @Test func newerRulesAreSkippedWithAWarning() throws {
-        let c = Self.compile(Self.diff(#""grouping": { "yearGap": { "since": 2, "years": 10 } }, "lists": { "arcWords": { "since": 2, "$add": ["x"] } }"#))
+        let c = Self.compile(Self.diff(#""grouping": { "yearGap": { "since": 99, "years": 10 } }, "lists": { "arcWords": { "since": 99, "$add": ["x"] } }"#))
         let rules = try #require(c.rules, "\(c.errors)")
         #expect(c.warnings.map(\.code) == [.newerRuleSkipped, .newerRuleSkipped])
         #expect(rules.changedPaths.isEmpty)
     }
 
     @Test func aRequiredNewerRuleKeepsTheWholeFileFromApplying() throws {
-        let c = Self.compile(Self.diff(#""grouping": { "sharedPrefix": { "minPrefix": 3 }, "yearGap": { "since": 2, "required": true } }"#))
+        let c = Self.compile(Self.diff(#""grouping": { "sharedPrefix": { "minPrefix": 3 }, "yearGap": { "since": 99, "required": true } }"#))
         let rules = try #require(c.rules, "\(c.errors)")
         #expect(c.warnings.map(\.code).contains(.requiredRuleUnknown))
         #expect(rules.series.grouping.minPrefix == 4)  // 既定値だけで動く

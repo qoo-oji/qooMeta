@@ -202,6 +202,8 @@ struct RuleLoader {
             checkObject(value, node, path, full: full, ignoring: ignoring)
         case .readers:
             checkReaders(value, path, full: full)
+        case .markers:
+            checkMarkers(value, path)
         case .presets:
             guard let o = value.objectValue else { report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
             // どの名前のプリセットがあるかは JSON が決める(コードは名前を決め打ちしない)。
@@ -391,6 +393,32 @@ struct RuleLoader {
         }
     }
 
+    /// 語の規則の並び(全体)。ID は JSON が決める(重なりだけを見る)。
+    mutating func checkMarkers(_ value: JSONValue, _ path: String) {
+        guard let items = value.arrayValue else {
+            report(.invalidValue, path, "語の規則の配列であるべきところが\(value.kindName)")
+            return
+        }
+        if items.count > Limits.items { report(.tooLarge, path, "\(items.count) 件") }
+        var seen = Set<String>()
+        for (i, item) in items.enumerated() {
+            let p = "\(path)[\(i)]"
+            guard let id = item["id"]?.stringValue else { report(.missingKey, "\(p).id"); continue }
+            guard checkRuleID(id, p) else { continue }
+            if !seen.insert(id).inserted { report(.duplicateID, "\(p).id", id) }
+            check(item, .object(RuleSchema.markerNode), p, full: true, ignoring: ["id"])
+        }
+    }
+
+    /// 利用者が付けられる規則の ID。`$` で始まる名前は差分の操作と紛れるので使えない。
+    mutating func checkRuleID(_ id: String, _ path: String) -> Bool {
+        if id.isEmpty || id.hasPrefix("$") || id.count > Limits.wordLength {
+            report(.invalidValue, "\(path).id", "規則の ID は、$ で始まらない 1〜\(Limits.wordLength) 文字")
+            return false
+        }
+        return true
+    }
+
     // MARK: - 差分を重ねる
 
     /// シリーズの規則の差分を、既定値に重ねる。
@@ -533,6 +561,8 @@ struct RuleLoader {
             return .object(merged)
         case .readers:
             return applyReaders(diff, to: base, path)
+        case .markers:
+            return applyMarkers(diff, to: base, path)
         case .presets:
             guard let changes = diff.objectValue, case .object(var merged) = base else {
                 report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(diff.kindName)")
@@ -607,30 +637,77 @@ struct RuleLoader {
             }
             readers[i] = applyObject(changes[key]!, to: readers[i], node, "\(path).\(id)", extraAllowed: ["id", "type"])
         }
-        if let order = changes["$order"] {
-            guard let wanted = order.arrayValue?.compactMap(\.stringValue), wanted.count == order.arrayValue?.count else {
-                report(.invalidValue, "\(path).$order", "読み手の ID の配列であるべきところ")
-                return .array(readers)
-            }
-            var front: [JSONValue] = []
-            for (i, raw) in wanted.enumerated() {
-                let id = ids.contains(raw) ? raw : (aliases[raw] ?? raw)
-                if front.contains(where: { $0["id"]?.stringValue == id }) {
-                    report(.duplicateID, "\(path).$order[\(i)]", raw)
-                } else if let reader = readers.first(where: { $0["id"]?.stringValue == id }) {
-                    front.append(reader)
-                } else if retiredIDs.contains(raw) {
-                    report(.retiredID, "\(path).$order[\(i)]", raw)
-                } else {
-                    report(.unknownKey, "\(path).$order[\(i)]", raw, suggestion: Spelling.suggestion(for: raw, among: ids))
-                }
-            }
-            // 挙げた読み手をこの順で先頭に寄せ、挙げなかった読み手は既定の順で後ろに続ける。
-            let reordered = front + readers.filter { r in !front.contains { $0["id"] == r["id"] } }
-            if reordered != readers { changedPaths.append("\(path).$order") }
-            readers = reordered
-        }
+        if let order = changes["$order"] { applyOrder(order, to: &readers, path) }
         return .array(readers)
+    }
+
+    /// `$order`: 挙げた ID をこの順で先頭に寄せ、挙げなかったものは今の順で後ろに続ける(巻の読み手と語の規則で同じ)。
+    mutating func applyOrder(_ order: JSONValue, to items: inout [JSONValue], _ path: String) {
+        guard let wanted = order.arrayValue?.compactMap(\.stringValue), wanted.count == order.arrayValue?.count else {
+            report(.invalidValue, "\(path).$order", "ID の配列であるべきところ")
+            return
+        }
+        let ids = items.compactMap { $0["id"]?.stringValue }
+        var front: [JSONValue] = []
+        for (i, raw) in wanted.enumerated() {
+            let id = ids.contains(raw) ? raw : (aliases[raw] ?? raw)
+            if front.contains(where: { $0["id"]?.stringValue == id }) {
+                report(.duplicateID, "\(path).$order[\(i)]", raw)
+            } else if let item = items.first(where: { $0["id"]?.stringValue == id }) {
+                front.append(item)
+            } else if retiredIDs.contains(raw) {
+                report(.retiredID, "\(path).$order[\(i)]", raw)
+            } else {
+                report(.unknownKey, "\(path).$order[\(i)]", raw, suggestion: Spelling.suggestion(for: raw, among: ids))
+            }
+        }
+        let reordered = front + items.filter { r in !front.contains { $0["id"] == r["id"] } }
+        if reordered != items { changedPaths.append("\(path).$order") }
+        items = reordered
+    }
+
+    /// 語の規則: `{ "plain": { "enabled": false }, "my-guide": { "treat": "keep", "words": ["…"] }, "$order": [...] }`。
+    /// 同梱に無い ID は、利用者の新しい規則(全体を書く。要るのは `treat`)。**新しい規則は並びの先頭に入る**
+    /// (例外は、守りたい規則より上に置くものだから)。別の位置に置くなら `$order` で並べる。
+    mutating func applyMarkers(_ diff: JSONValue, to base: JSONValue, _ path: String) -> JSONValue {
+        guard let changes = diff.objectValue, var rules = base.arrayValue else {
+            report(.invalidValue, path, "規則の ID をキーにしたオブジェクトであるべきところが\(diff.kindName)")
+            return base
+        }
+        var added: [JSONValue] = []
+        for key in changes.keys.sorted() where key != "$order" {
+            let ids = rules.compactMap { $0["id"]?.stringValue }
+            var id = key
+            if !ids.contains(id), let renamed = aliases[id], ids.contains(renamed) { id = renamed }
+            if let i = ids.firstIndex(of: id) {
+                if let v = changes[key]?["id"], v.stringValue != id { report(.invalidValue, "\(path).\(key).id", "ID は変えられない") }
+                rules[i] = applyObject(changes[key]!, to: rules[i], RuleSchema.markerNode, "\(path).\(id)", extraAllowed: ["id"])
+                continue
+            }
+            // 廃止した ID と、本体の知らない新しい版の規則は、警告で読み飛ばす。
+            let value = changes[key]!
+            if retiredIDs.contains(key) || (value["since"]?.intValue).map({ $0 > engineLevel }) == true {
+                skipUnknown(key, value, path, candidates: ids)
+                continue
+            }
+            guard checkRuleID(key, "\(path).\(key)"), var fresh = value.objectValue, fresh["treat"] != nil else {
+                report(.invalidValue, "\(path).\(key)", "新しい規則は全体を書く({ \"treat\": \"keep\", \"words\": [\"…\"] })。同梱の規則を変えるなら ID を確かめる",
+                       suggestion: Spelling.suggestion(for: key, among: ids))
+                continue
+            }
+            fresh["id"] = .string(key)
+            fresh["enabled"] = fresh["enabled"] ?? .bool(true)
+            fresh["words"] = fresh["words"] ?? .array([])
+            fresh["patterns"] = fresh["patterns"] ?? .array([])
+            let before = issues.count
+            check(.object(fresh), .object(RuleSchema.markerNode), "\(path).\(key)", full: true, ignoring: ["id"])
+            guard issues.count == before else { continue }
+            added.append(.object(fresh))
+            changedPaths.append("\(path).\(key)")
+        }
+        rules = added + rules
+        if let order = changes["$order"] { applyOrder(order, to: &rules, path) }
+        return .array(rules)
     }
 
     /// プロファイル: `{ "doujinshi": { "formats": { "$add": [...], "at": "end" } } }`。

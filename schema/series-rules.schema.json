@@ -135,7 +135,7 @@
             }
           ]
         },
-        "editionPrefixWords": {
+        "plainWords": {
           "oneOf": [
             {
               "$ref": "#/$defs/words"
@@ -327,54 +327,99 @@
       "additionalProperties": false
     },
     "markers": {
-      "type": "object",
-      "properties": {
-        "edition": {
-          "type": "object",
-          "properties": {
-            "since": {
-              "type": "integer",
-              "minimum": 1
+      "description": "語の規則の並び。並び順が優先順位: 上の規則から順に語を探し、上の規則が取った所には下の規則は反応しない。差分では { \"ID\": {…}, \"$order\": [...] }(新しい ID は先頭に入る)",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^$]"
+              },
+              "treat": {
+                "enum": [
+                  "keep",
+                  "edition",
+                  "source",
+                  "compilation"
+                ],
+                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語"
+              },
+              "since": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "words": {
+                "$ref": "#/$defs/wordsValue"
+              },
+              "patterns": {
+                "$ref": "#/$defs/patternsValue"
+              }
             },
-            "required": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "words": {
-              "$ref": "#/$defs/wordsValue"
-            },
-            "patterns": {
-              "$ref": "#/$defs/patternsValue"
-            }
-          },
-          "additionalProperties": false
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "treat"
+            ]
+          }
         },
-        "source": {
+        {
           "type": "object",
           "properties": {
-            "since": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "required": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "words": {
-              "$ref": "#/$defs/wordsValue"
-            },
-            "patterns": {
-              "$ref": "#/$defs/patternsValue"
+            "$order": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
-          "additionalProperties": false
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^$]"
+              },
+              "treat": {
+                "enum": [
+                  "keep",
+                  "edition",
+                  "source",
+                  "compilation"
+                ],
+                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語"
+              },
+              "since": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "words": {
+                "$ref": "#/$defs/wordsValue"
+              },
+              "patterns": {
+                "$ref": "#/$defs/patternsValue"
+              }
+            },
+            "additionalProperties": false
+          }
         }
-      },
-      "additionalProperties": false
+      ]
     },
     "grouping": {
       "type": "object",
@@ -389,9 +434,6 @@
             "required": {
               "type": "boolean"
             },
-            "words": {
-              "$ref": "#/$defs/wordsValue"
-            },
             "singleWhenMainExists": {
               "type": "boolean"
             },
@@ -399,31 +441,6 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 100000
-            },
-            "conditions": {
-              "type": "object",
-              "properties": {
-                "reject-edition-prefix": {
-                  "type": "object",
-                  "properties": {
-                    "since": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "required": {
-                      "type": "boolean"
-                    },
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "words": {
-                      "$ref": "#/$defs/wordsValue"
-                    }
-                  },
-                  "additionalProperties": false
-                }
-              },
-              "additionalProperties": false
             }
           },
           "additionalProperties": false

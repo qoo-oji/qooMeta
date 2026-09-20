@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.20",
+  "revision": "2026.09.20.2",
   "lists": {
     "ignoredInComparison": [
       " ", "　", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",", "「", "」", "『", "』", "【",
@@ -54,10 +54,7 @@
     "editionWords": ["フルカラー版", "カラー版", "モノクロ版", "完全版", "新装版", "愛蔵版", "無修正版", "修正版", "改訂版", "旧版", "新版"],
     "sourceWords": ["初回限定版", "限定版", "特装版", "通常版", "電子版", "デジタル版", "スキャン版"],
     "compilationWords": ["総集編", "総集篇", "番外編", "番外篇"],
-    "editionPrefixWords": [
-      "フルカラー版", "フルカラー", "カラー版", "カラー", "モノクロ版", "モノクロ",
-      "完全版", "新装版", "愛蔵版", "無修正版", "修正版", "改訂版", "旧版", "新版"
-    ],
+    "plainWords": ["フルカラー総集編", "フルカラー総集篇", "フルカラー版総集編", "フルカラー版総集篇"],
     "volumePrefixes": ["vol", "volume", "ver", "version", "no", "#", "第", "その", "其ノ", "其の", "ソノ", "part", "ep"],
     "volumeCounters": ["月号", "月", "巻", "話", "号", "章", "弾", "つめ", "つ目", "冊目", "作目"],
     "wholeOnlyCounters": ["集"],
@@ -84,18 +81,16 @@
     "differentGenre": "split",
     "subtitled": "attach"
   },
-  "markers": {
-    "edition": { "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
-    "source": { "enabled": true, "words": "@list:sourceWords", "patterns": ["[DＤ][LＬ]版"] }
-  },
+  "markers": [
+    { "id": "plain", "treat": "keep", "enabled": true, "since": 2, "words": "@list:plainWords", "patterns": [] },
+    { "id": "edition", "treat": "edition", "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
+    { "id": "source", "treat": "source", "enabled": true, "words": "@list:sourceWords", "patterns": ["[DＤ][LＬ]版"] },
+    { "id": "compilationMark", "treat": "compilation", "enabled": true, "since": 2, "words": "@list:compilationWords", "patterns": [] }
+  ],
   "grouping": {
     "compilation": {
-      "words": "@list:compilationWords",
       "singleWhenMainExists": true,
-      "volumeOffset": 100,
-      "conditions": {
-        "reject-edition-prefix": { "enabled": true, "words": "@list:editionPrefixWords" }
-      }
+      "volumeOffset": 100
     },
     "volumeHead": { "enabled": true },
     "sharedPrefix": {
@@ -146,6 +141,6 @@
       "firstVolume": { "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
     }
   },
-  "retiredIDs": [],
+  "retiredIDs": ["reject-edition-prefix", "editionPrefixWords"],
   "aliases": {}
 }

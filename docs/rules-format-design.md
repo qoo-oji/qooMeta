@@ -211,13 +211,15 @@
 
   "policies": { "editions": "sameWork", "compilations": "ownSeries", "…": "上の表のとおり" },
 
-  "markers": {
-    "edition": { "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
-    "source":  { "enabled": true, "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] }
-  },
+  "markers": [
+    { "id": "plain",           "treat": "keep",        "enabled": true, "words": "@list:plainWords", "patterns": [] },
+    { "id": "edition",         "treat": "edition",     "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
+    { "id": "source",          "treat": "source",      "enabled": true, "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] },
+    { "id": "compilationMark", "treat": "compilation", "enabled": true, "words": "@list:compilationWords", "patterns": [] }
+  ],
 
   "grouping": {
-    "compilation":  { "words": "@list:compilationWords", "singleWhenMainExists": true },
+    "compilation":  { "singleWhenMainExists": true, "volumeOffset": 100 },
     "volumeHead":   { "enabled": true },
     "sharedPrefix": {
       "enabled": true, "minPrefix": 4, "minWholeTitle": 2,
@@ -263,11 +265,65 @@
   (ここに書くのは認識のための語とパラメータだけ)。
 - 段階(`compare` → 比べる単位 → `markers` → `grouping` → `naming` → `volume`)と、`grouping`・`naming`・`inference` の中の規則の順は固定。
   キーの名前が規則の ID を兼ねる。
-- **`volume.readers` だけは並び順が優先順位**(上から試し、最初に読めたものを採る)。差分の `$order` で並べ替えられ、新しい読み手を足せる。
+- **並び順が優先順位になるのは、配列で書いた所**: `markers`(語の規則)と `volume.readers`(巻の読み手)。どちらも
+  「上から試し、先に当たったものが勝つ」。差分では ID で指し、`$order` で並べ替える。`markers` には新しい ID の規則を足せる
+  (下の「規則の順番と例外」)。
 - 最初の実装では、処理に埋め込んである読み方(`ordinal`・`roman`・`greek` など)は**オン・オフだけ**を外に出す。細かいパラメータは、
   必要になったときに `since` を付けて足す。
 - 新しい振る舞いが要るときは、コードに規則を足して `engineLevel` を上げ、既定値に `since` 付きで足す。
 - `"dictionary": "english"` は辞書の**名前**。実体は利用側が渡す。渡されていなければ、その条件は働かない(警告)。
+
+## 規則の順番と例外(2026-09-20)
+
+利用者の指摘: 「フルカラー総集編は総集編とも重複とも見なさない」が、総集編の規則にだけ付いた例外の条件
+(`grouping.compilation.conditions.reject-edition-prefix` と、そのための一覧 `editionPrefixWords`)になっていて、
+ほかの語には使えず、どの規則が何を止めているのかも読み取りにくい。規則のあいだの関係が分かり、全体として単純で、
+汎用性と拡張性のある仕組みにしたい。
+
+**採った仕組みは、この種の処理の定番**: 段階に分けたパイプラインと、段階の中の**順番のある規則表(先に当たった規則が勝つ)**。
+ファイアウォールの規則表、`.gitignore`、メールの振り分け、字句解析(lex)の規則の並び、決定表(DMN のヒットポリシー FIRST)が
+どれもこの形で、例外は「一般の規則より上に置いた規則」として書く。特別な例外の仕組みを持たないので、覚える決まりが 1 つで済む。
+
+1. **段階の順は固定で、JSON のキーの並びがそのまま処理の順**(`compare` → `markers` → `grouping` → `naming` → `volume`)。
+2. **段階の中で順番が意味を持つ所は配列にし、並び順 = 優先順位**。上から試し、先に当たった規則が勝つ。
+3. **例外は、上に置いた規則**。語の段階(`markers`)では `treat: keep`(そのまま読む = 何もしない)の規則がそれで、
+   守りたい規則のすぐ上に置けば、その規則より下にだけ効く。
+4. 利用者は差分で、規則を ID で指して変え、`$order` で並べ替え、新しい ID で規則を足す。
+
+済んだのは `markers`(語の段階)。`reject-edition-prefix` と `editionPrefixWords` は廃止した ID にした(差分に残っていても
+警告で読み飛ばす)。総集編の語は `grouping.compilation.words` から `markers` の `compilationMark` へ移した
+(語を見つけるのは `markers`、組み方は `grouping`、と役目を分けた)。手元の蔵書の指紋・公開データの採点・速さは変わらない。
+
+**配列にするのは、規則どうしが「同じものを取り合う」段階だけ**(2026-09-20、利用者の指示「広げる価値があるところだけ」を受けて
+見直した結論)。順番のある規則表が役に立つのは、複数の規則が同じ対象(タイトルの中の同じ語、同じ巻の表記)に当たりうるときで、
+そこでは並べ替えと「上に置く例外」が意味を持つ。当てはまるのは次の 2 つで、どちらも配列になっている。
+
+| 段階 | 取り合うもの | 並べ替え・例外の使い道 |
+|---|---|---|
+| `markers` | タイトルの中の語 | 「フルカラー総集編」を版の印にも総集編にもしない、など |
+| `volume.readers` | 巻の表記 | ローマ数字より先に漢数字を読む、読み手を止める、など |
+
+**ほかの段階は配列にしない。** 規則が取り合うのではなく、**前の規則の結果を次の規則が受け取る工程**だからで、並べ替えても
+良くなる順が無く(壊れるだけ)、あいだに挟む例外にも意味が無い。配列にすると「動かせそうに見えて動かせない」ものが増え、
+かえって分かりにくくなる。
+
+- `grouping`: 総集編を分ける → `volumeHead`(1 段目)→ 残りを `sharedPrefix`(2 段目)→ できた組を `splitByRelation` で分ける →
+  `rejectSameWork` で捨てる。後ろの 2 つは前の 3 つが作った組を受け取る。`sharedPrefix.conditions` の 3 つは、`sharedPrefix` が
+  切った共通部分を見る条件なので、その規則の中に置く(どの規則の条件かが、置き場所で分かる)。
+- `naming`: 括弧を閉じる → 続く「!」「?」を含める(名前を**延ばす** 2 つ)→ 末尾の記号を落とす → 末尾の語を落とす(**削る** 2 つ)。
+  延ばしてから削る、のほかに意味のある順が無い。
+- `volume.inference`: 規則は 2 つで、互いに結果を変えない。
+- 「この本だけは組にしない・この巻にする」という**個別の例外は、規則ではなく利用者の修正**(アプリの一覧で直し、作業ファイルに残る)。
+  規則の JSON に本ごとの例外を書く仕組みは作らない。
+
+**オブジェクトで書いた段階は、JSON に書いてある順に働く**(同梱のファイルのキーの順 = 処理の順。並べ替えはできない)。
+配列で書いた段階だけが並べ替えられる、と形で見分けられる。
+
+**「そのまま読む語」は、後ろの段階の巻の読み手にも効く**(2026-09-20、利用者の問い「設定さえすれば対応できるようになるか」を
+受けて足した)。効かせるのに要ったのは配列を増やすことではなく、「上で取られた語には、後ろの規則は反応しない」という同じ決まりを
+段階をまたいで通すことだった: 読めた巻の表記が「そのまま読む語」に重なるなら、巻にしない(`VolumeExtractor.extract`)。
+題名が「No.5」の本は、一覧 `plainWords` に「No.5」を足せば巻 5 にならない。なお、巻の読み手はもともと題名の中の数
+(「第2ボタン」「Part2の謎」「7つの鍵」)を巻として読まないので、これが要るのは「No.5」のように巻と同じ形の題名だけ。
 
 ## ファイル名のフォーマット(`qoometa.filename-formats`)
 

@@ -39,7 +39,7 @@ public struct RulesCompilation: Sendable {
 /// 組み立て済みの規則。
 public struct CompiledRules: Sendable {
     /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
-    public static let engineLevel = 1
+    public static let engineLevel = 2
 
     let series: SeriesRules
     /// 名前を付けた型の並び。本ごとに、どのプリセットで読むかを選べる(フォルダごとに分けたい利用者のため)。
@@ -224,7 +224,6 @@ struct RuleCompiler {
         let compare = root["compare"], markers = root["markers"], grouping = root["grouping"]
         let naming = root["naming"], volume = root["volume"]
         let shared = grouping?["sharedPrefix"], conditions = shared?["conditions"]
-        let compilationConditions = grouping?["compilation"]?["conditions"]
         let english = conditions?["reject-common-english"]
         var englishEnabled = enabled(english)
         if englishEnabled, let name = english?["dictionary"]?.stringValue, !dictionaries.contains(name) {
@@ -233,9 +232,16 @@ struct RuleCompiler {
             englishEnabled = false
         }
 
-        // 印は、規則を止めたときも、方針で見分けないこと(`ignore`)を選んだときも探さない。
-        let editionsOn = enabled(markers?["edition"]) && policies["editions"] != "ignore"
-        let sourcesOn = enabled(markers?["source"]) && policies["sources"] != "ignore"
+        // 語の規則(並び順が優先順位)。止めた規則と、方針で見分けないこと(`ignore`)を選んだ印の規則は、並びから外す
+        // (外した規則は語を取らないので、下の規則がその語に反応できる)。
+        let wordRules = (markers?.arrayValue ?? []).compactMap { rule -> SeriesRules.WordRule? in
+            guard enabled(rule), let id = rule["id"]?.stringValue,
+                  let treat = SeriesRules.WordRule.Treatment(rawValue: rule["treat"]?.stringValue ?? "") else { return nil }
+            if treat == .edition, policies["editions"] == "ignore" { return nil }
+            if treat == .source, policies["sources"] == "ignore" { return nil }
+            return SeriesRules.WordRule(id: id, treat: treat, words: words(rule["words"], lists),
+                                        patterns: words(rule["patterns"], lists))
+        }
 
         let readersJSON = volume?["readers"]?.arrayValue ?? []
         func reader(_ id: String) -> JSONValue? { readersJSON.first { $0["id"]?.stringValue == id } }
@@ -274,16 +280,10 @@ struct RuleCompiler {
                     ? pairs(naming?["includeClosingBrackets"]?["pairs"], lists) : [:],
                 labelIntroducers: enabled(naming?["dropLastWord"]) ? words(naming?["dropLastWord"]?["words"], lists) : []),
             editions: .init(
-                edition: editionsOn ? words(markers?["edition"]?["words"], lists) : [],
-                editionPatterns: editionsOn ? words(markers?["edition"]?["patterns"], lists) : [],
-                source: sourcesOn ? words(markers?["source"]?["words"], lists) : [],
-                sourcePatterns: sourcesOn ? words(markers?["source"]?["patterns"], lists) : [],
+                wordRules: wordRules,
                 stripsEditions: policies["editions"] != "separateBooks",
                 stripsSources: policies["sources"] != "separateBooks"),
             compilation: .init(
-                keywords: words(grouping?["compilation"]?["words"], lists),
-                editionPrefixes: enabled(compilationConditions?["reject-edition-prefix"])
-                    ? words(compilationConditions?["reject-edition-prefix"]?["words"], lists) : [],
                 placement: SeriesRules.Compilation.Placement(rawValue: policies["compilations"] ?? "") ?? .ownSeries,
                 volumeMode: SeriesRules.Compilation.VolumeMode(rawValue: policies["compilationVolume"] ?? "") ?? .offset,
                 volumeOffset: Double(grouping?["compilation"]?["volumeOffset"]?.intValue ?? 100)),
@@ -389,12 +389,18 @@ struct SeriesRules: Sendable {
         var labelIntroducers: [String]
     }
 
+    /// 語の規則 1 件(series-rules.json の `markers` の 1 件)。
+    struct WordRule: Sendable {
+        enum Treatment: String, Sendable { case keep, edition, source, compilation }
+        var id: String
+        var treat: Treatment
+        var words: [String]
+        var patterns: [String]
+    }
+
     struct Editions: Sendable {
-        /// 印の語と正規表現(規則を止めたとき、方針 `ignore` のときは空)。
-        var edition: [String]
-        var editionPatterns: [String]
-        var source: [String]
-        var sourcePatterns: [String]
+        /// 働いている語の規則(優先の順)。上の規則が取った所には、下の規則は反応しない。
+        var wordRules: [WordRule]
         /// 比べるタイトルから印を除くか(方針 `sameWork`)。`separateBooks` なら印を見分けて付けるが、除かずに比べる。
         var stripsEditions: Bool
         var stripsSources: Bool
@@ -403,10 +409,6 @@ struct SeriesRules: Sendable {
     struct Compilation: Sendable {
         enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
         enum VolumeMode: String, Sendable { case offset, none, afterRange }
-        var keywords: [String]
-        /// 総集編の語のすぐ前に区切り無しで続いたら、総集編と見なさない語(「フルカラー総集編」は独立した 1 冊)。
-        /// 規則 grouping.compilation.conditions.reject-edition-prefix。止めていれば空。
-        var editionPrefixes: [String]
         /// 方針 `compilations`。
         var placement: Placement
         /// 本編に含めたとき(`inMainSeries`)の巻の付け方(方針 `compilationVolume`)。

@@ -1,14 +1,76 @@
 import Foundation
 
-/// タイトルに付いた「版」と「入手経路」の印(利用者との取り決め、docs/design.md「版と入手経路」)。
+// タイトルに付いた「版」と「入手経路」の印(利用者との取り決め、docs/design.md「版と入手経路」)。
+//
+// - **版**: 色・収録内容・修正・言語などが違う(フルカラー版、完全版、無修正版、英語版 …)。
+//   同じ作品の版違いであって、続き物(シリーズ)ではない。
+// - **入手経路**: 内容は色も含めて同一で、手に入れた経路だけが違う(DL版、電子版、特装版・通常版 …)。
+//   特装版・通常版は付録の違いで本体は同じなので、こちらに入れる(両方をそろえる人は稀で、分けると困る)。
+//
+// どちらの印も、シリーズを組むときはタイトルから除いて比べる。印を除いて同じタイトルになる本は同じ作品の 1 冊と
+// 数え、版違い・入手経路違いだけの組はシリーズにしない(SeriesGrouper)。
+
+/// 語の規則(series-rules.json の `markers`)。タイトルの中の「役目のある語」を見つける、ただ 1 つの場所。
 ///
-/// - **版**: 色・収録内容・修正・言語などが違う(フルカラー版、完全版、無修正版、英語版 …)。
-///   同じ作品の版違いであって、続き物(シリーズ)ではない。
-/// - **入手経路**: 内容は色も含めて同一で、手に入れた経路だけが違う(DL版、電子版、特装版・通常版 …)。
-///   特装版・通常版は付録の違いで本体は同じなので、こちらに入れる(両方をそろえる人は稀で、分けると困る)。
+/// **決まりは 1 つ: 並びの上の規則から順に語を探し、上の規則が取った所には、下の規則は反応しない**(先に当たった規則が勝つ。
+/// ファイアウォールの規則表や .gitignore、字句解析の規則の並びと同じ、よくある仕組み)。だから例外は、特別な仕組みではなく
+/// 「守りたい規則より上に置いた、何もしない規則(`treat: keep`)」として書ける。
 ///
-/// どちらの印も、シリーズを組むときはタイトルから除いて比べる。印を除いて同じタイトルになる本は同じ作品の 1 冊と
-/// 数え、版違い・入手経路違いだけの組はシリーズにしない(SeriesGrouper)。
+/// 「フルカラー総集編」は独立した 1 冊で、版違いでも総集編でもない(利用者の判断 2026-09-20)。はじめは総集編の規則にだけ
+/// 付いた例外の条件として作ったが、ほかの語には使えず、どの規則が何を止めているのかも読み取りにくかった(利用者の指摘)。
+/// いまは並びの先頭の `keep` の規則(`plain`)の語の 1 つで、版の印も総集編も、その下にあるので反応しない。
+final class WordRules: Sendable {
+    /// 規則が取った語。
+    struct Claim: Sendable {
+        var treat: SeriesRules.WordRule.Treatment
+        /// 語そのものの位置(UTF-16)。取り合いはこの範囲で見る。
+        var word: NSRange
+        /// 語の前後の括弧と空白まで含めた位置(印をタイトルから外すときに使う)。
+        var whole: NSRange
+    }
+
+    private let rules: [(treat: SeriesRules.WordRule.Treatment, pattern: NSRegularExpression)]
+
+    init(_ rules: [SeriesRules.WordRule]) {
+        self.rules = rules.compactMap { rule in
+            // 長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
+            let words = rule.words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+            let all = words + rule.patterns
+            guard !all.isEmpty else { return nil }
+            // 印は前後の括弧ごと外すので、括弧と空白も一緒に読む(「DL版」は全角の「ＤＬ版」も規則の正規表現が受け付ける)。
+            let source = #"\s*[\[［【(（]?\s*(?<word>"# + all.joined(separator: "|") + #")\s*[\]］】)）]?"#
+            return (try? NSRegularExpression(pattern: source)).map { (rule.treat, $0) }
+        }
+    }
+
+    /// 「そのまま読む語」の規則があるか(無ければ、巻の読み手は語を探す手間を省く)。
+    var keepsAny: Bool { rules.contains { $0.treat == .keep } }
+
+    /// 「そのまま読む語」の位置だけ(巻の読み手が使う。巻の読み手は語の規則より後ろの段階なので、並びの中の位置は問わない)。
+    func keptRanges(in text: String) -> [NSRange] {
+        rules.filter { $0.treat == .keep }.flatMap { rule in
+            (BudgetedRegex.matches(rule.pattern, in: text, budget: BudgetedRegex.defaultBudget) ?? [])
+                .map { $0.range(withName: "word") }.filter { $0.location != NSNotFound }
+        }
+    }
+
+    /// タイトルの中で規則が取った語(位置の順)。正規表現は利用者が書き足せるので、照合に時間の上限を設ける
+    /// (越えた規則は、語が無いものとして扱う)。
+    func claims(in title: String) -> [Claim] {
+        var claims: [Claim] = []
+        for rule in rules {
+            guard let matches = BudgetedRegex.matches(rule.pattern, in: title, budget: BudgetedRegex.defaultBudget) else { continue }
+            for m in matches {
+                let word = m.range(withName: "word")
+                guard word.location != NSNotFound, word.length > 0,
+                      !claims.contains(where: { NSIntersectionRange($0.word, word).length > 0 }) else { continue }
+                claims.append(Claim(treat: rule.treat, word: word, whole: m.range))
+            }
+        }
+        return claims.sorted { $0.word.location < $1.word.location }
+    }
+}
+
 final class EditionMarkers: Sendable {
     struct Split: Equatable, Sendable {
         /// 印を除いたタイトル(比べる・巻を読むのに使う)。
@@ -17,65 +79,34 @@ final class EditionMarkers: Sendable {
         var sources: [String]
     }
 
-    /// 印の正規表現。前後の括弧ごと取り除く。長い語を先に並べる(「フルカラー版」を「カラー版」より先に)。
-    /// 「DL版」は全角の「ＤＬ版」も受け付ける。「〇〇語版」(英語版・中国語版 …)は版。
-    /// 印の規則(markers.edition / markers.source)を止めると、その語は空になる。両方とも空なら印は探さない。
-    private let pattern: NSRegularExpression?
+    private let words: WordRules
     /// 比べるタイトルから除く印(方針 `sameWork`)。`separateBooks` の印は見分けて付けるが、タイトルには残す。
     private let stripsEditions: Bool
     private let stripsSources: Bool
-    /// 「フルカラー総集編」は独立した 1 冊で、版違いでも総集編でもない(利用者の判断)。印の語のすぐ後ろに区切り無しで
-    /// 総集編の語が続く形は、印として外さずタイトルの一部として残す(外すと「X 総集編」になり、総集編として組まれてしまう)。
-    /// 語と有効無効は規則 grouping.compilation.conditions.reject-edition-prefix が決める。
-    private let editionPrefixes: Set<String>
-    private let compilationWords: [String]
 
-    /// 印の一覧は series-rules.json の markers。総集編の規則は、上の「すぐ後ろに続く形」の判定にだけ使う。
-    init(_ rules: SeriesRules.Editions, compilation: SeriesRules.Compilation) {
+    init(_ rules: SeriesRules.Editions, words: WordRules) {
         stripsEditions = rules.stripsEditions
         stripsSources = rules.stripsSources
-        editionPrefixes = Set(compilation.editionPrefixes)
-        compilationWords = compilation.editionPrefixes.isEmpty ? [] : compilation.keywords
-        func alternation(_ words: [String]) -> [String] {
-            words.isEmpty ? [] : [words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")]
-        }
-        let edition = (alternation(rules.edition) + rules.editionPatterns).joined(separator: "|")
-        let source = (alternation(rules.source) + rules.sourcePatterns).joined(separator: "|")
-        // 空の選択肢は空文字列に一致してしまうので、決して一致しない形(`(?!)`)にする。
-        guard !edition.isEmpty || !source.isEmpty else { pattern = nil; return }
-        pattern = try! NSRegularExpression(
-            pattern: #"\s*[\[［【(（]?\s*(?:(?<edition>"# + (edition.isEmpty ? "(?!)" : edition) + #")|(?<source>"#
-                + (source.isEmpty ? "(?!)" : source) + #"))\s*[\]］】)）]?"#)
+        self.words = words
     }
 
     func split(_ title: String) -> Split {
-        guard let pattern else { return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: []) }
         let ns = title as NSString
         var editions: [String] = [], sources: [String] = []
         var base = ""
         var last = 0
-        // 印の正規表現は利用者が書き足せるので、照合に時間の上限を設ける(越えたら印は無いものとして扱う)。
-        guard let matches = BudgetedRegex.matches(pattern, in: title, budget: BudgetedRegex.defaultBudget) else {
-            return Split(base: TextRules.normalizeDisplay(title), editions: [], sources: [])
-        }
-        for m in matches {
-            base += ns.substring(with: NSRange(location: last, length: m.range.location - last))
-            let matched = ns.substring(with: m.range)
-            last = m.range.location + m.range.length
-            let e = m.range(withName: "edition"), s = m.range(withName: "source")
-            // 「フルカラー版総集編」のように、印の語のすぐ後ろに(括弧も空白も挟まずに)総集編の語が続く形は、印にしない。
-            // 一致が印の語で終わっていること(閉じ括弧や空白を巻き込んでいないこと)が「区切り無し」の条件。
-            if e.location != NSNotFound, e.location + e.length == m.range.location + m.range.length,
-               editionPrefixes.contains(ns.substring(with: e)),
-               compilationWords.contains(where: ns.substring(from: last).hasPrefix) {
-                base += matched
-                continue
+        for claim in words.claims(in: title) {
+            let strips: Bool
+            switch claim.treat {
+            case .edition: editions.append(ns.substring(with: claim.word)); strips = stripsEditions
+            case .source: sources.append(ns.substring(with: claim.word)); strips = stripsSources
+            case .keep, .compilation: strips = false
             }
-            if e.location != NSNotFound { editions.append(ns.substring(with: e)) }
-            if s.location != NSNotFound { sources.append(ns.substring(with: s)) }
-            if (e.location != NSNotFound && !stripsEditions) || (s.location != NSNotFound && !stripsSources) {
-                base += ns.substring(with: m.range)
-            }
+            // 外す範囲が前の印の範囲と重なることがある(あいだの空白を両方が読む)。重なった分は二度外さない。
+            guard strips, claim.whole.location + claim.whole.length > last else { continue }
+            let start = max(claim.whole.location, last)
+            base += ns.substring(with: NSRange(location: last, length: start - last))
+            last = claim.whole.location + claim.whole.length
         }
         base += ns.substring(from: last)
         base = TextRules.normalizeDisplay(base)
@@ -87,29 +118,18 @@ final class EditionMarkers: Sendable {
 
 /// 総集編の語と、収録範囲の並べ替え。
 final class Compilation: Sendable {
-    /// 「総集編」(「総集篇」とも書く)。series-rules.json の grouping.compilation.words。
-    let keyword: NSRegularExpression
     let text: TextRules
-    /// すぐ前に区切り無しで続いたら総集編と見なさない語(規則 grouping.compilation.conditions.reject-edition-prefix)。
-    private let editionPrefixes: [String]
+    private let words: WordRules
 
-    init(_ rules: SeriesRules.Compilation, text: TextRules) {
-        let words = rules.keywords.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
-        keyword = try! NSRegularExpression(pattern: words.isEmpty ? "(?!)" : words.joined(separator: "|"))
-        editionPrefixes = rules.editionPrefixes
+    init(words: WordRules, text: TextRules) {
+        self.words = words
         self.text = text
     }
 
-    /// 総集編の語の位置。「フルカラー総集編」のように、版の語が区切り無しですぐ前に続く形は総集編と見なさない
-    /// (独立した 1 冊。利用者の判断 2026-09-20)。同じ名前にほかの総集編の語があれば、そちらを見る。
+    /// 総集編の語の位置(語の規則のうち `treat: compilation` が取った、最初の語)。上の規則が取った所の語
+    /// (「フルカラー総集編」の中の「総集編」)は、総集編と見なさない。
     func keywordRange(in title: String) -> Range<String.Index>? {
-        let ns = title as NSString
-        for m in keyword.matches(in: title, range: NSRange(location: 0, length: ns.length)) {
-            guard let r = Range(m.range, in: title) else { continue }
-            if editionPrefixes.contains(where: title[..<r.lowerBound].hasSuffix) { continue }
-            return r
-        }
-        return nil
+        words.claims(in: title).first { $0.treat == .compilation }.flatMap { Range($0.word, in: title) }
     }
 
     /// 総集編の前に書かれた収録範囲・番号(「1~4」「9~11+α」「11」)。

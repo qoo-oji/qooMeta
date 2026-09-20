@@ -1219,7 +1219,7 @@
         }
       ],
       "covers": [
-        "reject-edition-prefix",
+        "plain",
         "compilation"
       ]
     },
@@ -1246,7 +1246,7 @@
         }
       ],
       "covers": [
-        "reject-edition-prefix",
+        "plain",
         "edition",
         "compilation"
       ]

@@ -22,6 +22,8 @@ final class VolumeExtractor: Sendable {
 
     /// 巻の読み方の語の一覧は series-rules.json の volume.readers(prefixes / counters / …)。
     let rules: SeriesRules.Volume
+    /// 語の規則。「そのまま読む語」(`treat: keep`)に重なる表記は、巻として読まない。
+    private let words: WordRules?
     static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟"
 
     /// 語の一覧を空にしたとき、空の選択肢が何にでも一致しないよう、決して一致しない形にする。
@@ -43,8 +45,9 @@ final class VolumeExtractor: Sendable {
         pattern: #"^((?:19|20)\d{2})\s*(?:年\s*(\d{1,2})(?:\s*[-‐~〜・]\s*(\d{1,2}))?\s*(?:月号|月|号)|(?:vol\.?|no\.?|#)\s*(\d{1,3})|[-‐_.]\s*(\d{1,2})(?=$|\s))(?=$|\s|[~\-・!?.()\[\]【】])"#,
         options: [.caseInsensitive])
 
-    init(_ rules: SeriesRules.Volume, text: TextRules) {
+    init(_ rules: SeriesRules.Volume, text: TextRules, words: WordRules? = nil) {
         self.rules = rules
+        self.words = words
         let nonEmpty = Self.nonEmpty, kanjiDigits = Self.kanjiDigits
         numeric = try! NSRegularExpression(
             pattern: #"^(?:"# + nonEmpty(rules.prefixPattern) + #")?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:"#
@@ -68,7 +71,23 @@ final class VolumeExtractor: Sendable {
     }
 
     /// 読み手を優先の順に試し、最初に読めたものを採る(規則で止めた読み手は飛ばす)。
+    ///
+    /// 読めた表記が「そのまま読む語」に重なるなら、巻にしない(題名が「No.5」の本。語の規則は巻の読み手より前の段階なので、
+    /// そこで取られた語には、後ろの段階の読み手も反応しない)。
     func extract(fromRemainder remainder: String) -> Volume? {
+        guard let volume = read(fromRemainder: remainder) else { return nil }
+        if let words, words.keepsAny {
+            let s = remainder.precomposedNFKC.trimmingCharacters(in: leadingSeparators)
+            // 読み手は残りの頭から読む。巻の表記(「No.5」の「5」)の終わりまでを、読んだ範囲とみなす。
+            let found = (s as NSString).range(of: volume.text)
+            let read = NSRange(location: 0, length: found.location == NSNotFound ? (volume.text as NSString).length
+                                                                                  : found.location + found.length)
+            if words.keptRanges(in: s).contains(where: { NSIntersectionRange($0, read).length > 0 }) { return nil }
+        }
+        return volume
+    }
+
+    private func read(fromRemainder remainder: String) -> Volume? {
         let s = remainder.precomposedNFKC
             .trimmingCharacters(in: leadingSeparators)
         guard !s.isEmpty else { return nil }

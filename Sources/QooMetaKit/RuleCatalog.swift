@@ -108,6 +108,13 @@ extension CompiledRules {
                         entries.append(entry(id, stage: childPath, node: RuleSchema.Node(type.fields, rule: true, enabled: true),
                                              now: reader, before: defaults.first { $0["id"]?.stringValue == id }))
                     }
+                case .markers:
+                    let defaults = before?[field.name]?.arrayValue ?? []
+                    for rule in now?[field.name]?.arrayValue ?? [] {
+                        guard let id = rule["id"]?.stringValue else { continue }
+                        entries.append(entry(id, stage: childPath, node: RuleSchema.markerNode, now: rule,
+                                             before: defaults.first { $0["id"]?.stringValue == id }))
+                    }
                 default: break
                 }
             }
@@ -237,6 +244,8 @@ public struct RuleChanges: Sendable, Hashable {
                     if let found = find(child, path + [field.name]) { return found }
                 case .readers:
                     if RuleSchema.readerTypes.contains(where: { $0.id == rule }) { return path + [field.name, rule] }
+                case .markers:
+                    if RuleSchema.builtInMarkerIDs.contains(rule) { return path + [field.name, rule] }
                 default: break
                 }
             }

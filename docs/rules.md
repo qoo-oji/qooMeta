@@ -161,11 +161,12 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 ## 2. series-rules.json
 
 `@title` から、シリーズ名と巻を取り出します。処理の段階は固定で、JSON の構造がそのまま段階を表します
-(段階の順や、段階をまたぐ規則の移動はできません)。
+(段階の順や、段階をまたぐ規則の移動はできません)。**配列で書いてある所(`markers` と `volume.readers`)は並び順が優先順位で、
+並べ替えられます**(上から試し、先に当たった規則が勝つ)。オブジェクトで書いてある所は、書いてある順に働き、並べ替えられません。
 
 1. **比べる単位**: 同じサークル(無ければフォルダ)で、本の種別(`@genre`)が同じ本どうしだけを比べます(方針 `differentGenre`)。
 2. **`compare`**: 比べるための形(全角・半角、大文字・小文字、飾りの記号、異体字をそろえる)。
-3. **`markers`**: 版・入手経路の印を見分け、除いたタイトルで比べます。
+3. **`markers`**: タイトルの中の「役目のある語」(版・入手経路の印、総集編の語)を見つけます。**並び順が優先順位**です。
 4. **`grouping`**: 組を作ります。1 段目 `volumeHead`(「タイトル + 巻」を頭でまとめる)、2 段目 `sharedPrefix`(先頭の共通部分)、
    総集編 `compilation`、組にしない例外(`conditions`、ネタ違い、版違いだけ)。
 5. **`naming`**: 共通部分を元の表記に戻し、シリーズ名を整えます。
@@ -228,7 +229,45 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 | `variants` | `@list:variantKanji` | 同じ字とみなす異体字 |
 | `boundaries` | `@list:boundaryCharacters` | 語の切れ目とみなす記号 |
 
-### `markers` — 版と入手経路の印
+### `markers` — 語の規則(版・入手経路の印、総集編の語、そのまま読む語)
+
+タイトルの中の「役目のある語」を見つける規則の**並び**です。決まりは 1 つだけです:
+
+> **上の規則から順に語を探し、上の規則が取った所には、下の規則は反応しない。**
+
+ファイアウォールの規則表や `.gitignore`、メールの振り分けと同じ「先に当たった規則が勝つ」仕組みです。だから**例外は、
+特別な仕組みではなく「守りたい規則より上に置いた、何もしない規則」**として書きます。
+
+| 規則(同梱の順) | `treat` | 意味 |
+|---|---|---|
+| `plain` | `keep` | **そのまま読む語**。何もしない(下の規則と、後ろの段階の**巻の読み手**から語を守る。題名が「No.5」の本は、ここに足せば巻 5 になりません)。同梱は「フルカラー総集編」など: 独立した 1 冊で、版違いでも総集編でもない |
+| `edition` | `edition` | 版の印(下) |
+| `source` | `source` | 入手経路の印(下) |
+| `compilationMark` | `compilation` | 総集編の語(`総集編` `番外編` …)。置き場所は方針 `compilations`、組み方は `grouping.compilation` |
+
+どの規則も `words`(語の一覧)と `patterns`(正規表現)、`enabled` を持ちます。`treat` は規則の扱いで、`keep` /
+`edition` / `source` / `compilation` から選びます。
+
+差分では、規則を ID で指します。**同梱に無い ID を書くと、新しい規則になります**(要るのは `treat`。並びの先頭に入ります)。
+位置を変えるなら `$order`(挙げた ID を、この順で先頭に寄せる)。
+
+```json
+{ "kind": "qoometa.series-rules", "schemaVersion": 2, "base": "builtin",
+  "lists": { "plainWords": { "$add": ["完全版ガイド"] } } }
+```
+
+↑「完全版ガイド」の「完全版」を版の印にしない(同梱の「そのまま読む語」に足すだけ)。総集編としては読ませたいが、版の印に
+だけはしたくない、というように**順番のあいだに入れたい**ときは、新しい規則を足して位置を決めます:
+
+```json
+{ "kind": "qoometa.series-rules", "schemaVersion": 2, "base": "builtin",
+  "markers": {
+    "my-exceptions": { "treat": "keep", "words": ["新装版画集"] },
+    "$order": ["plain", "compilationMark", "my-exceptions"]
+  } }
+```
+
+#### 版と入手経路の印
 
 タイトルの中の印です。**比べるときは印を除いたタイトルを使い、印を除いて同じタイトルになる本は同じ作品とみなします。
 同じ作品だけの組はシリーズにしません**(規則 `grouping.rejectSameWork`)。シリーズの中の版違い(`X 3【フルカラー版】`)は、
@@ -247,7 +286,7 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 | 規則 | パラメータ(既定) | 意味 |
 |---|---|---|
-| `compilation` | `words`、`singleWhenMainExists`(true) | 総集編を本編とは別の `X 総集編` のシリーズにする。2 冊以上か、同じ書き手に本編のシリーズ `X` があれば(`singleWhenMainExists`)1 冊でもシリーズにする |
+| `compilation` | `singleWhenMainExists`(true)、`volumeOffset`(100) | 総集編(語は `markers` の `compilationMark`)を本編とは別の `X 総集編` のシリーズにする。2 冊以上か、同じ書き手に本編のシリーズ `X` があれば(`singleWhenMainExists`)1 冊でもシリーズにする |
 | `volumeHead` | — | 1 段目: 「タイトル + 巻」の形の本を、巻を除いた頭でまとめる。後ろが巻だけなので頭は 1 文字でもよい |
 | `sharedPrefix` | `minPrefix`(4)、`minWholeTitle`(2) | 2 段目: 残りを先頭の共通部分でまとめる。共通部分が**語の途中で**切れるときは `minPrefix` 文字以上、片方のタイトル全体がもう片方の先頭と一致するとき(`XY` と `XY2`)は `minWholeTitle` 文字以上 |
 | `sharedPrefix.conditions.reject-hiragana-ending` | — | 語の途中で切れる共通部分が、ひらがな(助詞など)で終わるなら組にしない |

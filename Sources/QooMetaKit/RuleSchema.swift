@@ -33,6 +33,8 @@ enum RuleSchema {
         case object(Node)
         /// 巻の読み手(並び順が優先順位。差分では ID で指し、`$order` で並べ替える)。
         case readers
+        /// 語の規則の並び(`markers`。並び順が優先順位。差分では ID で指し、`$order` で並べ替え、新しい ID で足せる)。
+        case markers
         /// 名前を付けた型の並び(`presets`)。差分では名前で指す。同梱に無い名前は、利用者の新しいプリセット。
         case presets
         /// プリセットが入れる既定の欄(`defaults`)。書いた欄だけ。
@@ -78,7 +80,7 @@ enum RuleSchema {
         "ignoredInComparison": .characters, "variantKanji": .pairs, "boundaryCharacters": .characters,
         "trimTrailing": .characters, "keepFollowing": .characters, "brackets": .pairs, "labelIntroducers": .words,
         "editionWords": .words, "sourceWords": .words, "compilationWords": .words,
-        "editionPrefixWords": .words, "volumePrefixes": .words,
+        "plainWords": .words, "volumePrefixes": .words,
         "volumeCounters": .words, "wholeOnlyCounters": .words, "kanjiCounters": .words, "positionFirst": .words,
         "positionMiddle": .words, "positionLast": .words, "notFirstMarkers": .words, "notFirstPrefixes": .words,
     ]
@@ -105,16 +107,10 @@ enum RuleSchema {
         f("compare", .object(Node([
             f("ignored", .list(.characters)), f("variants", .list(.pairs)), f("boundaries", .list(.characters)),
         ]))),
-        f("markers", .object(Node([
-            f("edition", rule([f("words", .list(.words)), f("patterns", .patterns)])),
-            f("source", rule([f("words", .list(.words)), f("patterns", .patterns)])),
-        ]))),
+        f("markers", .markers),
         f("grouping", .object(Node([
             f("compilation", rule([
-                f("words", .list(.words)), f("singleWhenMainExists", .bool), f("volumeOffset", .int(0...100_000)),
-                f("conditions", .object(Node([
-                    f("reject-edition-prefix", rule([f("words", .list(.words))])),
-                ]))),
+                f("singleWhenMainExists", .bool), f("volumeOffset", .int(0...100_000)),
             ], enabled: false)),
             f("volumeHead", rule()),
             f("sharedPrefix", rule([
@@ -142,6 +138,20 @@ enum RuleSchema {
             ]))),
         ]))),
     ])
+
+    /// 語の規則(`markers` の 1 件)の扱い。タイトルの中の語を上の規則から順に探し、**上の規則が取った所には下の規則は反応しない**。
+    /// - `keep`: そのまま読む(何もしない。下の規則から語を守るための規則で、例外はこれを上に置いて書く)
+    /// - `edition`・`source`: 版・入手経路の印(方針 editions・sources が扱いを決める)
+    /// - `compilation`: 総集編の語(方針 compilations が置き場所を決める)
+    static let markerTreatments = ["keep", "edition", "source", "compilation"]
+
+    /// 語の規則 1 件の形(`id` は別に見る)。
+    static let markerNode = Node([
+        f("treat", .choice(markerTreatments)), f("words", .list(.words)), f("patterns", .patterns),
+    ], rule: true, enabled: true)
+
+    /// 同梱の語の規則の ID(例の `covers` と、規則の編集画面が ID で指すのに使う。利用者は別の ID の規則を足せる)。
+    static let builtInMarkerIDs = ["plain", "edition", "source", "compilationMark"]
 
     /// 巻の読み手の種類と、そのパラメータ。今は種類ごとに 1 つずつで、ID で指す。
     static let readerTypes: [(id: String, type: String, fields: [Field])] = [
@@ -193,6 +203,7 @@ enum RuleSchema {
                     if child.isRule { ids.append(field.name) }
                     collect(child)
                 case .readers: ids += readerTypes.map(\.id)
+                case .markers: ids += builtInMarkerIDs
                 default: break
                 }
             }
