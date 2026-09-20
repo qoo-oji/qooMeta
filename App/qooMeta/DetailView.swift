@@ -287,6 +287,7 @@ extension FormatWord {
         case .event: .pink
         case .source: .purple
         case .info: .teal
+        case .series, .volume: .indigo
         case .ignore: .gray
         }
     }

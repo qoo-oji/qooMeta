@@ -7,16 +7,16 @@ import Foundation
 // 単位ごとに組・確定した内容・巻を決める → 決まった順に並べて返す。**提案は単位の中だけで決まる**ので、
 // 単位ごとに別々に計算でき(並列化・ProposalIndex の計算し直し)、同じ入力なら毎回同じ結果になる。
 
-/// ファイル名を欄に分ける(シリーズは見ない)。取り込みの瞬間に 1 冊ずつ補完したい利用側向け。
-public func parseName(_ name: String, rules: CompiledRules, vocabulary: Vocabulary) -> ParsedName {
-    let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
-    return engine.publicName(engine.parse(BookInput(id: "", name: name)))
+/// ファイル名を型で読んで欄に分ける(シリーズと巻数は見ない)。取り込みの瞬間に 1 冊ずつ補完したい利用側向け。
+/// `preset` は、どの型の並びで読むか(nil なら既定。フォルダごとに使い分けられる)。
+public func parseName(_ name: String, rules: CompiledRules, preset: String? = nil) -> FormatReading {
+    rules.formats[preset].read(RuleEngine.cleaned(name))
 }
 
 /// 一覧をまとめて提案する。CPU を使う同期の計算。メインスレッドの外で呼ぶ。
-public func proposeSync(_ books: [BookInput], rules: CompiledRules, vocabulary: Vocabulary,
+public func proposeSync(_ books: [BookInput], rules: CompiledRules, dictionaries: [String: WordSet],
                         options: ProposalOptions = .default) -> ProposalSet {
-    let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
+    let engine = RuleEngine(rules: rules, dictionaries: dictionaries)
     let prepared = engine.prepare(books, limits: options.limits)
     let results = prepared.units.mapValues { engine.computeUnit($0.map(\.core), explain: options.explanations) }
     return engine.assemble(prepared, results)
@@ -25,10 +25,10 @@ public func proposeSync(_ books: [BookInput], rules: CompiledRules, vocabulary: 
 /// 同じ計算を、呼び出し側のアクターの外で行う。Task の取り消しと、進み具合の通知に対応する。
 /// 単位をまとめた塊ごとに並列に計算する(1 単位は平均して数冊なので、単位ごとにタスクを作ると遅くなる)。
 @concurrent
-public func propose(_ books: [BookInput], rules: CompiledRules, vocabulary: Vocabulary,
+public func propose(_ books: [BookInput], rules: CompiledRules, dictionaries: [String: WordSet],
                     options: ProposalOptions = .default,
                     progress: (@Sendable (ProposalProgress) -> Void)? = nil) async throws(CancellationError) -> ProposalSet {
-    let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
+    let engine = RuleEngine(rules: rules, dictionaries: dictionaries)
     // 名前の解析(計算の大半)も、本をまとめた塊ごとに並列に行う。入力の確かめ(ID の重なりなど)は順に。
     let (accepted, rejected) = engine.screen(books, limits: options.limits)
     let size = max(64, (accepted.count + ProcessorCount.value * 4 - 1) / (ProcessorCount.value * 4))
@@ -90,8 +90,10 @@ struct PreparedBook: Sendable {
     let input: BookInput
     /// 中核へ渡す形。
     let core: CoreBook
-    /// 公開する形(下ごしらえのときに 1 度だけ作る。ProposalIndex で毎回作り直さないため)。
-    let parsed: ParsedName
+    /// 名前を型で読んだ結果(確定した欄は重ねていない)。
+    let reading: FormatReading
+    /// 読んだ欄に、確定した欄を重ねたもの(シリーズと巻数は、単位の計算のあとで入れる)。
+    let metadata: BookMetadata
     let unitKey: String
 }
 
@@ -159,67 +161,51 @@ extension RuleEngine {
     static func issue(_ input: BookInput, limits: InputLimits) -> InputIssue.Reason? {
         if input.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .emptyName }
         if input.name.count > limits.maxNameLength { return .nameTooLong }
-        if input.folders.count > limits.maxFolders { return .tooManyFolders }
-        if input.folders.contains(where: { $0.count > limits.maxFolderNameLength }) { return .folderNameTooLong }
         return nil
     }
 
-    /// 名前を読み、中核の入口に詰める。
+    /// 名前を型で読み、確定した欄を重ねて、中核の入口に詰める。
     func prepareOne(_ input: BookInput, order: Int) -> PreparedBook {
-        let parts = parse(input)
-        // 書き手はサークル。無ければいちばん近いフォルダ名(今の前段の読み方。フォルダ名を読むのは段階 6 でやめる)。
-        let owner = parts.circle.isEmpty ? (input.folders.first.map(TextRules.normalizeDisplay) ?? "") : parts.circle
-        let head = volumeHead(compareTitle: parts.baseTitle)
-        let core = CoreBook(id: input.id, order: order, title: parts.title, compareTitle: parts.baseTitle,
-                            writerKey: text.key(owner), genre: parts.mediaType ?? "", source: parts.trailing,
-                            hasEditionMarks: parts.editions != nil, hasSourceMarks: parts.sources != nil,
-                            confirmation: input.confirmation, volumeHead: head)
-        return PreparedBook(input: input, core: core, parsed: publicName(parts, volumeHead: head), unitKey: unitKey(core))
+        let reading = rules.formats[input.preset].read(Self.cleaned(input.name))
+        let metadata = input.confirmation.fields.applied(to: reading.metadata)
+        let compared = compareTitle(metadata.title)
+        // 型が名前から直に読んだシリーズ・巻数(`@series` `@volume`)は、利用者が確定した値と同じ扱いで中核へ渡す。
+        let confirmation = Self.confirming(metadata, over: input.confirmation)
+        // 巻数を型で読んだ本は、比べるタイトルの後ろにその表記を付ける(「月の庭」+「12」)。名前の中に巻が書いてある本と
+        // 同じ形になるので、中核の規則(タイトル + 巻)がそのまま効く。
+        let compareText = metadata.volume.isEmpty ? compared.text : compared.text + " " + metadata.volume
+        let core = CoreBook(id: input.id, order: order, title: metadata.title, compareTitle: compareText,
+                            // 書き手は著者の並びの先頭。無ければ空(書き手の空の本どうしで 1 つの単位になる)。
+                            writerKey: text.key(metadata.authors.first ?? ""), genre: metadata.genre,
+                            source: metadata.source, hasEditionMarks: !compared.editions.isEmpty,
+                            hasSourceMarks: !compared.sources.isEmpty, confirmation: confirmation,
+                            volumeHead: volumeHead(compareTitle: compareText))
+        return PreparedBook(input: input, core: core, reading: reading, metadata: metadata, unitKey: unitKey(core))
     }
 
-    /// 名前を欄に分け、確定した欄で置き換え、版・入手経路の印と総集編の範囲を見る。
-    func parse(_ input: BookInput) -> NameParts {
-        // 制御文字と書式文字(Cc・Cf)は比べる前に落とす(見えない文字で組を割ったり、表示を崩したりさせない)。
-        let name = String(String.UnicodeScalarView(input.name.unicodeScalars.filter {
+    /// 型が読んだシリーズ・巻数を、確定した内容に重ねる(利用者の確定が優先)。どちらも無ければそのまま。
+    static func confirming(_ metadata: BookMetadata, over confirmation: Confirmation) -> Confirmation {
+        guard !metadata.series.isEmpty || !metadata.volume.isEmpty else { return confirmation }
+        switch confirmation {
+        case .none, .fields:
+            let fields = confirmation.fields
+            guard !metadata.series.isEmpty else {
+                // 巻数だけ読めたときは、シリーズは中核に任せ、巻数だけ確定した値として渡す。
+                var withVolume = fields
+                withVolume[.volume] = [metadata.volume]
+                return .fields(withVolume)
+            }
+            return .series(name: metadata.series, volume: metadata.volume.isEmpty ? nil : metadata.volume, fields: fields)
+        case .series, .notInSeries:
+            return confirmation  // 利用者の確定が優先。
+        }
+    }
+
+    /// 制御文字と書式文字(Cc・Cf)は読む前に落とす(見えない文字で組を割ったり、表示を崩したりさせない)。
+    static func cleaned(_ name: String) -> String {
+        String(String.UnicodeScalarView(name.unicodeScalars.filter {
             !($0.properties.generalCategory == .control || $0.properties.generalCategory == .format)
         }))
-        // どのフォーマットにも一致しなければ、括弧の位置だけで読む(規則 fallback.simpleBrackets)。止めていれば名前全体をタイトルにする。
-        var parts = parser.parse(baseName: name) ?? {
-            if rules.formats.simpleBracketsEnabled {
-                var p = NameParser.parse(baseName: name)
-                p.format = .fallback(p.matchedPattern ? "simpleBrackets" : "wholeName")
-                return p
-            }
-            return NameParts(title: TextRules.normalizeDisplay(name), matchedPattern: false)
-        }()
-        let confirmed = input.confirmation.fields
-        if let circle = confirmed.circle { parts.circle = TextRules.normalizeDisplay(circle) }
-        if let authors = confirmed.authors { parts.authors = authors }
-        if let title = confirmed.title { parts.title = TextRules.normalizeDisplay(title) }
-        if let relation = confirmed.relation { parts.trailing = TextRules.normalizeDisplay(relation) }
-        if let genre = confirmed.genre {
-            parts.mediaType = TextRules.normalizeDisplay(genre)
-            parts.leading = parts.mediaType ?? ""
-        }
-        let compared = compareTitle(parts.title)
-        if compared.text != parts.title { parts.workTitle = compared.text }
-        parts.editions = compared.editions.isEmpty ? nil : compared.editions
-        parts.sources = compared.sources.isEmpty ? nil : compared.sources
-        return parts
-    }
-
-    func publicName(_ parts: NameParts, volumeHead head: Int?? = nil) -> ParsedName {
-        func value(_ s: String?) -> String? { (s ?? "").isEmpty ? nil : s }
-        // 1 冊だけで読める巻: タイトルが「頭 + 巻だけ」の形なら、その巻(シリーズ名は推定しない)。
-        let title = text.comparable(parts.baseTitle)
-        let standalone = (head ?? volumeHead(compareTitle: parts.baseTitle)).flatMap { head in
-            volumes.extract(fromRemainder: title.originalRemainder(afterKeyLength: head))
-        }.map { Volume(text: $0.text, sortKey: $0.number) }
-        return ParsedName(
-            genre: value(parts.mediaType), event: value(parts.event), circle: value(parts.circle), authors: parts.authors,
-            title: parts.title, relation: value(parts.trailing), keyword: value(parts.keyword),
-            editions: parts.editions ?? [], sources: parts.sources ?? [], format: parts.format,
-            standaloneVolume: standalone)
     }
 
     // MARK: - 単位ごとの計算
@@ -406,13 +392,23 @@ extension RuleEngine {
         let series = key.flatMap { k in result?.series.first { $0.key == k } }
         var flags = Set<BookProposal.Flag>()
         if r?.volume?.volume.inferred == true { flags.insert(.inferredVolume) }
-        if !book.parsed.editions.isEmpty { flags.insert(.edition) }
-        if !book.parsed.sources.isEmpty { flags.insert(.source) }
+        if book.core.hasEditionMarks { flags.insert(.edition) }
+        if book.core.hasSourceMarks { flags.insert(.source) }
         if r?.isCompilation == true { flags.insert(.compilation) }
         if series?.kind == .magazineYear || (series != nil && r?.volume?.fromMagazineIssue == true) { flags.insert(.magazineIssue) }
         if book.input.confirmation != .none { flags.insert(.confirmed) }
-        return BookProposal(id: book.input.id, name: book.input.name, parsed: book.parsed, seriesID: key.map { seriesID(book.unitKey, $0) },
-                            volume: r?.volume?.volume, flags: flags)
+        // シリーズと巻数は、単位の計算で決まったものを欄へ入れる。
+        var metadata = book.metadata
+        metadata.series = key.flatMap { k in result?.series.first { $0.key == k }?.name } ?? ""
+        if let volume = r?.volume?.volume {
+            metadata.volume = volume.text
+            metadata.volumeSort = volume.sortKey
+        } else if !metadata.volume.isEmpty {
+            // シリーズに入らなくても、型で読んだ巻数はそのまま残す。
+            metadata.volumeSort = volumes.extract(fromRemainder: " " + metadata.volume)?.number
+        }
+        return BookProposal(id: book.input.id, name: book.input.name, reading: book.reading, metadata: metadata,
+                            seriesID: key.map { seriesID(book.unitKey, $0) }, flags: flags)
     }
 
     func assemble(_ prepared: Prepared, _ results: [String: UnitResult]) -> ProposalSet {

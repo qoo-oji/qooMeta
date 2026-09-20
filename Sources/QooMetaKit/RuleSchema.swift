@@ -29,11 +29,9 @@ enum RuleSchema {
         case object(Node)
         /// 巻の読み手(並び順が優先順位。差分では ID で指し、`$order` で並べ替える)。
         case readers
-        /// ファイル名のフォーマットのプロファイル(差分では ID で指す)。
-        case profiles
-        /// 区切りの括弧の組 `[["[", "]"], ["(", ")"]]`(差分では `$replace` だけ)。
-        case delimiters
-        /// フォーマットの並び(書いた順が優先順位。差分の `$add` は `at` で先頭か末尾かを選ぶ)。
+        /// 名前を付けた型の並び(`presets`)。差分では名前で指す。
+        case presets
+        /// 型の並び(書いた順が優先順位。差分の `$add` は `at` で先頭か末尾かを選ぶ)。
         case formats
     }
 
@@ -143,19 +141,13 @@ enum RuleSchema {
     // MARK: - ファイル名のフォーマット
 
     /// 予約語(Stackroom 式)→ 照合の処理の予約語と qooMeta の欄。差分で変えられるのは作者の区切りだけ。
-    static let reservedWords: [String] = ["@genre", "@event", "@circle", "@author", "@title", "@relation", "@keywordA"]
-
-    static func reservedWordNode(_ word: String) -> Node {
-        Node([f("engine", .fixedString), f("field", .fixedString)] + (word == "@author" ? [f("split", .list(.characters))] : []))
-    }
-
-    static let profileNode = Node([
-        f("delimiters", .delimiters), f("protectedTokens", .patterns), f("formats", .formats),
-    ])
-
+    /// filename-formats.json の中身(第 3 版): 著者の区切りと、名前を付けた型の並び(プリセット)。
     static let formatStages = Node([
-        f("fallback", .object(Node([f("simpleBrackets", rule())]))),
+        f("separators", .list(.characters)), f("defaultPreset", .fixedString), f("presets", .presets),
     ])
+
+    /// 同梱のプリセットの名前(差分では、この名前で並びを変える)。
+    static let presetNames = ["mixed", "doujinshi", "commercial"]
 
     // MARK: - 規則の ID
 

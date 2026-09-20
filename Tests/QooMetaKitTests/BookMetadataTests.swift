@@ -74,7 +74,7 @@ import QooMetaRules
 }
 
 @Suite struct SeriesDerivationTests {
-    static let derivation = SeriesDerivation(rules: .builtin, vocabulary: Vocabulary(dictionaries: SystemDictionaries.all))
+    static let derivation = SeriesDerivation(rules: .builtin, dictionaries: SystemDictionaries.all)
 
     static func books(_ items: [(author: String, genre: String, title: String)]) -> [SeriesDerivation.Book] {
         items.enumerated().map { i, item in

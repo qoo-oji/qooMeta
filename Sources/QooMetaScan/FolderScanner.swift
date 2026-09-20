@@ -84,6 +84,6 @@ public struct ScannedFile: Codable, Sendable, Equatable {
 
     /// 提案の入力(ID は相対パス)。
     public func bookInput(confirmation: Confirmation = .none) -> BookInput {
-        BookInput(id: relativePath, name: baseName, folders: folders, confirmation: confirmation)
+        BookInput(id: relativePath, name: baseName, confirmation: confirmation)
     }
 }

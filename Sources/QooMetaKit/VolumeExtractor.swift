@@ -241,6 +241,14 @@ final class VolumeExtractor: Sendable {
 
 /// 候補の判定を本ごとの値へ反映する。
 enum ProposalFinalizer {
+    /// 確定した巻の表記(利用者の確定、または型が読んだ `@volume`)。
+    static func confirmedVolume(_ confirmation: Confirmation) -> String? {
+        // 利用者が「巻は無い」と確定したとき(空の表記)も、確定として扱う(推定し直さない)。
+        if case .series(_, let volume?, _) = confirmation { return volume }
+        if let read = confirmation.fields[.volume]?.first, !read.isEmpty { return read }
+        return nil
+    }
+
     /// 組を本ごとの値(シリーズ名・巻)へ反映する。
     static func finalize(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog? = nil) {
         var seriesByBook: [Int: String] = [:]
@@ -258,8 +266,9 @@ enum ProposalFinalizer {
             document.books[i].volumeNumber = nil
             document.books[i].volumeInferred = nil
             guard !series.isEmpty else { continue }
-            // 利用者が確定させた巻はそのまま使う。並べ替え用の数は、表記を巻の読み手に通して決める(「上」は文脈で後から)。
-            if case .series(_, let volume?, _) = document.books[i].confirmation {
+            // 確定した巻(利用者が直した値、または型が名前から直に読んだ `@volume`)はそのまま使う。
+            // 並べ替え用の数は、表記を巻の読み手に通して決める(「上」は文脈で後から)。
+            if let volume = confirmedVolume(document.books[i].confirmation) {
                 document.books[i].volumeText = volume
                 document.books[i].volumeNumber = engine.volumes.extract(fromRemainder: " " + volume)?.number
                 document.books[i].volumeConfirmed = true

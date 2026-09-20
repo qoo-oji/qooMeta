@@ -27,8 +27,8 @@ public struct SeriesDerivation: Sendable {
 
     let engine: RuleEngine
 
-    public init(rules: CompiledRules, vocabulary: Vocabulary) {
-        engine = RuleEngine(rules: rules, vocabulary: vocabulary)
+    public init(rules: CompiledRules, dictionaries: [String: WordSet]) {
+        engine = RuleEngine(rules: rules, dictionaries: dictionaries)
     }
 
     /// 入力の順を保って計算する(同じ入力なら毎回同じ結果)。ID が重なった本は後のものを捨てる。

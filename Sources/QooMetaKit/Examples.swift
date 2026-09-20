@@ -48,7 +48,8 @@ public struct ExampleBook: Sendable {
 public struct Expectation: Sendable {
     /// 確かめられる項目。
     public enum Field: String, CaseIterable, Sendable {
-        case series, volume, volumeSort, inferred, circle, authors, title, relation, genre, event, editions, sources
+        case series, volume, volumeSort, inferred, authors, title, genre, event, source, info, format,
+             editionMark, sourceMark
     }
 
     /// 書いた順に確かめる。`"series": null` は「シリーズに入ってはいけない」。
@@ -185,14 +186,15 @@ struct ExampleReader {
             guard let v = o[field.rawValue] else { continue }
             let p = join(path, field.rawValue)
             switch (field, v) {
-            case (.inferred, .bool), (.volumeSort, .number), (.volumeSort, .null): break
-            case (.authors, .array(let a)), (.editions, .array(let a)), (.sources, .array(let a)):
+            case (.inferred, .bool), (.editionMark, .bool), (.sourceMark, .bool),
+                 (.volumeSort, .number), (.volumeSort, .null): break
+            case (.authors, .array(let a)):
                 _ = strings(.array(a), p)
             // 文字列の項目の null は「空であること」(`"series": null` は「シリーズに入ってはいけない」)。
             case (.series, .string), (.series, .null), (.volume, .string), (.volume, .null),
-                 (.circle, .string), (.circle, .null), (.title, .string), (.title, .null),
-                 (.relation, .string), (.relation, .null), (.genre, .string), (.genre, .null),
-                 (.event, .string), (.event, .null):
+                 (.title, .string), (.title, .null), (.source, .string), (.source, .null),
+                 (.genre, .string), (.genre, .null), (.event, .string), (.event, .null),
+                 (.info, .string), (.info, .null), (.format, .number), (.format, .null):
                 break
             default:
                 error(p, .invalidValue, "この項目に\(v.kindName)は書けない")
@@ -228,12 +230,10 @@ public enum ExampleRunner {
                 }
                 rulesByPolicies[example.policies] = applied
             }
-            let vocabulary = Vocabulary(genres: example.genres ?? file.genres, dictionaries: dictionaries)
-            // フォルダは例では外側から書くので、近い順に並べ替えて渡す。
             let inputs = example.books.enumerated().map { i, book in
-                BookInput(id: String(format: "%04d", i + 1), name: book.name, folders: book.folders.reversed())
+                BookInput(id: String(format: "%04d", i + 1), name: book.name)
             }
-            let set = proposeSync(inputs, rules: rulesByPolicies[example.policies]!, vocabulary: vocabulary)
+            let set = proposeSync(inputs, rules: rulesByPolicies[example.policies]!, dictionaries: dictionaries)
             var mismatches: [String] = []
             for (i, expectation) in example.expectations.enumerated() where i < inputs.count {
                 guard let book = set[inputs[i].id] else {
@@ -258,17 +258,20 @@ public enum ExampleRunner {
         func list(_ a: [String]?) -> JSONValue { .array((a ?? []).map(JSONValue.string)) }
         switch field {
         case .series: return text(book.seriesID.flatMap { set.series($0)?.name })
-        case .volume: return text(book.volume?.text)
-        case .volumeSort: return book.volume?.sortKey.map(JSONValue.number) ?? .null
-        case .inferred: return .bool(book.volume?.inferred == true)
-        case .circle: return text(book.parsed.circle)
-        case .authors: return list(book.parsed.authors)
-        case .title: return text(book.parsed.title)
-        case .relation: return text(book.parsed.relation)
-        case .genre: return text(book.parsed.genre)
-        case .event: return text(book.parsed.event)
-        case .editions: return list(book.parsed.editions)
-        case .sources: return list(book.parsed.sources)
+        case .volume: return text(book.metadata.volume)
+        case .volumeSort: return book.metadata.volumeSort.map(JSONValue.number) ?? .null
+        case .inferred: return .bool(book.flags.contains(.inferredVolume))
+        case .authors: return list(book.metadata.authors)
+        case .title: return text(book.metadata.title)
+        case .genre: return text(book.metadata.genre)
+        case .event: return text(book.metadata.event)
+        case .source: return text(book.metadata.source)
+        case .info: return text(book.metadata.info)
+        // 一致した型の番号(1 から。どの型にも合わなければ null)。
+        case .format: return book.reading.formatIndex.map { JSONValue.number(Double($0 + 1)) } ?? .null
+        // 版・入手経路の印は欄ではない(比べるタイトルから除くだけ)。あったかどうかだけを確かめる。
+        case .editionMark: return .bool(book.flags.contains(.edition))
+        case .sourceMark: return .bool(book.flags.contains(.source))
         }
     }
 

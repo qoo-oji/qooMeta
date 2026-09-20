@@ -20,27 +20,24 @@ public struct FeedbackExample: Sendable, Hashable {
 ///
 /// 置き換えの規則(実名を残さないため、**すべての語を置き換える**):
 /// - 規則の一覧にある語(総集編・vol・第・上・フルカラー版 …)、括弧・記号・空白、数字(漢数字を含む)は残す。
-/// - 本の種別の語は `種別A`・`種別B` …(例の `vocabulary` にも同じ語を書く)。
 /// - 辞書にある英単語は、辞書にある別の英単語(同じ長さ。同じ語は同じ語へ)。
 /// - かな・カタカナ・漢字・それ以外の英字は、同じ文字種の架空の文字へ 1 文字ずつ置き換える。置き換えは「そこまでの元の並び」で
 ///   決めるので、同じ語は同じ語へ、先頭が共通する語は置き換えた後も同じ長さだけ共通する(シリーズの組が保たれる)。
 public func makeFeedbackExample(_ books: [BookInput], corrected: [String: Confirmation], rules: CompiledRules,
-                                vocabulary: Vocabulary) -> FeedbackExample {
-    var anonymizer = Anonymizer(rules: rules, vocabulary: vocabulary)
+                                dictionaries: [String: WordSet]) -> FeedbackExample {
+    var anonymizer = Anonymizer(rules: rules, dictionaries: dictionaries)
     let anonymousBooks = books.map { book in
-        BookInput(id: book.id, name: anonymizer.name(book.name), folders: book.folders.map { anonymizer.text($0) })
+        BookInput(id: book.id, name: anonymizer.name(book.name))
     }
-    let anonymousVocabulary = Vocabulary(genres: vocabulary.genres.map { anonymizer.genre($0) },
-                                         dictionaries: vocabulary.dictionaries)
 
     // 忠実さ: 直す前の提案(規則だけ)で、組の分け方と巻が元と同じか。
-    let original = proposeSync(books.map { BookInput(id: $0.id, name: $0.name, folders: $0.folders) },
-                               rules: rules, vocabulary: vocabulary)
-    let replaced = proposeSync(anonymousBooks, rules: rules, vocabulary: anonymousVocabulary)
+    let original = proposeSync(books.map { BookInput(id: $0.id, name: $0.name) },
+                               rules: rules, dictionaries: dictionaries)
+    let replaced = proposeSync(anonymousBooks, rules: rules, dictionaries: dictionaries)
     func shape(_ set: ProposalSet) -> ([[String]], [String: String]) {
         (set.series.map { $0.memberIDs.sorted() }.sorted { $0.lexicographicallyPrecedes($1) },
          Dictionary(uniqueKeysWithValues: set.proposals.map {
-             ($0.id, "\($0.volume?.sortKey.map { String($0) } ?? "-")\($0.volume?.inferred == true ? "?" : "")")
+             ($0.id, "\($0.metadata.volumeSort.map { String($0) } ?? "-")\($0.flags.contains(.inferredVolume) ? "?" : "")")
          }))
     }
     let isFaithful = shape(original) == shape(replaced)
@@ -57,18 +54,14 @@ public func makeFeedbackExample(_ books: [BookInput], corrected: [String: Confir
         case .notInSeries: e["series"] = .null
         case .none, .fields: break
         }
-        let f = c.fields
-        if let v = f.circle { e["circle"] = .string(anonymizer.text(v)) }
-        if let v = f.authors { e["authors"] = .array(v.map { .string(anonymizer.text($0)) }) }
-        if let v = f.title { e["title"] = .string(anonymizer.text(v)) }
-        if let v = f.relation { e["relation"] = .string(anonymizer.text(v)) }
-        if let v = f.genre { e["genre"] = .string(anonymizer.genre(v)) }
+        for (field, values) in c.fields.values.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+            let replaced = values.map { anonymizer.text($0) }
+            e[field.rawValue] = field.isList ? .array(replaced.map(JSONValue.string))
+                                             : (replaced.first.map(JSONValue.string) ?? .null)
+        }
         expectations.append(.object(e))
     }
-    let files: [JSONValue] = anonymousBooks.map { book in
-        book.folders.isEmpty ? .string(book.name)
-            : .object(["name": .string(book.name), "folders": .array(book.folders.reversed().map(JSONValue.string))])
-    }
+    let files: [JSONValue] = anonymousBooks.map { .string($0.name) }
     var hasher = FNV1a()
     for case .string(let s) in files { hasher.add(s) }
     let example: JSONValue = .object([
@@ -79,33 +72,32 @@ public func makeFeedbackExample(_ books: [BookInput], corrected: [String: Confir
     ])
     let file: JSONValue = .object([
         "kind": .string(ExampleFile.kind), "schemaVersion": .number(Double(ExampleFile.supportedSchemaVersion)),
-        "vocabulary": .object(["genres": .array(anonymousVocabulary.genres.map(JSONValue.string))]),
         "examples": .array([example]),
     ])
 
     return FeedbackExample(data: Data((file.rendered() + "\n").utf8), isFaithful: isFaithful,
-                           satisfiedByPolicy: policySatisfying(books, corrected: corrected, rules: rules, vocabulary: vocabulary))
+                           satisfiedByPolicy: policySatisfying(books, corrected: corrected, rules: rules, dictionaries: dictionaries))
 }
 
 /// 直しを満たす方針(今と違う値)を探す。シリーズの直しが無ければ探さない。
 func policySatisfying(_ books: [BookInput], corrected: [String: Confirmation], rules: CompiledRules,
-                      vocabulary: Vocabulary) -> FeedbackExample.PolicyChoice? {
+                      dictionaries: [String: WordSet]) -> FeedbackExample.PolicyChoice? {
     let targets = corrected.filter {
         switch $0.value { case .series, .notInSeries: true; default: false }
     }
     guard !targets.isEmpty else { return nil }
-    let plain = books.map { BookInput(id: $0.id, name: $0.name, folders: $0.folders) }
+    let plain = books.map { BookInput(id: $0.id, name: $0.name) }
     let current = rules.catalog.policies
     for policy in current {
         for choice in policy.choices where choice != policy.current {
             guard let applied = rules.applying(policies: [policy.id: choice]).rules else { continue }
-            let set = proposeSync(plain, rules: applied, vocabulary: vocabulary)
+            let set = proposeSync(plain, rules: applied, dictionaries: dictionaries)
             let satisfied = targets.allSatisfy { id, c in
                 let name = set[id]?.seriesID.flatMap { set.series($0)?.name }
                 switch c {
                 case .series(let expected, let volume, _):
                     guard name == TextRules.normalizeDisplay(expected) else { return false }
-                    return volume == nil || set[id]?.volume?.text == volume
+                    return volume == nil || set[id]?.metadata.volume == volume
                 case .notInSeries: return name == nil
                 default: return true
                 }
@@ -122,7 +114,6 @@ struct Anonymizer {
     let keepWords: [String]
     /// 残す文字(数字・漢数字・ギリシャ文字、処理に組み込まれた語の文字)。
     let keepCharacters: Set<Character>
-    let genres: [String]
     let dictionary: WordSet?
     let pools: [Script: [Character]]
     /// そこまでの元の並び + 元の文字 → 置き換えた文字。
@@ -134,7 +125,7 @@ struct Anonymizer {
 
     enum Script: Hashable { case hiragana, katakana, han, upper, lower }
 
-    init(rules: CompiledRules, vocabulary: Vocabulary) {
+    init(rules: CompiledRules, dictionaries: [String: WordSet]) {
         // 規則の一覧の語と、印の正規表現に書いた語(「DL版」「〇〇語版」)。
         var words: Set<String> = ["DL", "ＤＬ", "語版"]
         for (_, list) in rules.mergedSeriesRules["lists"]?.objectValue ?? [:] {
@@ -144,8 +135,7 @@ struct Anonymizer {
         // 処理に組み込まれた語(雑誌の号、分冊、ローマ数字は英字の並びとして別に見る)と、漢数字・ギリシャ文字。
         let builtIn = "年月号巻話章弾部幕集版編篇第上中下前後其"
         keepCharacters = Set(VolumeExtractor.kanjiDigits + builtIn + "αβγδεζηθικλμνξοπρστυφχψω")
-        genres = vocabulary.genres
-        dictionary = vocabulary.dictionaries["english"]
+        dictionary = dictionaries["english"]
         englishByLength = Dictionary(grouping: (dictionary?.words ?? []).filter { $0.allSatisfy { $0.isASCII && $0.isLetter } }.sorted(),
                                      by: \.count)
         // 置き換え先の文字。残す語・残す文字に使われている文字は避ける(置き換えで規則の語ができないように)。
@@ -172,23 +162,12 @@ struct Anonymizer {
         }
     }
 
-    mutating func genre(_ g: String) -> String {
-        guard let i = genres.firstIndex(of: g) else { return text(g) }
-        let letters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        return "種別" + (i < letters.count ? String(letters[i]) : String(i + 1))
-    }
-
     /// ファイル名。括弧で区切った部分ごとに置き換える(部分ごとに並びを数え直すので、タイトルの先頭とシリーズ名が同じに置き換わる)。
     mutating func name(_ raw: String) -> String {
         let delimiters: Set<Character> = ["[", "]", "(", ")", "［", "］", "（", "）"]
         var out = "", segment = ""
         func flush() {
-            let trimmed = segment.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty, genres.contains(trimmed) {
-                out += segment.replacingOccurrences(of: trimmed, with: genre(trimmed))
-            } else {
-                out += text(segment)
-            }
+            out += text(segment)
             segment = ""
         }
         for ch in raw.precomposedStringWithCanonicalMapping {

@@ -41,13 +41,23 @@ public enum Evaluator {
     }
 
     /// 提案(規則だけ)で採点する。書き手は `[著者] タイトル` の形の名前から読む。
-    public static func score(_ labeled: [LabeledBook], rules: CompiledRules, vocabulary: Vocabulary,
-                             examples: Int = 0) -> Score {
-        let engine = RuleEngine(rules: rules, vocabulary: vocabulary)
-        let inputs = labeled.enumerated().map { i, b in BookInput(id: String(i), name: "[\(b.author)] \(b.title)") }
-        let set = proposeSync(inputs, rules: rules, vocabulary: vocabulary)
-        struct Book { let id: Int; let circleKey: String }
-        let books = inputs.indices.map { i in Book(id: i, circleKey: engine.text.key(set[inputs[i].id]?.parsed.circle ?? "")) }
+    /// - Parameter formats: 名前を読む型の並び。公開データ(NDL)は商業の本の書誌なので、既定は商業誌のプリセット
+    ///   (末尾の丸括弧の数字は巻数。2026-09-20、利用者の判断)。
+    public static func score(_ labeled: [LabeledBook], rules: CompiledRules, dictionaries: [String: WordSet],
+                             formats: FilenameFormats = .commercialPreset, examples: Int = 0) -> Score {
+        let rules = rules.replacingFormats(formats)
+        let engine = RuleEngine(rules: rules, dictionaries: dictionaries)
+        // 書誌の著者に角括弧が入っていること(「著者[ほか]」)があるので、丸括弧に直してから名前を組み立てる
+        // (角括弧の中に角括弧があると、`[@author]` の型に当たらない。公開データだけの都合)。
+        let inputs = labeled.enumerated().map { i, b in
+            let author = b.author.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
+            return BookInput(id: String(i), name: "[\(author)] \(b.title)")
+        }
+        let set = proposeSync(inputs, rules: rules, dictionaries: dictionaries)
+        struct Book { let id: Int; let writerKey: String }
+        let books = inputs.indices.map { i in
+            Book(id: i, writerKey: engine.text.key(set[inputs[i].id]?.metadata.authors.first ?? ""))
+        }
         var predicted: [Int: SeriesID] = [:]  // 本の番号 → シリーズ
         var name: [Int: String] = [:]
         for (i, input) in inputs.enumerated() {
@@ -57,12 +67,12 @@ public enum Evaluator {
         }
         var score = Score()
         score.books = labeled.count
-        score.authors = Set(books.map(\.circleKey)).count
+        score.authors = Set(books.map(\.writerKey)).count
         let norm: (String) -> [Character] = { engine.text.comparable($0).key }
         let truthKey = labeled.map { norm($0.series) }
-        let seriesSize = Dictionary(grouping: books.indices, by: { "\(books[$0].circleKey)\u{1}\(String(truthKey[$0]))" })
+        let seriesSize = Dictionary(grouping: books.indices, by: { "\(books[$0].writerKey)\u{1}\(String(truthKey[$0]))" })
             .mapValues(\.count)
-        for (_, idx) in Dictionary(grouping: books.indices, by: { books[$0].circleKey }) {
+        for (_, idx) in Dictionary(grouping: books.indices, by: { books[$0].writerKey }) {
             for a in 0..<idx.count {
                 for b in (a + 1)..<idx.count {
                     let i = idx[a], j = idx[b]
@@ -80,7 +90,7 @@ public enum Evaluator {
                 }
             }
         }
-        for i in books.indices where seriesSize["\(books[i].circleKey)\u{1}\(String(truthKey[i]))", default: 0] >= 2 {
+        for i in books.indices where seriesSize["\(books[i].writerKey)\u{1}\(String(truthKey[i]))", default: 0] >= 2 {
             score.namedBooks += 1
             if let n = name[books[i].id], norm(n) == truthKey[i] { score.nameMatches += 1 }
         }

@@ -15,10 +15,8 @@ let package = Package(
         .library(name: "QooMetaAI", targets: ["QooMetaAI"]),
     ],
     targets: [
-        // qooLibrary のファイル名フォーマット処理を写したもの(MIT、同じ作者。Sources/QooFormat/README.md)。本体の内部で使い、公開しない。
-        .target(name: "QooFormat", exclude: ["README.md"]),
         // 名前の解析・シリーズ・巻・版・推定、規則の組み立てと検証。純粋な計算(規則・語彙・辞書は値で受け取る)。
-        .target(name: "QooMetaKit", dependencies: ["QooFormat"]),
+        .target(name: "QooMetaKit"),
         // 同梱の既定値のデータ、例のファイル、システムの辞書の読み込み口。
         .target(name: "QooMetaRules", dependencies: ["QooMetaKit"], resources: [.copy("Resources")]),
         // Stackroom XML・qooViewer JSON。Data を返す。

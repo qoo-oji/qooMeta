@@ -67,7 +67,7 @@ public enum Exporter {
             number += 1
             var entry: [String: Any] = [
                 "ID": number,
-                "Title": book.parsed.title,
+                "Title": book.metadata.title,
                 "Path": file.path,
                 // 表紙の画像は用意しない。本そのものを指しておけば、StackNest は本のパスとして扱える
                 // (StackroomPathRecovery)。表紙は StackNest の「表紙の再生成」で作る。
@@ -78,15 +78,17 @@ public enum Exporter {
                 "My Rate": 0,
                 "Unseen": true,
             ]
-            let authors = authorValues(book.parsed)
+            let authors = authorValues(book.metadata)
             if !authors.isEmpty { entry["Author"] = authors.joined(separator: ", ") }
-            if let genre = book.parsed.genre ?? book.parsed.event { entry["Genre"] = genre }
-            if let relation = book.parsed.relation { entry["Neta"] = relation }
-            // 版(フルカラー版・完全版 …)は Keyword C へ(利用者との取り決め)。入手経路(DL版など)は書かない。
-            if !book.parsed.editions.isEmpty { entry["Keyword C"] = book.parsed.editions.joined(separator: ", ") }
-            if let series = book.seriesID.flatMap({ set.series($0) }) { entry["Series"] = series.name }
-            // Volume は数値だけを持てる(「上」は文脈で決めた数)。
-            if let volume = book.volume?.sortKey { entry["Volume"] = volume }
+            if !book.metadata.genre.isEmpty { entry["Genre"] = book.metadata.genre }
+            if !book.metadata.source.isEmpty { entry["Neta"] = book.metadata.source }
+            // イベントと情報は、StackNest に合う欄が無いので空いている欄へ(段階 9 の対応表で選べるようにする)。
+            if !book.metadata.event.isEmpty { entry["Keyword A"] = book.metadata.event }
+            if !book.metadata.info.isEmpty { entry["Keyword B"] = book.metadata.info }
+            if !book.metadata.series.isEmpty { entry["Series"] = book.metadata.series }
+            // Volume は数値だけを持てるので、巻数(ソート用)を渡す。表示用は空いている欄へ。
+            if let volume = book.metadata.volumeSort { entry["Volume"] = volume }
+            if !book.metadata.volume.isEmpty { entry["Keyword C"] = book.metadata.volume }
             books[String(number)] = entry
         }
         return ["Books": books, "Playlists": [Any]()]
@@ -101,11 +103,11 @@ public enum Exporter {
         }
     }
 
-    /// Author に入れる値。サークル名と作者名を別々の値として並べる(StackNest は Author を
+    /// Author に入れる値。著者の並びをそのまま並べる(StackNest は Author を
     /// カンマ区切りの複数値として扱い、値ごとに絞り込める)。
-    static func authorValues(_ parsed: ParsedName) -> [String] {
+    static func authorValues(_ metadata: BookMetadata) -> [String] {
         var values: [String] = []
-        for name in [parsed.circle ?? ""] + parsed.authors where !name.isEmpty && !values.contains(name) {
+        for name in metadata.authors where !name.isEmpty && !values.contains(name) {
             values.append(name.replacingOccurrences(of: ",", with: " "))
         }
         return values
@@ -137,11 +139,11 @@ public enum Exporter {
             return QooViewerEntry(
                 bookID: file.path, inodeNumber: file.inodeNumber, volumeDeviceNumber: file.volumeDeviceNumber,
                 volumeUUID: file.volumeUUID,
-                // qooViewer の著者欄は 1 つなので、サークル名を入れる(それまでの手入力の登録と同じ使い方)。
-                author: book.parsed.circle ?? "",
-                title: book.parsed.title,
-                series: book.seriesID.flatMap { set.series($0)?.name } ?? "",
-                seriesIndex: book.volume?.text ?? "")
+                // qooViewer の著者欄は 1 つなので、著者の並びの先頭を入れる。
+                author: book.metadata.authors.first ?? "",
+                title: book.metadata.title,
+                series: book.metadata.series,
+                seriesIndex: book.metadata.volume)
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -151,16 +153,16 @@ public enum Exporter {
     // MARK: - ComicInfo
 
     /// ComicInfo.xml(書庫の中に置く、コミックのメタデータの広く使われる形)。1 冊ぶん。
-    /// サークルは出版元(Publisher)、作者は Writer、ネタは Tags、本の種別は Genre、版は Notes に入れる。
+    /// 著者は Writer、原作は Tags、ジャンルは Genre、情報は Notes に入れる。
     public static func comicInfoXML(_ proposal: BookProposal, series: SeriesProposal?) -> Data {
-        var fields: [(String, String)] = [("Title", proposal.parsed.title)]
+        let m = proposal.metadata
+        var fields: [(String, String)] = [("Title", m.title)]
         if let series { fields.append(("Series", series.name)) }
-        if let volume = proposal.volume { fields.append(("Number", volume.text)) }
-        if !proposal.parsed.authors.isEmpty { fields.append(("Writer", proposal.parsed.authors.joined(separator: ", "))) }
-        if let circle = proposal.parsed.circle { fields.append(("Publisher", circle)) }
-        if let genre = proposal.parsed.genre { fields.append(("Genre", genre)) }
-        if let relation = proposal.parsed.relation { fields.append(("Tags", relation)) }
-        if !proposal.parsed.editions.isEmpty { fields.append(("Notes", proposal.parsed.editions.joined(separator: ", "))) }
+        if !m.volume.isEmpty { fields.append(("Number", m.volume)) }
+        if !m.authors.isEmpty { fields.append(("Writer", m.authors.joined(separator: ", "))) }
+        if !m.genre.isEmpty { fields.append(("Genre", m.genre)) }
+        if !m.source.isEmpty { fields.append(("Tags", m.source)) }
+        if !m.info.isEmpty { fields.append(("Notes", m.info)) }
         let body = fields.map { "  <\($0.0)>\(xmlEscape($0.1))</\($0.0)>" }.joined(separator: "\n")
         return Data("""
         <?xml version="1.0" encoding="utf-8"?>

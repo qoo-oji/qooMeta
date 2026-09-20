@@ -1,5 +1,4 @@
 import Foundation
-import QooFormat
 
 /// 規則ファイルの読み込み: 型なしで読む → `schemaVersion` を見る → 既定値に差分を重ねる → 検証する。
 ///
@@ -60,8 +59,10 @@ struct RuleLoader {
         case nil: report(.missingKey, "kind")
         case let v?: report(.invalidValue, "kind", "文字列であるべきところが\(v.kindName)")
         }
+        // 形式の版はファイルごと(filename-formats は第 3 版、ほかは第 2 版)。
+        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 3.0 : 2.0
         switch o["schemaVersion"] {
-        case .number(let v)? where v == 2: break
+        case .number(let v)? where v == expectedVersion: break
         case .number(let v)?: report(.unsupportedSchemaVersion, "schemaVersion", JSONValue.number(v).rendered())
         case nil: report(.missingKey, "schemaVersion")
         case let v?: report(.invalidValue, "schemaVersion", "数であるべきところが\(v.kindName)")
@@ -95,21 +96,8 @@ struct RuleLoader {
     mutating func checkFormatDefaults(_ root: JSONValue) {
         guard let o = root.objectValue else { return }
         let stageNames = RuleSchema.formatStages.fields.map(\.name)
-        let allowed = Self.envelopeKeys + ["reservedWords", "profiles", "retiredIDs", "aliases"] + stageNames
+        let allowed = Self.envelopeKeys + ["retiredIDs", "aliases"] + stageNames
         unknownKeys(o, "", allowed: allowed)
-        if let words = required(o, "reservedWords", "") {
-            if let w = words.objectValue {
-                unknownKeys(w, "reservedWords", allowed: RuleSchema.reservedWords)
-                for word in RuleSchema.reservedWords {
-                    if let entry = required(w, word, "reservedWords") {
-                        check(entry, .object(RuleSchema.reservedWordNode(word)), "reservedWords.\(word)", full: true)
-                    }
-                }
-            } else {
-                report(.invalidValue, "reservedWords", "オブジェクトであるべきところが\(words.kindName)")
-            }
-        }
-        if let profiles = required(o, "profiles", "") { check(profiles, .profiles, "profiles", full: true) }
         check(root, .object(RuleSchema.formatStages), "", full: true, ignoring: Set(allowed).subtracting(stageNames))
         checkRetirement(o)
     }
@@ -205,14 +193,17 @@ struct RuleLoader {
             for (i, item) in items.enumerated() where (item.stringValue ?? "").isEmpty {
                 report(.invalidValue, "\(path)[\(i)]", "空でない文字列であるべきところ")
             }
-        case .delimiters:
-            checkDelimiters(value, path)
         case .object(let node):
             checkObject(value, node, path, full: full, ignoring: ignoring)
         case .readers:
             checkReaders(value, path, full: full)
-        case .profiles:
-            checkProfiles(value, path)
+        case .presets:
+            guard let o = value.objectValue else { report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
+            unknownKeys(o, path, allowed: RuleSchema.presetNames)
+            for name in RuleSchema.presetNames {
+                if let list = o[name] { check(list, .formats, "\(path).\(name)", full: full) }
+                else if full { report(.missingKey, "\(path).\(name)") }
+            }
         }
     }
 
@@ -328,24 +319,10 @@ struct RuleLoader {
             report(.unsafePattern, path, "正規表現として読めない")
             return
         }
-        for finding in RegexSafety.staticFindings(s) {
-            switch finding.kind {
+        for finding in PatternSafety.findings(s) {
+            switch finding {
             case .quantifiedGroup: report(.unsafePattern, path, "量指定子の付いたグループの中に量指定子か選択肢がある")
             case .backreference: report(.unsafePattern, path, "後方参照")
-            default: break
-            }
-        }
-    }
-
-    mutating func checkDelimiters(_ value: JSONValue, _ path: String) {
-        guard let pairs = value.arrayValue, !pairs.isEmpty else {
-            report(.invalidValue, path, "[開き, 閉じ] の組の配列であるべきところ")
-            return
-        }
-        for (i, pair) in pairs.enumerated() {
-            guard let p = pair.arrayValue, p.count == 2, p.allSatisfy({ $0.stringValue?.count == 1 }) else {
-                report(.invalidValue, "\(path)[\(i)]", "[開き, 閉じ] の 1 文字ずつの組であるべきところ")
-                continue
             }
         }
     }
@@ -379,20 +356,6 @@ struct RuleLoader {
             for reader in RuleSchema.readerTypes where !seen.contains(reader.id) {
                 report(.missingKey, path, "読み手 \(reader.id)")
             }
-        }
-    }
-
-    mutating func checkProfiles(_ value: JSONValue, _ path: String) {
-        guard let items = value.arrayValue, !items.isEmpty else {
-            report(.invalidValue, path, "プロファイルの配列(1 つ以上)であるべきところ")
-            return
-        }
-        var seen = Set<String>()
-        for (i, item) in items.enumerated() {
-            let p = "\(path)[\(i)]"
-            guard let id = item["id"]?.stringValue, !id.isEmpty else { report(.missingKey, "\(p).id"); continue }
-            if !seen.insert(id).inserted { report(.duplicateID, "\(p).id", id) }
-            check(item, .object(RuleSchema.profileNode), p, full: true, ignoring: ["id"])
         }
     }
 
@@ -432,30 +395,13 @@ struct RuleLoader {
     mutating func applyFormats(_ diff: [String: JSONValue], to base: JSONValue) -> JSONValue {
         guard var merged = base.objectValue else { return base }
         let stageNames = RuleSchema.formatStages.fields.map(\.name)
-        let allowed = Self.envelopeKeys + ["reservedWords", "profiles"] + stageNames
+        let allowed = Self.envelopeKeys + stageNames
         for key in diff.keys.sorted() where !allowed.contains(key) {
             if ["retiredIDs", "aliases"].contains(key) {
                 report(.invalidValue, key, "既定値のファイルにだけ書ける")
             } else {
                 skipUnknown(key, diff[key]!, "", candidates: allowed)
             }
-        }
-        if let words = diff["reservedWords"] {
-            if let changes = words.objectValue, case .object(var current) = merged["reservedWords"] ?? .object([:]) {
-                for key in changes.keys.sorted() {
-                    guard RuleSchema.reservedWords.contains(key), let b = current[key] else {
-                        skipUnknown(key, changes[key]!, "reservedWords", candidates: RuleSchema.reservedWords)
-                        continue
-                    }
-                    current[key] = apply(changes[key]!, to: b, .object(RuleSchema.reservedWordNode(key)), "reservedWords.\(key)")
-                }
-                merged["reservedWords"] = .object(current)
-            } else {
-                report(.invalidValue, "reservedWords", "オブジェクトであるべきところが\(words.kindName)")
-            }
-        }
-        if let profiles = diff["profiles"], let b = merged["profiles"] {
-            merged["profiles"] = apply(profiles, to: b, .profiles, "profiles")
         }
         for field in RuleSchema.formatStages.fields {
             if let d = diff[field.name], let b = merged[field.name] {
@@ -513,22 +459,23 @@ struct RuleLoader {
             return applyArrayOps(diff, to: base, path, allowsAt: true) { this, item, p in
                 if (item.stringValue ?? "").isEmpty { this.report(.invalidValue, p, "空でない文字列であるべきところ") }
             }
-        case .delimiters:
-            guard let o = diff.objectValue, o.keys.sorted() == ["$replace"], let v = o["$replace"] else {
-                report(.invalidValue, path, "区切りの括弧は { \"$replace\": [...] } で丸ごと置き換える")
-                return base
-            }
-            let before = issues.count
-            checkDelimiters(v, "\(path).$replace")
-            guard issues.count == before else { return base }
-            changedPaths.append(path)
-            return v
         case .object(let node):
             return applyObject(diff, to: base, node, path)
         case .readers:
             return applyReaders(diff, to: base, path)
-        case .profiles:
-            return applyProfiles(diff, to: base, path)
+        case .presets:
+            guard let changes = diff.objectValue, case .object(var merged) = base else {
+                report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(diff.kindName)")
+                return base
+            }
+            for name in changes.keys.sorted() {
+                guard let current = merged[name] else {
+                    skipUnknown(name, changes[name]!, path, candidates: RuleSchema.presetNames)
+                    continue
+                }
+                merged[name] = apply(changes[name]!, to: current, .formats, "\(path).\(name)")
+            }
+            return .object(merged)
         }
     }
 
@@ -607,26 +554,6 @@ struct RuleLoader {
     }
 
     /// プロファイル: `{ "doujinshi": { "formats": { "$add": [...], "at": "end" } } }`。
-    mutating func applyProfiles(_ diff: JSONValue, to base: JSONValue, _ path: String) -> JSONValue {
-        guard let changes = diff.objectValue, var profiles = base.arrayValue else {
-            report(.invalidValue, path, "プロファイルの ID をキーにしたオブジェクトであるべきところが\(diff.kindName)")
-            return base
-        }
-        let ids = profiles.compactMap { $0["id"]?.stringValue }
-        for key in changes.keys.sorted() {
-            var id = key
-            if !ids.contains(id), let renamed = aliases[id], ids.contains(renamed) { id = renamed }
-            guard let i = ids.firstIndex(of: id) else {
-                skipUnknown(key, changes[key]!, path, candidates: ids)
-                continue
-            }
-            if let v = changes[key]?["id"], v.stringValue != id { report(.invalidValue, "\(path).\(key).id", "ID は変えられない") }
-            profiles[i] = applyObject(changes[key]!, to: profiles[i], RuleSchema.profileNode, "\(path).\(id)",
-                                      extraAllowed: ["id"])
-        }
-        return .array(profiles)
-    }
-
     /// 一覧への操作。配列は `$add`・`$remove`・`$replace`、対応表は `$set`・`$unset`・`$replace`。
     mutating func applyListOps(_ diff: JSONValue, to base: JSONValue, _ kind: RuleSchema.ListKind, _ path: String) -> JSONValue {
         switch kind {

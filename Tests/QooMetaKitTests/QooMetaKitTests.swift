@@ -11,45 +11,12 @@ import QooMetaRules
 // 書き出しの形)と、部品ごとの確認。
 
 /// 同梱の既定値と、macOS の英単語の一覧で作った道具。
-let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionaries: SystemDictionaries.all))
-
-@Suite struct NameParserTests {
-    @Test func fullPattern() {
-        let p = NameParser.parse(baseName: "(分類A) [架空工房 (山田太郎、佐藤花子)] 星降る夜の喫茶店 2 (オリジナル)")
-        #expect(p.leading == "分類A")
-        #expect(p.circle == "架空工房")
-        #expect(p.authors == ["山田太郎", "佐藤花子"])
-        #expect(p.title == "星降る夜の喫茶店 2")
-        #expect(p.trailing == "オリジナル")
-        #expect(p.matchedPattern)
-    }
-
-    @Test func withoutAuthorsOrTrailing() {
-        let p = NameParser.parse(baseName: "(分類B) [架空工房] 月の裏側")
-        #expect(p.circle == "架空工房")
-        #expect(p.authors.isEmpty)
-        #expect(p.title == "月の裏側")
-        #expect(p.trailing.isEmpty)
-    }
-
-    @Test func fullWidthBracketsKeepOriginalWidth() {
-        let p = NameParser.parse(baseName: "［架空工房］ ＡＢＣの冒険！（オリジナル）")
-        #expect(p.circle == "架空工房")
-        #expect(p.title == "ＡＢＣの冒険！")
-        #expect(p.trailing == "オリジナル")
-    }
-
-    @Test func plainNameIsWholeTitle() {
-        let p = NameParser.parse(baseName: "ただのファイル名")
-        #expect(p.title == "ただのファイル名")
-        #expect(!p.matchedPattern)
-    }
-}
+let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries.all)
 
 @Suite struct SeriesGrouperTests {
-    static func books(_ items: [(circle: String, title: String)]) -> [WorkingBook] {
+    static func books(_ items: [(writer: String, title: String)]) -> [WorkingBook] {
         let inputs = items.enumerated().map { i, item in
-            BookInput(id: "\(i)", name: "[\(item.circle)] \(item.title)", folders: [item.circle])
+            BookInput(id: "\(i)", name: "[\(item.writer)] \(item.title)")
         }
         return builtinEngine.prepare(inputs, limits: .default).books.enumerated().map { i, b in
             WorkingBook(id: i + 1, inputID: b.core.id, title: b.core.title, compareTitle: b.core.compareTitle,
@@ -132,7 +99,7 @@ let builtinEngine = RuleEngine(rules: .builtin, vocabulary: Vocabulary(dictionar
         proposeSync([
             BookInput(id: "a.cbz", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 1 (オリジナル)"),
             BookInput(id: "b.cbr", name: "(分類A) [架空工房 (山田太郎)] 星降る夜の喫茶店 上 (オリジナル) <&>"),
-        ], rules: .builtin, vocabulary: Vocabulary())
+        ], rules: .builtin, dictionaries: [:])
     }
 
     @Test func stackroomPlistRoundTrip() throws {

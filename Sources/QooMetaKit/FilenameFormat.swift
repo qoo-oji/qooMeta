@@ -4,12 +4,15 @@ import Foundation
 //
 // 書き方はターゲットの 3 アプリ(qooViewer・StackNest・ShelfRow)と同じ: 予約語で欄の位置を書き、予約語以外の文字はそのまま
 // 照合し、空白は「0 文字以上の空白」。型の並びを上から照合し、名前全体に一致した最初の型で読む。qooMeta で足すのは、
-// 全角と半角の括弧を同じとみなすことと、どの型にも合わなかった名前に最も近い型を示すことだけ。
-// シリーズと巻は読まない(中核の規則で導く)。フォルダ名も読まない。
+// 全角と半角の括弧を同じとみなすことと、どの型にも合わなかった名前に最も近い型を示すことだけ。フォルダ名は読まない。
+//
+// シリーズ名と巻数は、ふつうはタイトルから中核の規則で導く。ただし、名前の中に**はっきり書いてある**とき
+// (商業の本の「(12)」「第01巻」)は `@series` `@volume` で読める(2026-09-20、利用者の判断)。読んだ値は、利用者が確定した値と
+// 同じ扱いで中核へ渡す。`@volume` は数字だけの値に当たる(全角の数字は半角に畳む)。
 
 /// 予約語。
 public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
-    case title, author, genre, event, source, info, ignore
+    case title, author, genre, event, source, info, series, volume, ignore
 
     /// 書いたときの綴り(`@title`)。
     public var spelling: String { "@" + rawValue }
@@ -23,12 +26,19 @@ public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
         case .event: .event
         case .source: .source
         case .info: .info
+        case .series: .series
+        case .volume: .volume
         case .ignore: nil
         }
     }
 
     /// 1 つの型に何度でも書けるか(名義が複数ある著者と、読まない部分だけ)。
     public var repeatable: Bool { self == .author || self == .ignore }
+}
+
+extension FormatWord {
+    /// 値に当てはまる形。`@volume` は数字だけ(全角も含む)。ほかは何でもよい。
+    var onlyDigits: Bool { self == .volume }
 }
 
 /// 型の書き方の誤り。
@@ -73,15 +83,21 @@ public struct FilenameFormat: Sendable, Hashable {
         tokens = try Self.compile(text)
     }
 
-    /// 全角の括弧を半角に畳む(名前の揺れで、意味は同じ)。
+    /// 全角の括弧を半角に畳む(名前の揺れで、意味は同じ)。全角の数字も畳む(`@volume` が「（１２）」にも当たるように)。
     static func fold(_ c: Character) -> Character {
         switch c {
         case "（": "("
         case "）": ")"
         case "［": "["
         case "］": "]"
+        case "０"..."９": Character(UnicodeScalar(c.unicodeScalars.first!.value - 0xFF10 + 0x30)!)
         default: c
         }
+    }
+
+    /// 欄の値を、欄ごとの形に畳む(巻数の全角の数字は半角に)。
+    static func foldValue(_ word: FormatWord, _ value: String) -> String {
+        word.onlyDigits ? String(value.map(fold)) : value
     }
 
     static let pairs: [Character: Character] = ["(": ")", "[": "]"]
@@ -173,7 +189,11 @@ public struct FilenameFormat: Sendable, Hashable {
                 for e in stride(from: end, through: p, by: -1) where step(t + 1, e) { return true }
             case .field(let word, let excluded):
                 var end = p
-                while end < folded.count, !excluded.contains(folded[end]) { end += 1 }
+                while end < folded.count, !excluded.contains(folded[end]) {
+                    // 数字だけの欄(`@volume`)は、数字と空白のあいだで止める。
+                    if word.onlyDigits, !folded[end].isNumber, !Self.isSpace(folded[end]) { break }
+                    end += 1
+                }
                 for e in stride(from: end, to: p, by: -1) {
                     // 空白だけの値は欄にしない。
                     guard folded[p..<e].contains(where: { !Self.isSpace($0) }) else { continue }
@@ -204,10 +224,13 @@ public struct FilenameFormats: Sendable, Hashable {
         self.separators = separators
     }
 
-    /// 同梱の並び(docs/filename-format.md の 5)。ターゲットの既定(qooViewer の 12 通り)の `@ignore` の位置へ欄を割り当て(末尾の角括弧は `@info`)、
-    /// 末尾が角括弧だけの形を足した 16 通り。具体的な型を上に置く。タイトル・著者が壊れる型(`@title` だけ、
-    /// `@title - @author`、`@title [@author]`)は入れない。
-    public static let presetTexts: [String] = {
+    /// 同梱のプリセット(docs/filename-format.md の 5)。**同人誌用と商業誌用に分ける**(2026-09-20、利用者の判断。末尾の丸括弧が
+    /// 原作なのは同人誌の慣習で、商業の本では巻数のことが多い)。利用者は使うほうを選び、複製して変える。
+    ///
+    /// 同人誌用: ターゲットの既定(qooViewer の 12 通り)の `@ignore` の位置へ欄を割り当て(末尾の角括弧は `@info`)、
+    /// 末尾が角括弧だけの形を足した 16 通り。タイトル・著者が壊れる型(`@title` だけ、`@title - @author`、
+    /// `@title [@author]`)は入れない。
+    public static let doujinshiPresetTexts: [String] = {
         var texts: [String] = []
         for genre in ["(@genre) ", ""] {
             for author in ["[@author (@author)]", "[@author]"] {
@@ -219,7 +242,36 @@ public struct FilenameFormats: Sendable, Hashable {
         return texts
     }()
 
+    /// 商業誌用: 末尾の丸括弧は巻数(数字だけのときに当たる)。原作と、著者の中の丸括弧(同人誌固有)は使わない。
+    /// 先頭の丸括弧は、同人誌用と同じくジャンルとして読む(商業の本にもレーベルや分類を書く利用者がいる)。
+    public static let commercialPresetTexts: [String] = {
+        var texts: [String] = []
+        for genre in ["(@genre) ", ""] {
+            for tail in [" (@volume) [@info]", " (@volume)", " [@info]", ""] {
+                texts.append("\(genre)[@author] @title\(tail)")
+            }
+        }
+        return texts
+    }()
+
+    /// 同梱の既定の並び: 命名の違う本が混ざった蔵書をそのまま読むための 1 本。形ごとに、**数字だけの末尾の丸括弧は巻数**
+    /// (`(@volume)`)を先に試し、そうでなければ原作(`(@source)`)として読む。`@volume` は数字だけに当たるので、
+    /// 「(12)」は巻数、「(架空の原作)」は原作になる。
+    public static let presetTexts: [String] = {
+        var texts: [String] = []
+        for genre in ["(@genre) ", ""] {
+            for author in ["[@author (@author)]", "[@author]"] {
+                for tail in [" (@volume) [@info]", " (@volume)", " (@source) [@info]", " (@source)", " [@info]", ""] {
+                    texts.append("\(genre)\(author) @title\(tail)")
+                }
+            }
+        }
+        return texts
+    }()
+
     public static let preset = FilenameFormats(formats: presetTexts.map { try! FilenameFormat($0) })
+    public static let doujinshiPreset = FilenameFormats(formats: doujinshiPresetTexts.map { try! FilenameFormat($0) })
+    public static let commercialPreset = FilenameFormats(formats: commercialPresetTexts.map { try! FilenameFormat($0) })
 
     /// 名前を読む。合わなければ、名前全体を仮のタイトルにし、最も近い型を添える。
     public func read(_ name: String) -> FormatReading {
@@ -231,7 +283,7 @@ public struct FilenameFormats: Sendable, Hashable {
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。
             if progress.tokens > 0, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
         }
-        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = TextRules.normalizeDisplay(name)
         return FormatReading(metadata: BookMetadata(title: title), formatIndex: nil,
                              spans: title.isEmpty ? [] : [FormatReading.Span(word: .title, range: 0..<chars.count)],
                              nearest: nearest.map { FormatReading.Nearest(formatIndex: $0.index, matchedCharacters: $0.progress.characters) })
@@ -247,7 +299,8 @@ public struct FilenameFormats: Sendable, Hashable {
             while upper > lower, chars[upper - 1].isWhitespace { upper -= 1 }
             spans.append(FormatReading.Span(word: word, range: lower..<upper))
             guard let field = word.field else { continue }
-            let value = String(chars[lower..<upper])
+            // 値は表示の形にそろえる(合成済みにし、連なった空白を 1 つにする)。名前の見た目は変えず、欄の値だけ。
+            let value = FilenameFormat.foldValue(word, TextRules.normalizeDisplay(String(chars[lower..<upper])))
             if field.isList {
                 metadata.set(field, to: metadata.values(field) + split(value))
             } else {
@@ -259,7 +312,7 @@ public struct FilenameFormats: Sendable, Hashable {
 
     /// 著者の値を区切りで分ける(前後の空白を除き、空の値は捨てる)。
     public func split(_ value: String) -> [String] {
-        var parts = [value]
+        var parts = [TextRules.normalizeDisplay(value)]
         for separator in separators where !separator.isEmpty {
             parts = parts.flatMap { $0.components(separatedBy: separator) }
         }
@@ -287,4 +340,30 @@ public struct FormatReading: Sendable, Hashable {
         public var formatIndex: Int
         public var matchedCharacters: Int
     }
+}
+
+/// 名前を付けた型の並び(プリセット)。**フォルダごとに使い分けられる**ように、本ごとに名前で選ぶ
+/// (2026-09-20、利用者の指示。商業誌と同人誌が混ざったフォルダ構成のため)。
+public struct FormatPresets: Sendable, Hashable {
+    /// 名前 → 型の並び(同梱は `mixed`・`doujinshi`・`commercial`)。
+    public var presets: [String: FilenameFormats]
+    /// 本がプリセットを選ばなかったときに使う名前。
+    public var defaultName: String
+
+    public init(presets: [String: FilenameFormats], defaultName: String) {
+        self.presets = presets
+        self.defaultName = defaultName
+    }
+
+    /// 名前で選ぶ(無い名前なら既定、それも無ければ同梱の既定)。
+    public subscript(name: String?) -> FilenameFormats {
+        presets[name ?? defaultName] ?? presets[defaultName] ?? .preset
+    }
+
+    public var names: [String] { presets.keys.sorted() }
+
+    /// 同梱のプリセット(コードの側の既定。規則ファイルを読む前に使う)。
+    public static let bundled = FormatPresets(
+        presets: ["mixed": .preset, "doujinshi": .doujinshiPreset, "commercial": .commercialPreset],
+        defaultName: "mixed")
 }

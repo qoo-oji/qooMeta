@@ -11,9 +11,8 @@ enum StatsReport {
     static func lines(_ set: ProposalSet, doc: ScanDocument) -> [String] {
         let books = set.proposals
         func ratio(_ n: Int, _ d: Int) -> String { d == 0 ? "-" : String(format: "%.1f%%", Double(n) * 100 / Double(d)) }
-        let matched = books.filter { if case .fallback("wholeName") = $0.parsed.format { false } else { true } }
-        let formatted = books.filter { if case .format = $0.parsed.format { true } else { false } }
-        let writers = Set(books.map { ($0.parsed.circle ?? "").lowercased() }).count
+        let matched = books.filter { $0.reading.formatIndex != nil }
+        let writers = Set(books.map { ($0.metadata.authors.first ?? "").lowercased() }).count
         let sizes = set.series.map(\.memberIDs.count)
         let evidence = Dictionary(grouping: set.series) { s -> String in
             switch s.evidence {
@@ -24,9 +23,9 @@ enum StatsReport {
             }
         }.mapValues(\.count)
         let withSeries = books.filter { $0.seriesID != nil }
-        let withVolume = books.filter { $0.volume != nil }
+        let withVolume = books.filter { !$0.metadata.volume.isEmpty }
         var lines = [
-            "本: \(books.count)(名前の形に当てはまった: \(matched.count)、うちフォーマット \(formatted.count)、書き手: \(writers))"
+            "本: \(books.count)(型に合った: \(matched.count)、書き手: \(writers))"
                 + (set.rejected.isEmpty ? "" : "、扱わなかった: \(set.rejected.count)"),
             "シリーズ: \(set.series.count) 組 / \(sizes.reduce(0, +)) 冊(組の大きさ 最大 \(sizes.max() ?? 0)、2 冊の組 \(sizes.filter { $0 == 2 }.count))",
             "  組になった理由: " + evidence.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: "、"),
@@ -51,7 +50,7 @@ enum StatsReport {
         }
         lines += relationLines(set)
         lines += [
-            "最終: シリーズ付き \(withSeries.count) 冊(\(ratio(withSeries.count, books.count)))、巻あり \(withVolume.count) 冊(数値 \(withVolume.filter { $0.volume?.sortKey != nil }.count)、うち 1 巻と推定 \(books.filter { $0.volume?.inferred == true }.count))",
+            "最終: シリーズ付き \(withSeries.count) 冊(\(ratio(withSeries.count, books.count)))、巻あり \(withVolume.count) 冊(数値 \(withVolume.filter { $0.metadata.volumeSort != nil }.count)、うち 1 巻と推定 \(books.filter { $0.flags.contains(.inferredVolume) }.count))",
             "結果の指紋: \(ResultFingerprint.of(set))",
         ]
         return lines
@@ -61,7 +60,7 @@ enum StatsReport {
     /// (商業の本では末尾の丸括弧が出版社などになりやすく、原則 1 の弱点が出るならここに出る)。
     /// 割れた組は、原作の違いで組にしなかった相手どうしをつないだかたまりの数(説明を作ったときだけ)。
     static func relationLines(_ set: ProposalSet) -> [String] {
-        let withRelation = set.proposals.compactMap { p in p.parsed.relation.flatMap { $0.isEmpty ? nil : $0 } }
+        let withRelation = set.proposals.map(\.metadata.source).filter { !$0.isEmpty }
         var line = "原作を持つ本: \(withRelation.count) 冊(値 \(Set(withRelation).count) 通り)"
         var parent: [String: String] = [:]
         func root(_ id: String) -> String {
@@ -86,8 +85,14 @@ enum StatsReport {
 
 /// ファイル名フォーマットの集計(名前を含まない)。型は同梱のもの(名前ではない)なので、そのまま出す。
 enum FormatReport {
-    static func lines(_ names: [String], formats: FilenameFormats) -> [String] {
-        let readings = names.map(formats.read)
+    static func lines(_ books: [(name: String, preset: String?)], presets: FormatPresets) -> [String] {
+        // プリセットごとに数える(フォルダごとに分けているときは、割り当てのとおり)。
+        let used = Set(books.map { presets[$0.preset] })
+        guard used.count == 1, let formats = used.first else {
+            return byPreset(books, presets: presets)
+        }
+        let readings = books.map { formats.read($0.name) }
+        let names = books.map(\.name)
         var matched = [Int](repeating: 0, count: formats.formats.count)
         var nearest = [Int](repeating: 0, count: formats.formats.count)
         var unmatched = 0
@@ -117,6 +122,20 @@ enum FormatReport {
     }
 }
 
+extension FormatReport {
+    /// プリセットが分かれているときは、プリセットごとに分けて数える。
+    static func byPreset(_ books: [(name: String, preset: String?)], presets: FormatPresets) -> [String] {
+        var lines: [String] = []
+        let groups = Dictionary(grouping: books) { $0.preset ?? presets.defaultName }
+        for name in groups.keys.sorted() {
+            lines.append("== プリセット \(name)")
+            lines += FormatReport.lines(groups[name]!,
+                                        presets: FormatPresets(presets: [name: presets[name]], defaultName: name))
+        }
+        return lines
+    }
+}
+
 /// 名前の「形」: 文字の続きを W、数字の続きを 9 に置き換え、空白を除いたもの(括弧・記号は残す)。名前そのものは出せないので、
 /// 型に合わない理由を見るときはこれを見る。
 enum NameShape {
@@ -139,12 +158,10 @@ enum NameShape {
 enum ResultFingerprint {
     static func of(_ set: ProposalSet) -> String {
         var lines = set.proposals.sorted { $0.id < $1.id }.map { b in
-            let p = b.parsed
-            let series = b.seriesID.flatMap { set.series($0)?.name } ?? ""
-            return [b.id, p.circle ?? "", p.authors.joined(separator: "\u{1}"), p.title, p.relation ?? "",
-                    p.genre ?? "", p.event ?? "", p.keyword ?? "", p.editions.joined(separator: "\u{1}"),
-                    p.sources.joined(separator: "\u{1}"), series, b.volume?.text ?? "",
-                    b.volume?.sortKey.map { String($0) } ?? "", b.volume?.inferred == true ? "推定" : ""]
+            let m = b.metadata
+            return [b.id, m.authors.joined(separator: "\u{1}"), m.title, m.genre, m.event, m.source, m.info,
+                    m.series, m.volume, m.volumeSort.map { String($0) } ?? "",
+                    b.flags.contains(.inferredVolume) ? "推定" : ""]
                 .joined(separator: "\u{2}")
         }
         // 組は、入った本の ID の集まりで表す(組の ID には依らない)。
@@ -179,17 +196,17 @@ enum ReviewReport {
             """
             for id in series.memberIDs {
                 guard let b = set[id] else { continue }
-                rows += "<tr><td>\(esc(b.parsed.circle ?? ""))</td><td>\(esc(b.parsed.title))</td>"
-                    + "<td>\(esc(series.name))</td><td>\(esc(b.volume?.text ?? ""))\(b.volume?.inferred == true ? "(推定)" : "")</td>"
-                    + "<td>\(esc(b.parsed.relation ?? ""))</td></tr>\n"
+                rows += "<tr><td>\(esc(b.metadata.authors.first ?? ""))</td><td>\(esc(b.metadata.title))</td>"
+                    + "<td>\(esc(series.name))</td><td>\(esc(b.metadata.volume))\(b.flags.contains(.inferredVolume) ? "(推定)" : "")</td>"
+                    + "<td>\(esc(b.metadata.source))</td></tr>\n"
             }
         }
         // シリーズにならなかった本のうち、組になりかけた相手がいるもの(なぜ組にならなかったか)。
         var misses = ""
         for book in set.proposals where book.seriesID == nil {
             guard let miss = set.explanation(for: book.id)?.nearMisses.first, let other = set[miss.otherID] else { continue }
-            misses += "<tr><td>\(esc(book.parsed.circle ?? ""))</td><td>\(esc(book.parsed.title))</td>"
-                + "<td>\(esc(other.parsed.title))</td><td>\(esc(miss.rejectedBy))(共通 \(miss.sharedPrefixLength) 文字)</td></tr>\n"
+            misses += "<tr><td>\(esc(book.metadata.authors.first ?? ""))</td><td>\(esc(book.metadata.title))</td>"
+                + "<td>\(esc(other.metadata.title))</td><td>\(esc(miss.rejectedBy))(共通 \(miss.sharedPrefixLength) 文字)</td></tr>\n"
         }
         return """
         <!doctype html><meta charset="utf-8"><title>qooMeta 見直し表</title>
@@ -223,15 +240,16 @@ enum SeriesListCSV {
         func fileName(_ id: String) -> String {
             (id as NSString).lastPathComponent.precomposedStringWithCanonicalMapping
         }
-        var lines = ["シリーズ,サークル,作者,冊数,巻,巻の推定,タイトル,ネタ,版,入手元,ファイル"]
+        var lines = ["シリーズ,著者,冊数,巻数(表示),巻数(ソート),巻の推定,タイトル,ジャンル,イベント,原作,情報,ファイル"]
         for series in set.series {
             let members = series.memberIDs.filter { !excluded.contains(fileName(files[$0]?.relativePath ?? $0)) }
             for id in members {
                 guard let b = set[id] else { continue }
-                lines.append([series.name, b.parsed.circle ?? "", b.parsed.authors.joined(separator: "、"), String(members.count),
-                              b.volume?.text ?? "", b.volume?.inferred == true ? "推定" : "", b.parsed.title,
-                              b.parsed.relation ?? "", b.parsed.editions.joined(separator: "、"),
-                              b.parsed.sources.joined(separator: "、"), files[id]?.relativePath ?? id].map(field).joined(separator: ","))
+                let m = b.metadata
+                lines.append([series.name, m.authors.joined(separator: "、"), String(members.count),
+                              m.volume, m.volumeSort.map { String($0) } ?? "",
+                              b.flags.contains(.inferredVolume) ? "推定" : "", m.title, m.genre, m.event, m.source,
+                              m.info, files[id]?.relativePath ?? id].map(field).joined(separator: ","))
             }
         }
         return "\u{FEFF}" + lines.joined(separator: "\r\n") + "\r\n"

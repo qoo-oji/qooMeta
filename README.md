@@ -1,11 +1,10 @@
 # qooMeta
 
-漫画・同人誌の書庫ファイル(zip/cbz・rar/cbr・7z/cb7)の**ファイル名の一覧**から、蔵書管理用のメタデータ
-(サークル・作者・タイトル・シリーズ・巻・ネタ・版)を提案するコマンドラインツールです。
+本(商業のコミック・同人誌などが混ざった書庫ファイル)の**ファイル名の一覧**から、qooViewer・StackNest・ShelfRow が本を管理する
+ためのメタデータ(タイトル・著者・ジャンル・イベント・原作・情報・シリーズ・巻数)を作るツールです。
 
-- 書庫の中身は開きません。ファイル名とフォルダ構成だけを読みます。
-- ファイル名の読み取りには、[qooLibrary](https://github.com/qoo-oji/qooLibrary) のファイル名フォーマット処理を使います
-  (`Sources/QooFormat` に写してあります)。
+- 書庫の中身は開きません。ファイル名だけを読みます(フォルダ名は読みません)。
+- ファイル名は、利用者が並べた**型**(`[@author] @title (@source)` のような書き方)で読みます。
 - 番号の無いシリーズも、同じ書き手の本どうしを見比べて見つけます。1 冊目にだけ番号の無いシリーズ、総集編、
   版違い(フルカラー版など)や入手経路違い(DL版など)、雑誌の号・合併号も扱います。
 - 通信はしません。判定は規則と、任意で端末内モデル(Apple Intelligence)だけで行います。
@@ -123,8 +122,7 @@ scripts/ci/check-private-terms.sh --require-terms                   # 手で検�
 - [docs/rules-format-design.md](docs/rules-format-design.md) — 規則ファイルの形式を育てていくための設計(第 2 版の案)
 - [docs/api.md](docs/api.md) — ライブラリとしての API 仕様(案)
 - [docs/roadmap.md](docs/roadmap.md) — 実装計画(規則ファイルの第 2 版 → ライブラリ化 → GUI アプリ → qooViewer への組み込み)
-- [Sources/QooFormat/README.md](Sources/QooFormat/README.md) — qooLibrary から写したコードの出どころ
 
 ## ライセンス
 
-MIT License([LICENSE](LICENSE))。`Sources/QooFormat` は qooLibrary(MIT、同じ作者)から写したものです。
+MIT License([LICENSE](LICENSE))。

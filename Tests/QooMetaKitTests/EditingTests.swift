@@ -7,7 +7,7 @@ import QooMetaRules
 
 @Suite struct ExplanationTests {
     static func explained(_ names: [String]) -> ProposalSet {
-        proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary(dictionaries: SystemDictionaries.all),
+        proposeSync(inputs(names), rules: .builtin, dictionaries: SystemDictionaries.all,
                     options: ProposalOptions(explanations: true))
     }
 
@@ -45,14 +45,14 @@ import QooMetaRules
     }
 
     @Test func noExplanationsUnlessAsked() {
-        let set = proposeSync(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]), rules: .builtin, vocabulary: Vocabulary())
+        let set = proposeSync(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]), rules: .builtin, dictionaries: [:])
         #expect(set.explanation(for: "000") == nil)
     }
 
     @Test func prefixCommonness() throws {
         let set = proposeSync(inputs([
             "[架空工房] 魔法少女リナ 休日", "[架空工房] 魔法少女リナ 夏休み", "[幻想舎] 魔法少女リナは眠らない", "[白紙堂] 魔法少女リナと猫",
-        ]), rules: .builtin, vocabulary: Vocabulary())
+        ]), rules: .builtin, dictionaries: [:])
         let id = try #require(set.series.first?.id)
         #expect(set.prefixCommonness(of: id, rules: .builtin) == 3)
     }
@@ -62,7 +62,7 @@ import QooMetaRules
     static let set = proposeSync(inputs([
         "[架空工房] 星降る夜の喫茶店 春の章", "[架空工房] 星降る夜の喫茶店 夏の章【フルカラー版】", "[架空工房] 星降る夜の喫茶店 秋",
         "[架空工房] 月の庭 02", "[架空工房] 月の庭 03", "[架空工房] 風の港",
-    ]), rules: .builtin, vocabulary: Vocabulary())
+    ]), rules: .builtin, dictionaries: [:])
 
     @Test func suggestedName() {
         #expect(BulkEdit.suggestedSeriesName(for: ["000", "001", "002"], in: Self.set, rules: .builtin) == "星降る夜の喫茶店")
@@ -71,9 +71,9 @@ import QooMetaRules
     }
 
     @Test func setSeriesKeepsVolumesAndFields() {
-        let current: [String: QooMetaKit.Confirmation] = ["003": .fields(ConfirmedFields(circle: "別名工房"))]
+        let current: [String: QooMetaKit.Confirmation] = ["003": .fields(ConfirmedFields([.authors: ["別名工房"]]))]
         let result = BulkEdit.setSeries("庭シリーズ", for: ["003", "005"], in: Self.set, current: current)
-        #expect(result["003"] == .series(name: "庭シリーズ", volume: "02", fields: ConfirmedFields(circle: "別名工房")))
+        #expect(result["003"] == .series(name: "庭シリーズ", volume: "02", fields: ConfirmedFields([.authors: ["別名工房"]])))
         #expect(result["005"] == .series(name: "庭シリーズ", volume: nil))
     }
 
@@ -96,19 +96,19 @@ import QooMetaRules
         #expect(BulkEdit.clearVolumes(["003"], in: Self.set)["003"] == .series(name: "月の庭", volume: ""))
         let accepted = BulkEdit.acceptProposals(["003", "005"], in: Self.set)
         guard case .series("月の庭", "02", let fields)? = accepted["003"] else { Issue.record("\(String(describing: accepted["003"]))"); return }
-        #expect(fields.circle == "架空工房")
+        #expect(fields[.authors] == ["架空工房"])
         guard case .notInSeries? = accepted["005"] else { Issue.record("シリーズの無い本"); return }
     }
 
     /// まとめて編集の結果を渡すと、確定した内容として効く(巻を消すと、推定もしない)。
     @Test func editsTakeEffect() {
         let names = ["[架空工房] 月の庭", "[架空工房] 月の庭 2"]
-        let before = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
-        #expect(before["000"]?.volume?.inferred == true)
+        let before = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        #expect(before["000"]?.flags.contains(.inferredVolume) == true)
         let cleared = BulkEdit.clearVolumes(["000"], in: before)
         let after = proposeSync(inputs(names).map { BookInput(id: $0.id, name: $0.name, confirmation: cleared[$0.id] ?? .none) },
-                                rules: .builtin, vocabulary: Vocabulary())
-        #expect(after["000"]?.volume == nil)
+                                rules: .builtin, dictionaries: [:])
+        #expect(after["000"]?.metadata.volume.isEmpty == true)
         #expect(seriesName(after, "000") == "月の庭")
     }
 
@@ -136,7 +136,7 @@ import QooMetaRules
         changes.setPolicy("separate", for: "subtitled")
         let known = [changes.setEnabled(false, rule: "roman"),
                      changes.setValue(.number(3), rule: "sharedPrefix", parameter: "minPrefix"),
-                     changes.setEnabled(false, rule: "simpleBrackets")]
+                     changes.setEnabled(false, rule: "reject-hiragana-ending")]
         #expect(known == [true, true, true])
         changes.add(["arc"], to: "labelIntroducers")
         changes.remove(["episode"], from: "labelIntroducers")
@@ -152,7 +152,7 @@ import QooMetaRules
         #expect(catalog.policies.first { $0.id == "subtitled" }?.current == "separate")
         #expect(catalog.entries.first { $0.id == "roman" }?.isEnabled == false)
         #expect(catalog.entries.first { $0.id == "sharedPrefix" }?.parameters.first { $0.name == "minPrefix" }?.current == .number(3))
-        #expect(catalog.entries.first { $0.id == "simpleBrackets" }?.isModified == true)
+        #expect(catalog.entries.first { $0.id == "reject-hiragana-ending" }?.isModified == true)
         let labels = try #require(catalog.lists.first { $0.id == "labelIntroducers" })
         #expect(labels.added == ["arc"])
         #expect(labels.removed == ["episode"])
@@ -187,37 +187,36 @@ import QooMetaRules
 }
 
 @Suite struct FeedbackTests {
-    static let vocabulary = Vocabulary(genres: ["種別A", "本の種別Z"], dictionaries: SystemDictionaries.all)
+    static let dictionaries = SystemDictionaries.all
 
     @Test func everyWordIsReplacedAndTheShapeIsKept() throws {
         let books = [
             BookInput(id: "1", name: "(本の種別Z) [夕凪工房 (水野葵)] 蒼穹のアルカディア 2 (原作X) [DL版]"),
             BookInput(id: "2", name: "(本の種別Z) [夕凪工房 (水野葵)] 蒼穹のアルカディア 3"),
             BookInput(id: "3", name: "(本の種別Z) [夕凪工房 (水野葵)] 蒼穹のアルカディア 総集編"),
-            BookInput(id: "4", name: "[夕凪工房] Silver Moon Garden 上", folders: ["水野葵"]),
+            BookInput(id: "4", name: "[夕凪工房] Silver Moon Garden 上"),
         ]
         let feedback = makeFeedbackExample(books, corrected: ["2": .series(name: "蒼穹のアルカディア", volume: "3"),
                                                               "4": .notInSeries()],
-                                           rules: .builtin, vocabulary: Self.vocabulary)
+                                           rules: .builtin, dictionaries: SystemDictionaries.all)
         let text = String(decoding: feedback.data, as: UTF8.self)
         // 元の語は残らない(規則の語・数字・記号・本の種別の置き換えは残る)。
-        for word in ["夕凪", "工房", "水野", "蒼穹", "アルカディア", "原作", "本の種別Z", "Silver", "Moon", "Garden"] {
+        for word in ["夕凪", "工房", "水野", "蒼穹", "アルカディア", "原作", "Silver", "Moon", "Garden"] {
             #expect(!text.contains(word), "\(word) が残っている")
         }
-        for kept in ["DL版", "総集編", "種別B", " 2 ", "上"] { #expect(text.contains(kept), "\(kept) が消えた") }
+        for kept in ["DL版", "総集編", " 2 ", "上"] { #expect(text.contains(kept), "\(kept) が消えた") }
         #expect(feedback.isFaithful)
 
         // 置き換えた例は、例のファイルとしてそのまま読めて、直した結果の期待値を持つ。
         let file = try ExampleFile.load(feedback.data).get()
         #expect(file.examples.count == 1)
-        #expect(file.genres == ["種別A", "種別B"])
         let outcome = try #require(ExampleRunner.run(file, rules: .builtin, dictionaries: SystemDictionaries.all).first)
         #expect(outcome.passed, "\(outcome.mismatches)")
     }
 
     /// 同じ語は同じ語へ、先頭が共通する語は同じ長さだけ共通させる。
     @Test func sharedPrefixesStayShared() {
-        var a = Anonymizer(rules: .builtin, vocabulary: Self.vocabulary)
+        var a = Anonymizer(rules: .builtin, dictionaries: SystemDictionaries.all)
         let x = a.text("蒼穹のアルカディア 春"), y = a.text("蒼穹のアルカディア 秋"), z = a.text("蒼穹のアルカディア")
         #expect(x.count == "蒼穹のアルカディア 春".count)
         #expect(x.hasPrefix(z) && y.hasPrefix(z))
@@ -227,7 +226,7 @@ import QooMetaRules
 
     @Test func correctionMetByAPolicy() {
         let books = inputs(["[架空工房] 月影 はじまりの章", "[架空工房] 月影 2", "[架空工房] 月影 3"])
-        let feedback = makeFeedbackExample(books, corrected: ["000": .notInSeries()], rules: .builtin, vocabulary: Self.vocabulary)
+        let feedback = makeFeedbackExample(books, corrected: ["000": .notInSeries()], rules: .builtin, dictionaries: SystemDictionaries.all)
         #expect(feedback.satisfiedByPolicy == .init(policy: "subtitled", choice: "separate"))
     }
 }

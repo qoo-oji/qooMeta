@@ -1,10 +1,9 @@
 import CryptoKit
 import Foundation
-import QooFormat
 
 /// 既定値の規則のデータ(同梱の 2 つの JSON。読み込むのは QooMetaRules)。
 ///
-/// - `filename-formats.json`: ファイル名をどう区切り、どこがサークル・作者・タイトル・ネタ(関連)かを決めるフォーマット。
+/// - `filename-formats.json`: 型の並び(名前のどこが何の欄か)と、著者の区切り。
 /// - `series-rules.json`: タイトルからシリーズ名と巻を取り出す規則。
 ///
 /// どちらも**蔵書の名前を含まない**(一般的な語と記号だけ)。公開リポジトリに置く。形式は docs/rules-format-design.md。
@@ -43,7 +42,8 @@ public struct CompiledRules: Sendable {
     public static let engineLevel = 1
 
     let series: SeriesRules
-    let formats: FilenameFormatRules
+    /// 名前を付けた型の並び。本ごとに、どのプリセットで読むかを選べる(フォルダごとに分けたい利用者のため)。
+    public let formats: FormatPresets
     /// 重ねた結果(`rules show` 用)。
     public let mergedSeriesRules: JSONValue
     public let mergedFilenameFormats: JSONValue
@@ -163,6 +163,20 @@ public struct CompiledRules: Sendable {
             changedPaths: Set(changedPaths + policies.keys.map { "policies.\($0)" }).sorted(), contentHash: rules.contentHash,
             defaultSeriesRules: defaultSeriesRules, defaultFilenameFormats: defaultFilenameFormats),
             errors: compilation.errors, warnings: compilation.warnings)
+    }
+
+    /// 型の並びだけを差し替えたもの(公開データの採点のように、別のプリセットで読みたいとき)。規則の中身は変えない。
+    public func replacingFormats(_ formats: FilenameFormats) -> CompiledRules {
+        replacingFormats(FormatPresets(presets: [formats == .doujinshiPreset ? "doujinshi" : "commercial": formats],
+                                       defaultName: formats == .doujinshiPreset ? "doujinshi" : "commercial"))
+    }
+
+    /// プリセットの組ごと差し替えたもの。
+    public func replacingFormats(_ formats: FormatPresets) -> CompiledRules {
+        CompiledRules(series: series, formats: formats, mergedSeriesRules: mergedSeriesRules,
+                      mergedFilenameFormats: mergedFilenameFormats, changedPaths: changedPaths,
+                      contentHash: contentHash, defaultSeriesRules: defaultSeriesRules,
+                      defaultFilenameFormats: defaultFilenameFormats)
     }
 
     /// 処理に関係しない包みのキー(`$schema`・`revision`)を除く。内容のハッシュがそれらに左右されないように。
@@ -287,60 +301,24 @@ struct RuleCompiler {
                 notFirstPrefixes: words(firstVolume?["excludePrefixes"], lists)))
     }
 
-    mutating func formats(_ root: JSONValue) -> FilenameFormatRules? {
-        var reserved: [String: FilenameFormatRules.ReservedWord] = [:]
-        for (word, entry) in root["reservedWords"]?.objectValue ?? [:] {
-            reserved[word] = .init(engine: entry["engine"]?.stringValue ?? "", field: entry["field"]?.stringValue ?? "")
-        }
-        let separators = words(root["reservedWords"]?["@author"]?["split"], [:]).joined()
-        let profiles = (root["profiles"]?.arrayValue ?? []).map { p in
-            FilenameFormatRules.Profile(
-                id: p["id"]?.stringValue ?? "",
-                delimiters: p["delimiters"]?.arrayValue?.map { $0.arrayValue?.compactMap(\.stringValue) ?? [] } ?? [],
-                formats: words(p["formats"], [:]),
-                protectedTokens: words(p["protectedTokens"], [:]))
-        }
-        let rules = FilenameFormatRules(reservedWords: reserved, authorSeparators: separators, profiles: profiles,
-                                        simpleBracketsEnabled: root["fallback"]?["simpleBrackets"]?["enabled"]?.boolValue ?? true)
-        // フォーマットは照合の処理(QooFormat)で組み立てて確かめる。書き間違いは位置付きで返す。
-        for profile in profiles {
-            for (j, format) in profile.formats.enumerated() {
-                do { _ = try QooLibraryNameParser.compile(format, profile: profile, rules: rules, mediaTypes: []) } catch {
-                    report(.invalidValue, "profiles.\(profile.id).formats[\(j)]", "\(error)")
+    /// filename-formats.json → 名前を付けた型の並び(プリセット)と区切り。型の書き間違いは、番号付きで誤りにする。
+    mutating func formats(_ root: JSONValue) -> FormatPresets? {
+        let separators = words(root["separators"], [:])
+        var presets: [String: FilenameFormats] = [:]
+        for (name, list) in root["presets"]?.objectValue ?? [:] {
+            var compiled: [FilenameFormat] = []
+            for (i, text) in words(list, [:]).enumerated() {
+                do { compiled.append(try FilenameFormat(text)) } catch {
+                    report(.invalidValue, "presets.\(name)[\(i)]", error.description)
                 }
             }
+            presets[name] = FilenameFormats(formats: compiled,
+                                            separators: separators.isEmpty ? FilenameFormats.defaultSeparators : separators)
         }
-        return rules
+        let defaultName = root["defaultPreset"]?.stringValue ?? "mixed"
+        if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }
+        return FormatPresets(presets: presets, defaultName: defaultName)
     }
-}
-
-/// エンジンが使う形のファイル名のフォーマット。
-struct FilenameFormatRules: Sendable {
-    struct ReservedWord: Sendable {
-        /// 照合の処理(QooFormat)での予約語。
-        var engine: String
-        /// qooMeta の欄(genre / event / circle / authors / title / relation / keyword)。
-        var field: String
-    }
-
-    struct Profile: Sendable {
-        var id: String
-        /// 区切りに使う括弧の組(開き, 閉じ)。
-        var delimiters: [[String]]
-        /// 上から順に照合し、最初に一致したものを採る。
-        var formats: [String]
-        /// 1 かたまりとして扱う文字列(正規表現)。「(2019)」のような年や「(完結)」を、末尾の丸括弧と取り違えないため。
-        var protectedTokens: [String]
-    }
-
-    /// Stackroom 式の予約語 → 照合の処理の予約語と、qooMeta の欄。
-    var reservedWords: [String: ReservedWord]
-    /// 作者が複数のときの区切り文字。
-    var authorSeparators: String
-    /// 上から試し、どれかのフォーマットが一致した最初のプロファイルを採る。
-    var profiles: [Profile]
-    /// どのフォーマットにも一致しない名前を、括弧の位置だけで読むか(NameParser)。止めるとタイトルだけになる。
-    var simpleBracketsEnabled: Bool
 }
 
 /// エンジンが使う形のシリーズの規則。方針(`policies`)は、ここでは今の扱いのフラグに写してある。

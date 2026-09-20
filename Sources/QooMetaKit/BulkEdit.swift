@@ -39,8 +39,10 @@ public enum BulkEdit {
     /// 選んだ本のタイトルから、シリーズ名の候補を返す(共通部分を語の切れ目まで縮め、規則の名前の整え方に通したもの。
     /// 無ければ nil)。版・入手経路の印は除いて比べる。1 冊なら、「タイトル + 巻」の頭か、タイトルそのもの。
     public static func suggestedSeriesName(for ids: [String], in set: ProposalSet, rules: CompiledRules) -> String? {
-        let engine = RuleEngine(rules: rules, vocabulary: Vocabulary())
-        let titles = ids.compactMap { set[$0] }.map { engine.text.comparable(engine.markers.split($0.parsed.title).base) }
+        let engine = RuleEngine(rules: rules, dictionaries: [String: WordSet]())
+        let titles: [ComparableText] = ids.compactMap { set[$0] }.map { book in
+            engine.text.comparable(engine.compareTitle(book.metadata.title).text)
+        }
         guard let first = titles.first else { return nil }
         var length = first.key.count
         if titles.count == 1 {
@@ -70,11 +72,7 @@ public enum BulkEdit {
         ids.reduce(into: [:]) { result, id in
             guard set[id] != nil else { return }
             var merged = Self.fields(id, current)
-            if let v = fields.circle { merged.circle = v }
-            if let v = fields.authors { merged.authors = v }
-            if let v = fields.title { merged.title = v }
-            if let v = fields.relation { merged.relation = v }
-            if let v = fields.genre { merged.genre = v }
+            for (field, value) in fields.values { merged[field] = value }
             result[id] = switch current[id] ?? .none {
             case .none, .fields: .fields(merged)
             case .series(let name, let volume, _): .series(name: name, volume: volume, fields: merged)
@@ -121,10 +119,11 @@ public enum BulkEdit {
     public static func acceptProposals(_ ids: [String], in set: ProposalSet) -> [String: Confirmation] {
         ids.reduce(into: [:]) { result, id in
             guard let book = set[id] else { return }
-            let p = book.parsed
-            let fields = ConfirmedFields(circle: p.circle, authors: p.authors, title: p.title, relation: p.relation, genre: p.genre)
+            let m = book.metadata
+            let fields = ConfirmedFields([.authors: m.authors, .title: [m.title], .genre: [m.genre],
+                                          .event: [m.event], .source: [m.source], .info: [m.info]])
             if let series = book.seriesID.flatMap({ set.series($0) }) {
-                result[id] = .series(name: series.name, volume: book.volume?.text, fields: fields)
+                result[id] = .series(name: series.name, volume: m.volume.isEmpty ? nil : m.volume, fields: fields)
             } else {
                 result[id] = .notInSeries(fields: fields)
             }
@@ -149,7 +148,7 @@ public enum BulkEdit {
             let x = set[a], y = set[b]
             let result: ComparisonResult
             switch order {
-            case .title: result = natural(x?.parsed.title ?? "", y?.parsed.title ?? "")
+            case .title: result = natural(x?.metadata.title ?? "", y?.metadata.title ?? "")
             case .name: result = natural(x?.name ?? "", y?.name ?? "")
             case .date:
                 switch (dates[a], dates[b]) {
@@ -159,7 +158,7 @@ public enum BulkEdit {
                 default: result = .orderedSame
                 }
             case .currentVolume:
-                switch (x?.volume?.sortKey, y?.volume?.sortKey) {
+                switch (x?.metadata.volumeSort, y?.metadata.volumeSort) {
                 case let (p?, q?): result = p == q ? .orderedSame : (p < q ? .orderedAscending : .orderedDescending)
                 case (_?, nil): result = .orderedAscending
                 case (nil, _?): result = .orderedDescending
@@ -185,14 +184,14 @@ public enum BulkEdit {
     /// 今の巻の表記(確定した巻、無ければ提案。推定した巻は確定させない)。
     static func volumeText(_ id: String, _ set: ProposalSet, _ current: [String: Confirmation]) -> String? {
         if case .series(_, let volume?, _) = current[id] ?? .none { return volume }
-        guard let volume = set[id]?.volume, !volume.inferred else { return nil }
-        return volume.text
+        guard let book = set[id], !book.metadata.volume.isEmpty, !book.flags.contains(.inferredVolume) else { return nil }
+        return book.metadata.volume
     }
 
     /// そのシリーズの今の表記のゼロ埋めの桁数(無ければ 0)。
     static func seriesPadding(_ book: BookProposal, _ set: ProposalSet) -> Int {
         guard let series = book.seriesID.flatMap({ set.series($0) }) else { return 0 }
-        return series.memberIDs.compactMap { set[$0]?.volume?.text }
+        return series.memberIDs.compactMap { set[$0]?.metadata.volume }
             .filter { $0.count > 1 && $0.hasPrefix("0") && $0.allSatisfy(\.isNumber) }
             .map(\.count).max() ?? 0
     }

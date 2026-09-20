@@ -96,7 +96,7 @@ final class Workspace {
 
     init(files: [(id: String, name: String)], formats: FilenameFormats = .preset) {
         self.formats = formats
-        derivation = SeriesDerivation(rules: .builtin, vocabulary: Vocabulary(dictionaries: SystemDictionaries.all))
+        derivation = SeriesDerivation(rules: .builtin, dictionaries: SystemDictionaries.all)
         books = files.map { file in
             let reading = formats.read(file.name)
             return BookRow(id: file.id, fileName: file.name, reading: reading, metadata: reading.metadata)

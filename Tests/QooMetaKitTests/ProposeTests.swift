@@ -13,27 +13,25 @@ func seriesName(_ set: ProposalSet, _ id: String) -> String? {
     set[id]?.seriesID.flatMap { set.series($0)?.name }
 }
 
-let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: SystemDictionaries.all)
+let allDictionaries = SystemDictionaries.all
 
 @Suite struct ParseNameTests {
     @Test func fieldsAndFormat() {
-        let p = parseName("(種別A) [架空工房 (山田太郎)] 月の庭 第3巻 (作品A) [DL版]", rules: .builtin, vocabulary: genreVocabulary)
-        #expect(p.genre == "種別A")
-        #expect(p.event == nil)
-        #expect(p.circle == "架空工房")
-        #expect(p.authors == ["山田太郎"])
-        #expect(p.title == "月の庭 第3巻")
-        #expect(p.relation == "作品A")
-        #expect(p.keyword == "DL版")
-        #expect(p.format == .format(profile: "doujinshi", index: 0))
-        #expect(p.standaloneVolume == Volume(text: "3", sortKey: 3))
+        let r = parseName("(種別A) [架空工房 (山田太郎)] 月の庭 第3巻 (作品A) [DL版]", rules: .builtin)
+        #expect(r.metadata.genre == "種別A")
+        #expect(r.metadata.event.isEmpty)
+        #expect(r.metadata.authors == ["架空工房", "山田太郎"])
+        #expect(r.metadata.title == "月の庭 第3巻")
+        #expect(r.metadata.source == "作品A")
+        #expect(r.metadata.info == "DL版")
+        #expect(r.formatIndex == 2)
     }
 
-    @Test func fallbacks() {
-        #expect(parseName("ただのファイル名", rules: .builtin, vocabulary: Vocabulary()).format == .fallback("wholeName"))
-        let p = parseName("[架空工房 月の庭", rules: .builtin, vocabulary: Vocabulary())
-        #expect(p.title.isEmpty == false)
-        #expect(p.standaloneVolume == nil)
+    @Test func unmatchedNameIsAProvisionalTitle() {
+        let r = parseName("ただのファイル名", rules: .builtin)
+        #expect(r.formatIndex == nil)
+        #expect(r.metadata.title == "ただのファイル名")
+        #expect(r.metadata.authors.isEmpty)
     }
 }
 
@@ -41,21 +39,20 @@ let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: S
     @Test func rejectedInputs() {
         var limits = InputLimits()
         limits.maxNameLength = 20
-        limits.maxFolders = 2
         let set = proposeSync([
             BookInput(id: "a", name: "[架空工房] 月の庭 1"),
             BookInput(id: "a", name: "[架空工房] 月の庭 2"),
             BookInput(id: "b", name: "   "),
             BookInput(id: "c", name: String(repeating: "月", count: 21)),
-            BookInput(id: "d", name: "月の庭", folders: ["x", "y", "z"]),
-        ], rules: .builtin, vocabulary: Vocabulary(), options: ProposalOptions(limits: limits))
-        #expect(set.proposals.map(\.id) == ["a"])
-        #expect(set.rejected.map(\.reason) == [.duplicateID, .emptyName, .nameTooLong, .tooManyFolders])
+            BookInput(id: "d", name: "月の庭"),
+        ], rules: .builtin, dictionaries: [:], options: ProposalOptions(limits: limits))
+        #expect(set.proposals.map(\.id) == ["a", "d"])
+        #expect(set.rejected.map(\.reason) == [.duplicateID, .emptyName, .nameTooLong])
     }
 
     /// 見えない文字(書式文字)で組が割れない。
     @Test func formatCharactersAreDropped() {
-        let set = proposeSync(inputs(["[架空工房] 月の\u{200B}庭 1", "[架空工房] 月の庭 2"]), rules: .builtin, vocabulary: Vocabulary())
+        let set = proposeSync(inputs(["[架空工房] 月の\u{200B}庭 1", "[架空工房] 月の庭 2"]), rules: .builtin, dictionaries: [:])
         #expect(seriesName(set, "000") == "月の庭")
         #expect(seriesName(set, "001") == "月の庭")
     }
@@ -64,13 +61,13 @@ let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: S
     @Test func deterministicOrderAndIDs() {
         let names = ["[架空工房] 月の庭 2", "[幻想舎] 風の港 1", "[架空工房] 月の庭 1", "[幻想舎] 風の港 2", "[架空工房] 星の歌 1",
                      "[架空工房] 星の歌 2"]
-        let a = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
-        let b = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
+        let a = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        let b = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
         #expect(a.series == b.series)
         #expect(a.proposals == b.proposals)
         #expect(a.series.map(\.name) == ["風の港", "星の歌", "月の庭"])  // 書き手(比べる形)→ 名前の順
         let shuffled = inputs(names).reversed()
-        let c = proposeSync(Array(shuffled), rules: .builtin, vocabulary: Vocabulary())
+        let c = proposeSync(Array(shuffled), rules: .builtin, dictionaries: [:])
         #expect(c.series.map(\.name) == a.series.map(\.name))
         #expect(c.series.map(\.memberIDs) == a.series.map(\.memberIDs))
         #expect(a.series.first { $0.name == "月の庭" }?.memberIDs == ["002", "000"])  // 巻の順
@@ -80,7 +77,7 @@ let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: S
         let set = proposeSync(inputs([
             "[架空工房] 月の庭", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 3【フルカラー版】",
             "[架空工房] 週刊架空 2025年35号", "[架空工房] 週刊架空 2025年36号",
-        ]), rules: .builtin, vocabulary: Vocabulary())
+        ]), rules: .builtin, dictionaries: [:])
         #expect(set["000"]?.flags == [.inferredVolume])
         #expect(set["002"]?.flags == [.compilation])
         #expect(set["003"]?.flags == [.edition])
@@ -90,9 +87,9 @@ let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: S
 
     @Test func asyncMatchesSyncAndReportsProgress() async throws {
         let names = (1...40).flatMap { i in ["[架空工房\(i % 7)] 月の庭 \(i)", "[幻想舎\(i % 5)] 風の港 \(i) 夜"] }
-        let sync = proposeSync(inputs(names), rules: .builtin, vocabulary: Vocabulary())
+        let sync = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
         let progress = ProgressLog()
-        let async = try await propose(inputs(names), rules: .builtin, vocabulary: Vocabulary()) { progress.add($0) }
+        let async = try await propose(inputs(names), rules: .builtin, dictionaries: [:]) { progress.add($0) }
         #expect(async.proposals == sync.proposals)
         #expect(async.series == sync.series)
         #expect(progress.last?.completedUnits == progress.last?.totalUnits)
@@ -100,7 +97,7 @@ let genreVocabulary = Vocabulary(genres: ["種別A", "種別B"], dictionaries: S
 
     @Test func cancellation() async {
         let names = (1...200).map { "[架空工房\($0)] 月の庭 \($0)" }
-        let task = Task { try await propose(inputs(names), rules: .builtin, vocabulary: Vocabulary()) }
+        let task = Task { try await propose(inputs(names), rules: .builtin, dictionaries: [:]) }
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
     }
@@ -117,7 +114,7 @@ final class ProgressLog: @unchecked Sendable {
     static func propose(_ items: [(String, QooMetaKit.Confirmation)]) -> ProposalSet {
         proposeSync(items.enumerated().map { BookInput(id: String(format: "%03d", $0.offset), name: $0.element.0,
                                                         confirmation: $0.element.1) },
-                    rules: .builtin, vocabulary: genreVocabulary)
+                    rules: .builtin, dictionaries: SystemDictionaries.all)
     }
 
     /// 確定した名前は錨になり、規則が同じ組にした未確定の本もその名前に入る。
@@ -153,24 +150,25 @@ final class ProgressLog: @unchecked Sendable {
         #expect(seriesName(set, "000") == "庭の本")
         #expect(set.series.count == 1)
         #expect(set.series[0].memberIDs == ["000", "001"])
-        #expect(set["001"]?.volume == Volume(text: "2", sortKey: 2))
+        #expect(set["001"]?.metadata.volume == "2")
+        #expect(set["001"]?.metadata.volumeSort == 2)
     }
 
     /// 確定した巻はそのまま使い、推定は確定した巻を読めた巻として扱う。
     @Test func confirmedVolumes() {
         let set = Self.propose([("[架空工房] 月の庭", .none), ("[架空工房] 月の庭 おまけ", .series(name: "月の庭", volume: "上")),
                                 ("[架空工房] 月の庭 2", .none)])
-        #expect(set["001"]?.volume?.text == "上")
-        #expect(set["001"]?.volume?.sortKey == 1)
-        #expect(set["000"]?.volume == nil)  // 確定した「上」が 1 巻に当たるので、番号の無い本を 1 巻とは推定しない
+        #expect(set["001"]?.metadata.volume == "上")
+        #expect(set["001"]?.metadata.volumeSort == 1)
+        #expect(set["000"]?.metadata.volume.isEmpty == true)  // 確定した「上」が 1 巻に当たるので、番号の無い本を 1 巻とは推定しない
     }
 
     /// 確定した欄は解析の結果より優先し、比べる単位も確定した値で決まる。
     @Test func confirmedFieldsDecideTheUnit() {
         let set = Self.propose([("(種別A) [架空工房] 月の庭 1", .none), ("(種別A) [架空工房] 月の庭 2", .none),
-                                ("(種別A) [架空工房] 月の庭 3", .fields(ConfirmedFields(genre: "種別B")))])
+                                ("(種別A) [架空工房] 月の庭 3", .fields(ConfirmedFields([.genre: ["種別B"]])))])
         #expect(["000", "001", "002"].map { seriesName(set, $0) } == ["月の庭", "月の庭", nil])
-        #expect(set["002"]?.parsed.genre == "種別B")
+        #expect(set["002"]?.metadata.genre == "種別B")
     }
 }
 
@@ -183,7 +181,7 @@ final class ProgressLog: @unchecked Sendable {
 
     /// 足す・変える・消すを繰り返しても、索引の結果は同じ一覧を一括で計算した結果と同じ。
     @Test func indexMatchesBatch() async throws {
-        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        let index = ProposalIndex(rules: .builtin, dictionaries: [:])
         var current: [BookInput] = []
         var generator = SplitMix(seed: 7)
         for step in 0..<120 {
@@ -201,7 +199,7 @@ final class ProgressLog: @unchecked Sendable {
             }
             try await index.apply([change])
             if step % 10 == 9 {
-                let batch = proposeSync(current, rules: .builtin, vocabulary: Vocabulary())
+                let batch = proposeSync(current, rules: .builtin, dictionaries: [:])
                 let snapshot = await index.snapshot()
                 #expect(snapshot.proposals == batch.proposals, "step \(step)")
                 #expect(snapshot.series == batch.series, "step \(step)")
@@ -210,7 +208,7 @@ final class ProgressLog: @unchecked Sendable {
     }
 
     @Test func previewDoesNotChangeTheState() async throws {
-        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        let index = ProposalIndex(rules: .builtin, dictionaries: [:])
         try await index.apply(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]).map { .upsert($0) })
         let before = await index.snapshot()
         let delta = try await index.preview([.upsert(BookInput(id: "x", name: "[架空工房] 月の庭 3"))])
@@ -221,7 +219,7 @@ final class ProgressLog: @unchecked Sendable {
     }
 
     @Test func deltaReportsRemovedSeries() async throws {
-        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        let index = ProposalIndex(rules: .builtin, dictionaries: [:])
         try await index.apply(inputs(["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"]).map { .upsert($0) })
         let seriesID = try #require(await index.proposal(for: "000")?.seriesID)
         let delta = try await index.apply([.remove(id: "001")])
@@ -231,11 +229,11 @@ final class ProgressLog: @unchecked Sendable {
     }
 
     @Test func updateRulesMatchesBatch() async throws {
-        let index = ProposalIndex(rules: .builtin, vocabulary: Vocabulary())
+        let index = ProposalIndex(rules: .builtin, dictionaries: [:])
         try await index.apply(inputs(Self.names).map { .upsert($0) })
         let leaveEmpty = try #require(CompiledRules.builtin.applying(policies: ["unnumberedFirst": "leaveEmpty"]).rules)
-        let delta = try await index.update(rules: leaveEmpty, vocabulary: Vocabulary())
-        let batch = proposeSync(inputs(Self.names), rules: leaveEmpty, vocabulary: Vocabulary())
+        let delta = try await index.update(rules: leaveEmpty, dictionaries: [:])
+        let batch = proposeSync(inputs(Self.names), rules: leaveEmpty, dictionaries: [:])
         #expect(await index.snapshot().proposals == batch.proposals)
         #expect(!delta.changed.isEmpty)
     }

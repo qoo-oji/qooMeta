@@ -1,40 +1,70 @@
 {
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 2,
-  "revision": "2026.09.19",
-  "reservedWords": {
-    "@genre": { "engine": "@mediatype", "field": "genre" },
-    "@event": { "engine": "@event", "field": "event" },
-    "@circle": { "engine": "@studio", "field": "circle" },
-    "@author": { "engine": "@author", "field": "authors", "split": ["、", ",", "，", "&", "＆", "/", "／"] },
-    "@title": { "engine": "@title", "field": "title" },
-    "@relation": { "engine": "@genre", "field": "relation" },
-    "@keywordA": { "engine": "@keyword", "field": "keyword" }
-  },
-  "profiles": [
-    {
-      "id": "doujinshi",
-      "delimiters": [
-        ["[", "]"],
-        ["(", ")"]
-      ],
-      "protectedTokens": ["\\((19[0-9]{2})\\)", "\\((20[0-9]{2})\\)", "\\((結|終|完|完結|完全版)\\)"],
-      "formats": [
-        "(@genre) [@circle (@author)] @title (@relation) [@keywordA]",
-        "(@genre) [@circle (@author)] @title (@relation)", "(@genre) [@circle (@author)] @title [@keywordA]",
-        "(@genre) [@circle (@author)] @title", "(@genre) [@circle] @title (@relation) [@keywordA]",
-        "(@genre) [@circle] @title (@relation)", "(@genre) [@circle] @title [@keywordA]",
-        "(@genre) [@circle] @title", "(@event) [@circle (@author)] @title (@relation) [@keywordA]",
-        "(@event) [@circle (@author)] @title (@relation)", "(@event) [@circle (@author)] @title [@keywordA]",
-        "(@event) [@circle (@author)] @title", "(@event) [@circle] @title (@relation) [@keywordA]",
-        "(@event) [@circle] @title (@relation)", "(@event) [@circle] @title [@keywordA]",
-        "(@event) [@circle] @title", "[@circle] @title (@relation) [@keywordA]", "[@circle] @title (@relation)",
-        "[@circle] @title [@keywordA]", "[@circle] @title"
-      ]
-    }
+  "schemaVersion": 3,
+  "revision": "2026.09.20",
+  "separators": [
+    ",",
+    "，",
+    "、"
   ],
-  "fallback": { "simpleBrackets": { "enabled": true } },
+  "defaultPreset": "mixed",
+  "presets": {
+    "mixed": [
+      "(@genre) [@author (@author)] @title (@volume) [@info]",
+      "(@genre) [@author (@author)] @title (@volume)",
+      "(@genre) [@author (@author)] @title (@source) [@info]",
+      "(@genre) [@author (@author)] @title (@source)",
+      "(@genre) [@author (@author)] @title [@info]",
+      "(@genre) [@author (@author)] @title",
+      "(@genre) [@author] @title (@volume) [@info]",
+      "(@genre) [@author] @title (@volume)",
+      "(@genre) [@author] @title (@source) [@info]",
+      "(@genre) [@author] @title (@source)",
+      "(@genre) [@author] @title [@info]",
+      "(@genre) [@author] @title",
+      "[@author (@author)] @title (@volume) [@info]",
+      "[@author (@author)] @title (@volume)",
+      "[@author (@author)] @title (@source) [@info]",
+      "[@author (@author)] @title (@source)",
+      "[@author (@author)] @title [@info]",
+      "[@author (@author)] @title",
+      "[@author] @title (@volume) [@info]",
+      "[@author] @title (@volume)",
+      "[@author] @title (@source) [@info]",
+      "[@author] @title (@source)",
+      "[@author] @title [@info]",
+      "[@author] @title"
+    ],
+    "doujinshi": [
+      "(@genre) [@author (@author)] @title (@source) [@info]",
+      "(@genre) [@author (@author)] @title (@source)",
+      "(@genre) [@author (@author)] @title [@info]",
+      "(@genre) [@author (@author)] @title",
+      "(@genre) [@author] @title (@source) [@info]",
+      "(@genre) [@author] @title (@source)",
+      "(@genre) [@author] @title [@info]",
+      "(@genre) [@author] @title",
+      "[@author (@author)] @title (@source) [@info]",
+      "[@author (@author)] @title (@source)",
+      "[@author (@author)] @title [@info]",
+      "[@author (@author)] @title",
+      "[@author] @title (@source) [@info]",
+      "[@author] @title (@source)",
+      "[@author] @title [@info]",
+      "[@author] @title"
+    ],
+    "commercial": [
+      "(@genre) [@author] @title (@volume) [@info]",
+      "(@genre) [@author] @title (@volume)",
+      "(@genre) [@author] @title [@info]",
+      "(@genre) [@author] @title",
+      "[@author] @title (@volume) [@info]",
+      "[@author] @title (@volume)",
+      "[@author] @title [@info]",
+      "[@author] @title"
+    ]
+  },
   "retiredIDs": [],
   "aliases": {}
 }

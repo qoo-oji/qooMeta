@@ -19,19 +19,6 @@ public struct WordSet: Sendable, Hashable {
     func contains(_ word: String) -> Bool { words.contains(word) }
 }
 
-/// 利用者ごとの語彙と辞書。蔵書の語を含むので、利用側の設定に置く。
-public struct Vocabulary: Sendable, Hashable {
-    /// 先頭の括弧のうち、本の種別とみなす語。
-    public var genres: [String]
-    /// 規則が名前で指す辞書(`"english"` など)。
-    public var dictionaries: [String: WordSet]
-
-    public init(genres: [String] = [], dictionaries: [String: WordSet] = [:]) {
-        self.genres = genres
-        self.dictionaries = dictionaries
-    }
-}
-
 // MARK: - 入力
 
 public struct BookInput: Sendable, Hashable {
@@ -39,14 +26,16 @@ public struct BookInput: Sendable, Hashable {
     public var id: String
     /// 拡張子を除いたファイル名(またはフォルダ名)。
     public var name: String
-    /// 入っているフォルダ名(近い順、任意)。サークルの無い名前は、いちばん近いフォルダが書き手になる。
-    public var folders: [String]
     public var confirmation: Confirmation
+    /// どの型の並び(プリセット)で読むか。nil なら既定。**フォルダごとに使い分けられる**ように、本ごとに持つ
+    /// (2026-09-20、利用者の指示。商業誌と同人誌が混ざったフォルダ構成のため)。どのフォルダにどれを使うかは利用側が決める。
+    public var preset: String?
 
-    public init(id: String, name: String, folders: [String] = [], confirmation: Confirmation = .none) {
+    /// フォルダ名は読まない(2026-09-19 決定。3 つのアプリはどれも読まない)。フォルダは、プリセットを選ぶ手がかりにだけ使う。
+    public init(id: String, name: String, preset: String? = nil, confirmation: Confirmation = .none) {
         self.id = id
         self.name = name
-        self.folders = folders
+        self.preset = preset
         self.confirmation = confirmation
     }
 }
@@ -69,24 +58,30 @@ public enum Confirmation: Sendable, Hashable, Codable {
     }
 }
 
+/// 確定した欄の値(書いていない欄は未確定)。並びの欄は値の並び、1 つの値の欄は先頭だけを使う。
 public struct ConfirmedFields: Sendable, Hashable, Codable {
-    public var circle: String?, authors: [String]?, title: String?, relation: String?, genre: String?
+    public var values: [BookMetadata.Field: [String]]
 
-    public init(circle: String? = nil, authors: [String]? = nil, title: String? = nil, relation: String? = nil,
-                genre: String? = nil) {
-        self.circle = circle
-        self.authors = authors
-        self.title = title
-        self.relation = relation
-        self.genre = genre
+    public init(_ values: [BookMetadata.Field: [String]] = [:]) {
+        self.values = values
+    }
+
+    public subscript(field: BookMetadata.Field) -> [String]? {
+        get { values[field] }
+        set { values[field] = newValue }
+    }
+
+    /// 確定した欄を metadata へ重ねる。
+    public func applied(to metadata: BookMetadata) -> BookMetadata {
+        var result = metadata
+        for (field, value) in values { result.set(field, to: value) }
+        return result
     }
 }
 
 /// 入力の上限。細工された名前(極端に長い、大量のフォルダ)で計算を止められないようにする。
 public struct InputLimits: Sendable, Hashable {
     public var maxNameLength = 1_000
-    public var maxFolders = 32
-    public var maxFolderNameLength = 1_000
     public var maxBooks = 1_000_000
 
     public init() {}
@@ -95,8 +90,7 @@ public struct InputLimits: Sendable, Hashable {
 
 /// 扱わなかった入力。
 public struct InputIssue: Sendable, Hashable {
-    public enum Reason: String, Sendable, Hashable { case emptyName, nameTooLong, tooManyFolders, folderNameTooLong,
-                                                          duplicateID, tooManyBooks }
+    public enum Reason: String, Sendable, Hashable { case emptyName, nameTooLong, duplicateID, tooManyBooks }
     public let id: String
     public let reason: Reason
 }
@@ -114,32 +108,12 @@ public struct ProposalOptions: Sendable, Hashable {
 }
 
 public struct ProposalProgress: Sendable, Hashable {
-    /// 計算を終えた単位(書き手 + 本の種別)の数と、全体の数。
+    /// 計算を終えた単位(書き手 + ジャンル)の数と、全体の数。
     public let completedUnits: Int
     public let totalUnits: Int
 }
 
 // MARK: - 出力
-
-/// ファイル名を欄に分けた結果。
-public struct ParsedName: Sendable, Hashable {
-    public var genre: String?, event: String?, circle: String?, authors: [String]
-    /// タイトル(版・入手経路の印を含む、ファイル名のとおりの表記)。
-    public var title: String
-    public var relation: String?, keyword: String?
-    public var editions: [String], sources: [String]
-    public var format: FormatMatch
-    /// 1 冊だけで読める巻(「X 第3巻」)。シリーズ名は推定しない。
-    public var standaloneVolume: Volume?
-}
-
-/// どのフォーマットで読めたか。
-public enum FormatMatch: Sendable, Hashable {
-    /// プロファイルの ID と、その中のフォーマットの番号(0 から)。
-    case format(profile: String, index: Int)
-    /// どのフォーマットにも一致せず、括弧の位置だけで読んだ(`simpleBrackets`)か、名前全体をタイトルにした(`wholeName`)。
-    case fallback(String)
-}
 
 public struct Volume: Sendable, Hashable {
     /// 表記(「36-37」「上」「後編1」)。
@@ -171,9 +145,11 @@ public struct BookProposal: Sendable, Hashable {
     public let id: String
     /// 入力の名前(並べ替え「ファイル名順」に使う)。
     public let name: String
-    public let parsed: ParsedName
+    /// 名前を型で読んだ結果(欄・一致した型・名前のどこがどの欄か)。確定した欄は重ねていない。
+    public let reading: FormatReading
+    /// 提案の欄(読んだ欄 + 確定した欄 + 中核が導いたシリーズと巻数)。
+    public let metadata: BookMetadata
     public let seriesID: SeriesID?
-    public let volume: Volume?
     public let flags: Set<Flag>
 }
 

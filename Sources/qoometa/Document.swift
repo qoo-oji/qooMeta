@@ -42,8 +42,34 @@ struct ScanDocument: Codable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 
+    /// フォルダごとに使う型の並び(プリセット)。走査の起点からの相対パスの頭が合うものを使う。
+    /// **蔵書のフォルダ名を含む**ので、リポジトリの外のファイルから読む(`--presets`)。
+    struct PresetMap: Sendable {
+        /// 相対パスの頭 → プリセットの名前(長い頭から先に見る)。
+        var byPrefix: [(prefix: String, preset: String)] = []
+        var fallback: String?
+
+        static func load(_ path: String) throws -> PresetMap {
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw CLIError("プリセットの割り当てファイルはオブジェクトで書きます")
+            }
+            var map = PresetMap()
+            map.fallback = o["default"] as? String
+            for (prefix, preset) in (o["folders"] as? [String: String] ?? [:]) {
+                map.byPrefix.append((prefix, preset))
+            }
+            map.byPrefix.sort { $0.prefix.count > $1.prefix.count }
+            return map
+        }
+
+        func preset(for relativePath: String) -> String? {
+            byPrefix.first { relativePath == $0.prefix || relativePath.hasPrefix($0.prefix + "/") }?.preset ?? fallback
+        }
+    }
+
     /// 本の入力。`useAI` なら、端末内モデルの判定を確定した内容として渡す(確定した名前は錨になる)。
-    func inputs(useAI: Bool, rulesOnly: ProposalSet? = nil) -> [BookInput] {
+    func inputs(useAI: Bool, rulesOnly: ProposalSet? = nil, presets: PresetMap? = nil) -> [BookInput] {
         var confirmations: [String: Confirmation] = [:]
         if useAI, let rulesOnly {
             let seriesByMembers = Dictionary(rulesOnly.series.map { ($0.memberIDs.sorted(), $0) },
@@ -53,23 +79,30 @@ struct ScanDocument: Codable {
                 confirmations.merge(verdict.confirmations(for: series)) { a, _ in a }
             }
         }
-        return files.map { $0.bookInput(confirmation: confirmations[$0.relativePath] ?? .none) }
+        return files.map { file in
+            var input = file.bookInput(confirmation: confirmations[file.relativePath] ?? .none)
+            input.preset = presets?.preset(for: file.relativePath)
+            return input
+        }
     }
 }
 
 /// 提案を計算する道具一式(規則・語彙)。
 struct Proposer {
     let rules: CompiledRules
-    let vocabulary: Vocabulary
+    let dictionaries: [String: WordSet]
+    /// フォルダごとのプリセットの割り当て(`--presets`)。無ければ既定のプリセットで読む。
+    var presets: ScanDocument.PresetMap?
     /// 説明(組になりかけた相手など)も作るか(見直し表のため)。
     var explanations = false
 
     /// 規則だけの提案と、端末内モデルの判定を反映した提案。
     func proposals(_ doc: ScanDocument, useAI: Bool) -> (rulesOnly: ProposalSet, final: ProposalSet) {
         let options = ProposalOptions(explanations: explanations)
-        let rulesOnly = proposeSync(doc.inputs(useAI: false), rules: rules, vocabulary: vocabulary, options: options)
+        let rulesOnly = proposeSync(doc.inputs(useAI: false, presets: presets), rules: rules, dictionaries: dictionaries,
+                                    options: options)
         guard useAI, doc.judgements.contains(where: { $0.verdict != nil }) else { return (rulesOnly, rulesOnly) }
-        return (rulesOnly, proposeSync(doc.inputs(useAI: true, rulesOnly: rulesOnly), rules: rules, vocabulary: vocabulary,
-                                       options: options))
+        return (rulesOnly, proposeSync(doc.inputs(useAI: true, rulesOnly: rulesOnly, presets: presets), rules: rules,
+                                       dictionaries: dictionaries, options: options))
     }
 }

@@ -16,7 +16,9 @@ import QooMetaRules
     }
 
     static func diff(_ body: String, kind: String = "qoometa.series-rules") -> String {
-        #"{ "kind": "\#(kind)", "schemaVersion": 2, "base": "builtin", "# + body + " }"
+        // 形式の版はファイルごと(filename-formats は第 3 版)。
+        let version = kind == "qoometa.filename-formats" ? 3 : 2
+        return #"{ "kind": "\#(kind)", "schemaVersion": \#(version), "base": "builtin", "# + body + " }"
     }
 
     /// 同梱の既定値を JSON のまま書き換えたもの(廃止した ID・別名のような、今の既定値に無い形を試すため)。
@@ -33,7 +35,8 @@ import QooMetaRules
         let rules = try #require(c.rules)
         #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .greek, .roman, .position])
         #expect(rules.series.grouping.minPrefix == 4)
-        #expect(rules.formats.profiles.map(\.id) == ["doujinshi"])
+        #expect(rules.formats[nil].formats.count == 24)
+        #expect(rules.formats.names == ["commercial", "doujinshi", "mixed"])
         #expect(rules.changedPaths.isEmpty)
     }
 
@@ -134,7 +137,7 @@ import QooMetaRules
             BookInput(id: "\($0.offset)", name: $0.element)
         }
         let firstBookSeries = [CompiledRules.builtin, separate].map { rules -> String in
-            let set = proposeSync(inputs, rules: rules, vocabulary: Vocabulary())
+            let set = proposeSync(inputs, rules: rules, dictionaries: [:])
             return set["0"]?.seriesID.flatMap { set.series($0)?.name } ?? ""
         }
         #expect(firstBookSeries == ["月影", ""])
@@ -192,20 +195,21 @@ import QooMetaRules
         { "kind": "qoometa.rules-bundle", "schemaVersion": 2, "base": "builtin",
           "seriesRules": { "grouping": { "sharedPrefix": { "minPrefix": 5 } } },
           "filenameFormats": {
-            "profiles": { "doujinshi": { "formats": { "$add": ["[@circle] @title {@keywordA}"], "at": "end" } } },
-            "reservedWords": { "@author": { "split": { "$add": ["・"] } } }
+            "presets": { "mixed": { "$add": ["@title - @author"], "at": "end" } },
+            "separators": { "$add": ["・"] }
           } }
         """)
         let rules = try #require(c.rules, "\(c.errors)")
         #expect(rules.series.grouping.minPrefix == 5)
-        #expect(rules.formats.profiles[0].formats.last == "[@circle] @title {@keywordA}")
-        #expect(rules.formats.authorSeparators.contains("・"))
+        #expect(rules.formats[nil].formats.last?.text == "@title - @author")
+        #expect(rules.formats[nil].separators.contains("・"))
     }
 
-    @Test func badFormatsAreReportedByProfile() {
-        let c = Self.compile(Self.diff(#""profiles": { "doujinshi": { "formats": { "$add": ["[@circle] @titl"] } } }"#,
+    @Test func badFormatsAreReportedByIndex() {
+        // 予約語ではない `@titl` は、型の番号付きで誤りになる。
+        let c = Self.compile(Self.diff(#""presets": { "mixed": { "$add": ["[@author] @titl"] } }"#,
                                        kind: "qoometa.filename-formats"))
-        #expect(c.errors.map(\.path) == ["profiles.doujinshi.formats[0]"])
+        #expect(c.errors.map(\.path) == ["presets.mixed[0]"])
     }
 
     @Test func contentHashFollowsTheContentOnly() throws {

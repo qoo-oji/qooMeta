@@ -21,8 +21,8 @@ public actor ProposalIndex {
     private var state = State()
     private var cachedSnapshot: ProposalSet?
 
-    public init(rules: CompiledRules, vocabulary: Vocabulary, options: ProposalOptions = .default) {
-        engine = RuleEngine(rules: rules, vocabulary: vocabulary)
+    public init(rules: CompiledRules, dictionaries: [String: WordSet], options: ProposalOptions = .default) {
+        engine = RuleEngine(rules: rules, dictionaries: dictionaries)
         self.options = options
     }
 
@@ -42,8 +42,8 @@ public actor ProposalIndex {
 
     /// 規則・語彙を替える。すべての本を読み直す(単位が変わりうるため)。
     @discardableResult
-    public func update(rules: CompiledRules, vocabulary: Vocabulary) throws(CancellationError) -> ProposalDelta {
-        let newEngine = RuleEngine(rules: rules, vocabulary: vocabulary)
+    public func update(rules: CompiledRules, dictionaries: [String: WordSet]) throws(CancellationError) -> ProposalDelta {
+        let newEngine = RuleEngine(rules: rules, dictionaries: dictionaries)
         let inputs = state.books.values.sorted { $0.core.order < $1.core.order }.map(\.input)
         // 扱わなかった入力の理由は上限だけで決まり、規則には依らないので、そのまま持ち越す。
         var fresh = State()

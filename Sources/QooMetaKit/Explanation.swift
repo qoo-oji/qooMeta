@@ -67,12 +67,12 @@ extension ProposalSet {
     /// その時点の全体からここで数える(docs/api.md「変えた分だけ計算し直す」)。
     public func prefixCommonness(of id: SeriesID, rules: CompiledRules) -> Int {
         guard let series = series(id) else { return 0 }
-        let engine = RuleEngine(rules: rules, vocabulary: Vocabulary())
+        let engine = RuleEngine(rules: rules, dictionaries: [String: WordSet]())
         let prefix = engine.text.key(series.name)
         guard !prefix.isEmpty else { return 0 }
         var writers = Set<String>()
-        for book in proposals where engine.text.key(engine.markers.split(book.parsed.title).base).hasPrefix(prefix) {
-            writers.insert(engine.text.key(book.parsed.circle ?? ""))
+        for book in proposals where engine.text.key(engine.compareTitle(book.metadata.title).text).hasPrefix(prefix) {
+            writers.insert(engine.text.key(book.metadata.authors.first ?? ""))
         }
         return writers.count
     }
