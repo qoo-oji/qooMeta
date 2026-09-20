@@ -12,6 +12,10 @@
 使い方:
     scripts/dev/build-private-terms.py /Volumes/<ボリューム>/<蔵書のフォルダ> [別のフォルダ …]
     scripts/dev/build-private-terms.py --extra "追加の語" …   # 名前以外に禁じたい語
+    scripts/dev/build-private-terms.py --rebuild <蔵書のフォルダ> …   # 既にある一覧を捨てて作り直す
+
+**既にある一覧には足していく**(既定)。一覧には、ほかの蔵書や qooViewer の一覧から入れた語も入っているので、
+フォルダを 1 つ走査し直しただけで、それらが消えてはいけない ―― 消えても検査は通ってしまい、気づけない。
 
 読むだけで、蔵書には一切書き込まない。走査するのはフォルダ名とファイル名だけ(書庫の中身は開かない)。
 自動で足すもの: 指定したフォルダの上位のフォルダ名(ボリューム名は除く)、ホームフォルダのユーザー名、
@@ -70,7 +74,8 @@ def main() -> int:
     parser.add_argument("roots", nargs="*", help="蔵書のフォルダ(読み取りのみ)")
     parser.add_argument("--extra", action="append", default=[], help="名前以外に禁じたい語")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help=f"書き出し先(既定: {DEFAULT_OUTPUT})")
-    parser.add_argument("--append", action="store_true", help="既存の一覧に足す(既定は作り直す)")
+    parser.add_argument("--rebuild", action="store_true", help="既にある一覧を捨てて作り直す(既定は足していく)")
+    parser.add_argument("--append", action="store_true", help="(既定になったので、付けても付けなくても同じ)")
     args = parser.parse_args()
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -86,17 +91,26 @@ def main() -> int:
     repo_name = normalized(os.path.basename(repo_root))
     terms = {t for t in terms if t and is_meaningful(t) and t != repo_name and t != "qooViewer"}
 
-    if args.append and os.path.exists(args.output):
+    kept = 0
+    if not args.rebuild and os.path.exists(args.output):
         with open(args.output, encoding="utf-8") as f:
-            terms.update(line.rstrip("\n") for line in f if line and not line.startswith("#"))
+            existing = {line.rstrip("\n") for line in f if line.strip() and not line.startswith("#")}
+        kept = len(existing - terms)
+        terms |= existing
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
+    # 別の名前で書き終えてから入れ替える。書いている途中で止まっても、半分だけの一覧が残らない
+    # (git hook は一覧が「ある」ことしか見ないので、欠けた一覧でも検査は通ってしまう)。
+    temporary = args.output + ".writing"
+    with open(temporary, "w", encoding="utf-8") as f:
         f.write("# qooMeta: リポジトリに現れてはいけない語(scripts/dev/build-private-terms.py が生成)\n")
         f.write("# このファイルはリポジトリの外に置く。1 行 1 語。# で始まる行は無視される。\n")
         for term in sorted(terms):
             f.write(term + "\n")
-    print(f"{len(terms)} 語を書き出した: {args.output}")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temporary, args.output)
+    print(f"{len(terms)} 語を書き出した(前からの語 {kept}): {args.output}")
     return 0
 
 

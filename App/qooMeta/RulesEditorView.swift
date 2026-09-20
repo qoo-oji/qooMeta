@@ -1372,6 +1372,12 @@ struct DiffPane: View {
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "qooMeta rule changes.json".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? editing.settings.changes.data(half).write(to: url, options: .atomic)
+        do {
+            try editing.settings.changes.data(half).write(to: url, options: .atomic)
+            message = "Written".ui
+        } catch {
+            // 書けなかったことを黙っていない(持っていくつもりのファイルが、実は無いことになる)。
+            editing.errors = [error.localizedDescription]
+        }
     }
 }

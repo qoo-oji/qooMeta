@@ -234,43 +234,53 @@ struct SeriesGrouper: Sendable {
             var headGroups: [(key: String, members: [(id: Int, text: ComparableText, headLength: Int)])] = []
             // 辞書の並びはプロセスごとに変わるので、キーの順に並べてから使う。下の「1 冊だけの頭の組を移す」処理は
             // 組の並びで結果が変わりうる(同じ入力なら毎回同じ結果にする。api.md「方針」の 5)。
+            // **頭の組は、鍵で引く。** 組と本を総当たりで見比べると、冊数の 2 乗の時間がかかる。どの型にも合わない名前は
+            // 書き手が空で、蔵書の全体が 1 つの単位になるので、2 万冊で 25 秒かかっていた(2026-09-21 の監査)。
+            // 本の鍵の頭を長いほうから順に切り出して引けば、1 冊あたり鍵の長さぶんで済み、結果は同じ。
+            let restByKey = Dictionary(grouping: rest.indices) { String(rest[$0].text.key) }
+            var movedFromRest = Set<Int>()
             for (key, members) in byHead.sorted(by: { $0.key < $1.key }) {
                 // 巻の無い本(「X」)が同じ頭なら、その組に入れる(1 巻目に番号が無いことは多い)。
                 var members = members
-                rest.removeAll { item in
-                    guard String(item.text.key) == key else { return false }
-                    members.append((item.id, item.text, item.text.key.count))
-                    return true
+                for i in restByKey[key] ?? [] {
+                    members.append((rest[i].id, rest[i].text, rest[i].text.key.count))
+                    movedFromRest.insert(i)
                 }
                 headGroups.append((key, members))
+            }
+            if !movedFromRest.isEmpty { rest = rest.indices.filter { !movedFromRest.contains($0) }.map { rest[$0] } }
+            /// 本の鍵の頭に当たる組のうち、`accepts` が通す、いちばん長い頭のもの(`below` より短い頭だけを見る)。
+            func longestHead(of text: ComparableText, below limit: Int, in index: [String: Int],
+                             where accepts: (Int) -> Bool) -> Int? {
+                let chars = Array(String(text.key))
+                for length in stride(from: min(limit - 1, chars.count), through: 1, by: -1) {
+                    if let h = index[String(chars[..<length])], accepts(length) { return h }
+                }
+                return nil
             }
             // 1 冊だけの頭の組は、もっと短い頭の組に語の切れ目で当たるなら、そちらへ移す。
             // 「X2～副題 1～」のように末尾の別の番号を巻と読んで長い頭になった本を、「X」の組へ戻すため。
             // 長い頭から順に見る(移す先がまだ移されていないうちに。並びで結果が変わらないように)。
+            let keyCounts = headGroups.map(\.key.count)
             let longestFirst = headGroups.indices.sorted {
-                headGroups[$0].key.count != headGroups[$1].key.count
-                    ? headGroups[$0].key.count > headGroups[$1].key.count : headGroups[$0].key < headGroups[$1].key
+                keyCounts[$0] != keyCounts[$1] ? keyCounts[$0] > keyCounts[$1] : headGroups[$0].key < headGroups[$1].key
             }
+            let headIndex = Dictionary(headGroups.indices.map { (headGroups[$0].key, $0) }, uniquingKeysWith: { a, _ in a })
             for g in longestFirst where headGroups[g].members.count == 1 {
                 let m = headGroups[g].members[0]
-                let key = String(m.text.key)
-                guard let h = headGroups.indices
-                    .filter({ $0 != g && headGroups[$0].key.count < headGroups[g].key.count
-                        && key.hasPrefix(headGroups[$0].key) && Self.isCleanCut(m.text, at: headGroups[$0].key.count) })
-                    .max(by: { headGroups[$0].key.count < headGroups[$1].key.count }) else { continue }
-                headGroups[h].members.append((m.id, m.text, headGroups[h].key.count))
+                guard let h = longestHead(of: m.text, below: keyCounts[g], in: headIndex,
+                                          where: { Self.isCleanCut(m.text, at: $0) }) else { continue }
+                headGroups[h].members.append((m.id, m.text, keyCounts[h]))
                 headGroups[g].members = []
             }
             headGroups.removeAll { $0.members.isEmpty }
             // 副題付きの本(「X 〇〇編」「X 番外編」)は、頭が語の切れ目で一致する組へ入れる(いちばん長い頭)。
             if attachesSubtitledBooks {
-                let heads = headGroups.indices.sorted { headGroups[$0].key.count > headGroups[$1].key.count }
+                let attachIndex = Dictionary(headGroups.indices.map { (headGroups[$0].key, $0) }, uniquingKeysWith: { a, _ in a })
                 rest.removeAll { item in
-                    let key = String(item.text.key)
-                    guard let h = heads.first(where: { i in
-                        guard key.hasPrefix(headGroups[i].key) else { return false }
-                        return Self.isCleanCut(item.text, at: headGroups[i].key.count)
-                            || (attachesAcrossScript && Self.startsNewWord(item.text, at: headGroups[i].key.count))
+                    guard let h = longestHead(of: item.text, below: Int.max, in: attachIndex, where: { length in
+                        Self.isCleanCut(item.text, at: length)
+                            || (attachesAcrossScript && Self.startsNewWord(item.text, at: length))
                     }) else { return false }
                     headGroups[h].members.append((item.id, item.text, headGroups[h].key.count))
                     log?.apply(Self.isCleanCut(item.text, at: headGroups[h].key.count)
@@ -365,15 +375,32 @@ struct SeriesGrouper: Sendable {
         groups = splitByRelation(groups, books: books)
         groups = dissolveSameWorkOnly(groups, books: books)
         // ありふれた言葉の疑い: この前半部分で始まるタイトルを持つ書き手の数。
+        // 鍵は並べておき、前半部分の位置を二分探索で探す(組の数 × 冊数の総当たりにしない。理由は上の「頭の組は、鍵で引く」)。
         let titleKeysByWriter = Dictionary(grouping: books, by: \.writerKey)
-            .mapValues { $0.map { String(text.comparable($0.compareTitle).key) } }
+            .mapValues { $0.map { String(text.comparable($0.compareTitle).key) }.sorted() }
         for i in groups.indices {
             let prefix = String(text.comparable(groups[i].ruleName).key)
             groups[i].writersSharingPrefix = prefix.isEmpty ? 0 : titleKeysByWriter.values
-                .filter { keys in keys.contains { $0.hasPrefix(prefix) } }.count
+                .filter { Self.anyHasPrefix(prefix, inSorted: $0) }.count
             groups[i].id = i + 1
         }
         return groups
+    }
+
+    /// 並べてある鍵の中に、この前半部分で始まるものがあるか。前半部分で始まる鍵は、並びの中でひと続きになる
+    /// (文字列の順は、正規化した符号の辞書順)。その先頭を二分探索で見つけ、続くあいだだけ確かめる。
+    static func anyHasPrefix(_ prefix: String, inSorted keys: [String]) -> Bool {
+        var low = 0, high = keys.count
+        while low < high {
+            let middle = (low + high) / 2
+            if keys[middle] < prefix { low = middle + 1 } else { high = middle }
+        }
+        var i = low
+        while i < keys.count, keys[i].unicodeScalars.starts(with: prefix.unicodeScalars) {
+            if keys[i].hasPrefix(prefix) { return true }
+            i += 1
+        }
+        return false
     }
 
     /// その本の名前の頭に当たる組(いちばん長い名前のもの)。総集編の語が題名の途中にあるだけの本を、

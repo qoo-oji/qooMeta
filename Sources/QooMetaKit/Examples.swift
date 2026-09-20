@@ -302,7 +302,7 @@ public enum ExampleRunner {
         switch v {
         case .null: "null"
         case .bool(let b): b ? "true" : "false"
-        case .number(let n): n == n.rounded() ? String(Int(n)) : String(n)
+        case .number(let n): BookMetadata.volumeSortText(n)
         case .string(let s): "\"\(s)\""
         case .array(let a): "[" + a.map(show).joined(separator: ", ") + "]"
         case .object: "{…}"

@@ -35,8 +35,7 @@ struct WorkspaceView: View {
                 Button { showsDetail.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
             }
         }
-        // 規則の窓で変えた内容は、開いている一覧にすぐ効かせる(すべての本を読み直す)。
-        .onChange(of: settings.rules.contentHash) { Task { await workspace.setRules(settings.rules) } }
+        // 規則の窓で変えた内容を一覧へ届けるのは FlowView(この段が出ていないあいだの変更も届けるため)。
         .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta (unsaved changes)" : "qooMeta")
         .navigationSubtitle("%1$lld / %2$lld books".ui(workspace.visibleBooks.count, workspace.books.count))
     }

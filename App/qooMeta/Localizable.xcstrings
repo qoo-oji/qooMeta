@@ -2015,6 +2015,40 @@
         }
       }
     },
+    "Close without saving": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close without saving"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存せずに閉じる"
+          }
+        }
+      }
+    },
+    "Close without saving?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close without saving?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存せずに閉じますか?"
+          }
+        }
+      }
+    },
     "Closing bracket → opening bracket": {
       "extractionState": "manual",
       "localizations": {
@@ -2538,6 +2572,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "算用数字(3・第3巻・Vol.3・36-37)"
+          }
+        }
+      }
+    },
+    "Discard and open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard and open"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "破棄して開く"
           }
         }
       }
@@ -5126,6 +5177,23 @@
         }
       }
     },
+    "Open another workfile?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open another workfile?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別の作業ファイルを開きますか?"
+          }
+        }
+      }
+    },
     "Ordered": {
       "extractionState": "manual",
       "localizations": {
@@ -5156,6 +5224,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "そのほか"
+          }
+        }
+      }
+    },
+    "Part of the settings file could not be read and was skipped. The file as it was is kept as “%@”.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part of the settings file could not be read and was skipped. The file as it was is kept as “%@”."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定ファイルの一部を読めなかったので、そこを飛ばしました。元のファイルは「%@」として残してあります。"
           }
         }
       }
@@ -5394,6 +5479,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "すべてのウインドウを閉じたら終了"
+          }
+        }
+      }
+    },
+    "Quit without saving": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit without saving"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存せずに終了"
+          }
+        }
+      }
+    },
+    "Quit without saving?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit without saving?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存せずに終了しますか?"
           }
         }
       }
@@ -7149,6 +7268,57 @@
         }
       }
     },
+    "The settings could not be saved: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The settings could not be saved: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定を保存できませんでした: %@"
+          }
+        }
+      }
+    },
+    "The settings file could not be read, and no copy of it could be kept. qooMeta will not overwrite it, so changes to the settings are not saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The settings file could not be read, and no copy of it could be kept. qooMeta will not overwrite it, so changes to the settings are not saved."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定ファイルを読めず、写しも残せませんでした。上書きしないので、設定の変更は保存されません。"
+          }
+        }
+      }
+    },
+    "The settings file could not be read, so qooMeta started with the defaults. The unreadable file was kept as “%@”.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The settings file could not be read, so qooMeta started with the defaults. The unreadable file was kept as “%@”."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定ファイルを読めなかったので、既定値で始めました。読めなかったファイルは「%@」として残してあります。"
+          }
+        }
+      }
+    },
     "The trailing parenthesis is the source work. A parenthesis inside the brackets holds the second author onwards.": {
       "extractionState": "manual",
       "localizations": {
@@ -7247,6 +7417,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存していない変更があります"
+          }
+        }
+      }
+    },
+    "There is a problem with the settings file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is a problem with the settings file"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定ファイルに問題があります"
           }
         }
       }
@@ -8777,6 +8964,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "書き出す…"
+          }
+        }
+      }
+    },
+    "Written": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Written"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書き出しました"
           }
         }
       }

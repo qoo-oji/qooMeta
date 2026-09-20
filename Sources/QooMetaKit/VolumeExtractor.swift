@@ -154,7 +154,9 @@ final class VolumeExtractor: Sendable {
 
     private func readMagazineIssue(_ s: String, _ ns: NSString, _ range: NSRange) -> Volume? {
         guard let m = Self.magazineIssue.firstMatch(in: s, range: range) else { return nil }
-        let year = Int(ns.substring(with: m.range(at: 1)))!
+        // 正規表現の `\d` は ASCII のほかの数字(アラビア・インド数字など)にも当たるが、`Int` は ASCII しか読まない。
+        // 読めなければ、号として読まない(決めつけて開くと、そこでアプリが落ちる)。
+        guard let year = Int(ns.substring(with: m.range(at: 1))) else { return nil }
         guard let issue = [2, 4, 5].lazy.compactMap({ i -> Int? in
             m.range(at: i).location == NSNotFound ? nil : Int(ns.substring(with: m.range(at: i)))
         }).first else { return nil }
@@ -279,7 +281,15 @@ final class VolumeExtractor: Sendable {
         // 位取りで書いた漢数字(「二〇」= 20、「二〇二五」= 2025)。十・百・千が 1 つも無く、2 文字以上なら桁として読む。
         // 数え上げの読み方だと「二〇」は 2 + 0 で 0 になり、読めない数になってしまう(2026-09-20、利用者の指摘)。
         if s.count >= 2, s.allSatisfy({ digits[$0] != nil }) {
-            let value = s.reduce(0) { $0 * 10 + digits[$1]! }
+            // 桁が Int に収まらない並び(「九」が 19 字以上)は数として読まない。あふれた掛け算はそこでアプリが落ちる
+            // ―― 名前は外から来るもので、長さを選べない(2026-09-21 の監査)。
+            var value = 0
+            for ch in s {
+                let (shifted, overflowed) = value.multipliedReportingOverflow(by: 10)
+                let (next, carried) = shifted.addingReportingOverflow(digits[ch] ?? 0)
+                guard !overflowed, !carried else { return nil }
+                value = next
+            }
             return value > 0 ? value : nil
         }
         var total = 0, current = 0

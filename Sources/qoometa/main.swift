@@ -84,10 +84,21 @@ struct CLIError: Error, CustomStringConvertible {
 }
 
 /// 名前を含むファイルを Git の作業ツリーの中へ書かせない(リポジトリへ紛れ込む事故を防ぐ)。
+///
+/// 併せて、**本のファイルやフォルダを出力先にさせない**。`--out` は確かめずに上書きするので、引数を取り違えると
+/// (`--out` に蔵書の中のファイルを書くと)本そのものが提案ファイルで置き換わる。qooMeta が本に触るのは読むときだけ。
 func checkedOutputURL(_ path: String, _ args: Arguments) throws -> URL {
     let url = URL(fileURLWithPath: path).standardizedFileURL
+    var isDirectory: ObjCBool = false
+    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+        throw CLIError("出力先がフォルダです: ファイルの名前まで指定してください")
+    }
+    if FolderScanner.bookFileExtensions.contains(url.pathExtension.lowercased()) {
+        throw CLIError("出力先が本のファイルの名前です(.\(url.pathExtension))。本を上書きしないよう、書き出しません")
+    }
     guard !args.flags.contains("allow-in-repo") else { return url }
-    var dir = url.deletingLastPathComponent()
+    // リンクを辿った先で確かめる(リポジトリの中を指すリンクの下へ書いても、作業ツリーの中に書いたことになる)。
+    var dir = url.deletingLastPathComponent().resolvingSymlinksInPath()
     while dir.path != "/" {
         if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
             throw CLIError("Git の作業ツリーの中へは書きません(蔵書の名前を含むため): 出力先を変えてください")

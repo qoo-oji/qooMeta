@@ -48,6 +48,15 @@ public struct BookMetadata: Sendable, Hashable, Codable {
         public var isList: Bool { self == .authors }
     }
 
+    /// 巻数(ソート用)を文字にする(整数なら小数点を付けない)。
+    ///
+    /// **`Int(value)` で直さない。** 名前の中の長い数字の並び(20 桁の番号など)も巻として読めるので、数は
+    /// Int の範囲を超えうる。範囲の外の Double を Int にすると、そこでアプリが落ちる(2026-09-21 の監査)。
+    public static func volumeSortText(_ value: Double) -> String {
+        if value == value.rounded(), let whole = Int(exactly: value) { return String(whole) }
+        return String(value)
+    }
+
     /// 欄の値。1 つの値の欄は、空なら空の並び(絞り込みの「(空)」)。
     public func values(_ field: Field) -> [String] {
         if field == .authors { return authors }

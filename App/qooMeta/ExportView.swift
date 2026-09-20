@@ -71,7 +71,8 @@ struct ExportView: View {
         .padding(16)
         .frame(maxWidth: 640, alignment: .leading)
         .frame(maxWidth: .infinity)
-        .task(id: "\(target.rawValue)\(mapping.slots.map(\.value.rawValue).sorted().joined())\(workspace.books.count)") {
+        // 規則が変われば欄の値も変わるので、数え直す(読み直しが済むのは `currentProposals` が待つ)。
+        .task(id: "\(target.rawValue)\(mapping.slots.map(\.value.rawValue).sorted().joined())\(workspace.books.count)\(workspace.rules.contentHash)") {
             await refresh()
         }
     }
@@ -105,7 +106,10 @@ struct ExportView: View {
                 }
                 try data.write(to: url, options: .atomic)
                 written = url
+                error = nil
             } catch {
+                // 前に書き出せた印を残さない(失敗したのに「書き出した」と読める)。
+                written = nil
                 self.error = String(describing: error)
             }
         }

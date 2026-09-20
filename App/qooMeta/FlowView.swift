@@ -11,6 +11,17 @@ import SwiftUI
 struct FlowView: View {
     @Bindable var model: AppModel
 
+    /// いまの一覧を捨てる前の確かめの言葉(何をしようとしているかで変える)。
+    private var discardTitle: LocalizedStringKey {
+        if case .openWorkfile = model.pendingDiscard { return "Open another workfile?" }
+        return "Start over with other books?"
+    }
+
+    private var discardAction: LocalizedStringKey {
+        if case .openWorkfile = model.pendingDiscard { return "Discard and open" }
+        return "Discard and start over"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             StepBar(current: model.step, furthest: model.furthestStep) { model.go(to: $0) }
@@ -33,14 +44,26 @@ struct FlowView: View {
         // 窓のツールバーの背景(すりガラス)が、段のバーより下まで掛かって表の見出しを塗り潰していた。
         // 段のバーが仕切りになるので、ツールバーの背景は隠す(2026-09-21、実機で確かめた)。
         .toolbarBackground(.hidden, for: .windowToolbar)
-        .confirmationDialog("Start over with other books?",
-                            isPresented: Binding(get: { model.pendingPick != nil },
-                                                 set: { if !$0 { model.pendingPick = nil } })) {
-            Button("Discard and start over", role: .destructive) { model.confirmPendingPick() }
+        // 規則の窓で変えた内容は、開いている一覧にすぐ効かせる(すべての本を読み直す)。**どの段にいても届ける**
+        // ―― 段 3 の画面に付けていたときは、段 2 や段 4 にいるあいだの変更が一覧へ届かず、古い規則で読んだ結果を
+        // そのまま書き出していた(2026-09-21 の監査)。一覧ができた時点でも 1 度届ける(組み立ての最中に変わった分)。
+        .task(id: RulesDelivery(rules: model.settings.rules.contentHash, workspace: model.workspace.map(ObjectIdentifier.init))) {
+            await model.workspace?.setRules(model.settings.rules)
+        }
+        .confirmationDialog(discardTitle,
+                            isPresented: Binding(get: { model.pendingDiscard != nil },
+                                                 set: { if !$0 { model.pendingDiscard = nil } })) {
+            Button(discardAction, role: .destructive) { model.confirmDiscarding() }
         } message: {
             Text("The corrections you have not saved are lost.")
         }
     }
+}
+
+/// 規則を一覧へ届け直すきっかけ(規則の中身か、一覧そのものが替わったとき)。
+private struct RulesDelivery: Hashable {
+    var rules: String
+    var workspace: ObjectIdentifier?
 }
 
 // MARK: - 段のバー

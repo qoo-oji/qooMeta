@@ -90,8 +90,7 @@ struct BookRow: Identifiable, Hashable, Sendable {
 
     /// 巻数(ソート用)の表示(空なら「-」)。
     var volumeSortText: String {
-        guard let n = metadata.volumeSort else { return "" }
-        return n == n.rounded() ? String(Int(n)) : String(n)
+        metadata.volumeSort.map(BookMetadata.volumeSortText) ?? ""
     }
 
     /// 並べ替えの鍵(組み立て済みのものを引くだけ)。
@@ -124,7 +123,9 @@ final class Workspace {
     var fileURL: URL?
     private(set) var hasUnsavedChanges = false
     /// 計算し直している最中か(大きな一覧では数秒かかる)。
-    private(set) var isWorking = false
+    var isWorking: Bool { working > 0 }
+    /// 終わっていない計算の数。真偽で持つと、先に終わった計算が、まだ走っている計算の印まで消してしまう。
+    private var working = 0
 
     /// フォルダごとの型の並びの割り当て。変えると、当たる本の名前を読み直す。
     private(set) var presets: Workfile.PresetAssignment
@@ -194,7 +195,10 @@ final class Workspace {
         folderIDs = Set(workfile.books.filter(\.isFolder).map(\.id))
         let all = workfile.inputs
         inputs = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        order = all.map(\.id)
+        // 同じ ID が 2 度書いてある作業ファイル(手で直したもの、重なりを除く前の版が書いたもの)でも、行は 1 つにする。
+        // 同じ ID の行が並ぶと、一覧(Table)の振る舞いが決まらない。
+        var seen = Set<String>()
+        order = all.map(\.id).filter { seen.insert($0).inserted }
         index = ProposalIndex(rules: rules, dictionaries: SystemDictionaries.all)
     }
 
@@ -220,27 +224,37 @@ final class Workspace {
     }
 
     /// 規則を替える(画面で方針や語の一覧を変えたとき)。すべての本を読み直す(単位が変わりうるため)。
+    ///
+    /// **本の修正と同じ列(`tail`)に並べる。** 別々に走らせると、読み直しの結果が、その最中に入った修正の表示を
+    /// 古い行で上書きしうる。書き出し(`currentProposals`)も列の終わりを待つので、読み直しの途中の提案を書き出さない。
     func setRules(_ rules: CompiledRules) async {
         guard rules.contentHash != self.rules.contentHash else { return }
         self.rules = rules
         formats = rules.formats
-        isWorking = true
-        await tail?.value
-        let confirmations = inputs.mapValues(\.confirmation)
-        books = await Task.detached { [index] in
-            try? await index.update(rules: rules, dictionaries: SystemDictionaries.all)
-            return await index.snapshot().proposals.map { BookRow($0, confirmation: confirmations[$0.id] ?? .none) }
-        }.value
-        dropStaleFilters()
-        refresh()
-        isWorking = false
+        let previous = tail
+        working += 1
+        let task = Task { [index] in
+            await previous?.value
+            // 前の修正が着いてからの値で行を作る。
+            let confirmations = self.inputs.mapValues(\.confirmation)
+            let rows = await Task.detached {
+                try? await index.update(rules: rules, dictionaries: SystemDictionaries.all)
+                return await index.snapshot().proposals.map { BookRow($0, confirmation: confirmations[$0.id] ?? .none) }
+            }.value
+            self.books = rows
+            self.dropStaleFilters()
+            self.refresh()
+            self.working -= 1
+        }
+        tail = task
+        await task.value
     }
 
     // MARK: - 計算
 
     /// 全冊を索引へ入れ直す(開いたとき・規則やプリセットを替えたとき)。
     private func recomputeAll() async {
-        isWorking = true
+        working += 1
         let all = order.compactMap { inputs[$0] }
         // **一覧の行も、計算し直しと同じ所(main の外)で組み立てる。** 1 万冊ぶんの行を main で作ると、
         // その間じゅう画面が止まる(2026-09-21、利用者の報告)。
@@ -251,7 +265,7 @@ final class Workspace {
         }.value
         dropStaleFilters()
         refresh()
-        isWorking = false
+        working -= 1
     }
 
     /// 変わった本だけを索引へ渡す。索引は影響のある単位だけを計算し直し、変わった提案を返す。
@@ -259,13 +273,12 @@ final class Workspace {
         let changes = changedIDs.compactMap { inputs[$0] }.map { BookChange.upsert($0) }
         guard !changes.isEmpty else { return }
         let previous = tail
-        isWorking = true
+        working += 1
         tail = Task { [index] in
             await previous?.value
             let delta = await Task.detached { try? await index.apply(changes) }.value
-            guard !Task.isCancelled else { return }
             if let delta { self.absorb(delta) }
-            self.isWorking = false
+            self.working -= 1
         }
     }
 
@@ -491,16 +504,18 @@ final class Workspace {
             updated.defaultPreset = name
         }
         guard updated != presets else { return }
-        let beforeInputs = inputs, beforePresets = presets
+        let beforePresets = presets
         presets = updated
         var changed: [String] = []
+        var previous: [String: BookInput] = [:]
         for id in order {
             let preset = presets.preset(for: id)
-            guard inputs[id]?.preset != preset else { continue }
+            guard let input = inputs[id], input.preset != preset else { continue }
+            previous[id] = input
             inputs[id]?.preset = preset
             changed.append(id)
         }
-        pushUndo("Change the format list".ui, beforeInputs, presets: beforePresets)
+        pushUndo("Change the format list".ui, previous, presets: beforePresets)
         hasUnsavedChanges = true
         push(changed)
     }
@@ -556,6 +571,9 @@ final class Workspace {
     // MARK: - 取り消し
 
     /// 取り消せる操作(名前と、その前の持ちもの)。操作の単位は 1 回のまとめて編集。
+    ///
+    /// **持つのは、その操作で変わった本の、前の入力だけ。** 全冊の入力を 1 手ごとに丸ごと持つと、1 万冊で 50 手ぶん
+    /// 百 MB に届き、冊数に比べて伸びる(2026-09-21 の監査)。本は足しも消しもしないので、変わった本だけで元に戻せる。
     private struct Step {
         let name: String
         let inputs: [String: BookInput]
@@ -572,17 +590,19 @@ final class Workspace {
 
     /// 本ごとの入力を書き換える操作を、取り消せる 1 歩として行う。
     private func edit(_ name: String, _ change: (inout BookInput) -> Void) {
-        let before = inputs
+        var previous: [String: BookInput] = [:]
         var changed: [String] = []
         for id in order {
-            guard var input = inputs[id] else { continue }
+            guard let before = inputs[id] else { continue }
+            var input = before
             change(&input)
-            guard input != inputs[id] else { continue }
+            guard input != before else { continue }
+            previous[id] = before
             inputs[id] = input
             changed.append(id)
         }
         guard !changed.isEmpty else { return }
-        pushUndo(name, before, presets: presets)
+        pushUndo(name, previous, presets: presets)
         hasUnsavedChanges = true
         push(changed)
     }
@@ -595,22 +615,26 @@ final class Workspace {
 
     func undo() {
         guard let step = undoSteps.popLast() else { return }
-        redoSteps.append(Step(name: step.name, inputs: inputs, presets: presets))
-        restore(step)
+        redoSteps.append(restore(step))
     }
 
     func redo() {
         guard let step = redoSteps.popLast() else { return }
-        undoSteps.append(Step(name: step.name, inputs: inputs, presets: presets))
-        restore(step)
+        undoSteps.append(restore(step))
     }
 
-    private func restore(_ step: Step) {
-        let changed = order.filter { inputs[$0] != step.inputs[$0] }
-        inputs = step.inputs
+    /// その操作の前へ戻し、逆向きの 1 歩(戻す前の値)を返す。
+    private func restore(_ step: Step) -> Step {
+        var current: [String: BookInput] = [:]
+        for (id, input) in step.inputs {
+            current[id] = inputs[id]
+            inputs[id] = input
+        }
+        let reverse = Step(name: step.name, inputs: current, presets: presets)
         presets = step.presets
         hasUnsavedChanges = true
-        push(changed)
+        push(order.filter { step.inputs[$0] != nil && current[$0] != step.inputs[$0] })
+        return reverse
     }
 }
 

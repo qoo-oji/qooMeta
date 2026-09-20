@@ -103,7 +103,7 @@ $Q rules show --rules <変更.json>                              # 既定値に�
 - 蔵書のフォルダ名・ファイル名から作った禁止語の一覧(リポジトリの外)と照合する検査を、git hook で必ず通します。
 
 ```bash
-scripts/dev/build-private-terms.py <蔵書のフォルダ> [別のフォルダ …]   # 禁止語の一覧を作る(語は表示しない)
+scripts/dev/build-private-terms.py <蔵書のフォルダ> [別のフォルダ …]   # 禁止語の一覧に足す(語は表示しない。作り直すのは --rebuild)
 scripts/dev/install-git-hooks.sh                                     # pre-commit / commit-msg / pre-push を有効にする
 scripts/ci/check-private-terms.sh --require-terms                   # 手で検査する
 ```

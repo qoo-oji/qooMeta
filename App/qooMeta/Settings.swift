@@ -106,8 +106,12 @@ final class AppSettings {
     }
 
     /// 規則の差分を入れ替える。読めたら効かせ、誤りがあれば既定のままにして理由を返す。
+    ///
+    /// `keepingUnreadable` は、設定ファイルから読むときだけ真にする: 組み立てられなかった差分も**文字のまま持ち続ける**。
+    /// 捨ててしまうと、次に何かを保存したときに空の差分で上書きされ、利用者の規則が黙って消える(版を上げて、前の差分が
+    /// 通らなくなったとき。2026-09-21 の監査)。持っていれば、差分の画面に理由と一緒に出るので、直すか戻すかを選べる。
     @discardableResult
-    func setRulesDiff(_ text: String) -> [String] {
+    func setRulesDiff(_ text: String, keepingUnreadable: Bool = false) -> [String] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             rulesDiff = ""
@@ -116,10 +120,14 @@ final class AppSettings {
             save()
             return []
         }
-        guard let builtIn = try? BuiltInRules.bundled() else { return ["The bundled rules could not be read".ui] }
+        guard let builtIn = try? BuiltInRules.bundled() else {
+            if keepingUnreadable { rulesDiff = trimmed }
+            return ["The bundled rules could not be read".ui]
+        }
         let compiled = CompiledRules.compile(RuleSources(builtIn: builtIn, userChanges: Data(trimmed.utf8)))
         guard let compiledRules = compiled.rules else {
             ruleIssues = compiled.errors.map(\.description)
+            if keepingUnreadable { rulesDiff = trimmed }
             return ruleIssues
         }
         rulesDiff = trimmed
@@ -136,28 +144,142 @@ final class AppSettings {
         var stamps: [Stamp] = []
         var mappings: [FieldMapping] = []
         var language: AppLanguage = .system
-        /// 古い設定ファイルには無いので、既定(残す側)で読む。
         var quitsWhenLastWindowCloses = false
+
+        init(rulesDiff: String, stamps: [Stamp], mappings: [FieldMapping], language: AppLanguage,
+             quitsWhenLastWindowCloses: Bool) {
+            self.rulesDiff = rulesDiff
+            self.stamps = stamps
+            self.mappings = mappings
+            self.language = language
+            self.quitsWhenLastWindowCloses = quitsWhenLastWindowCloses
+        }
+
+        /// **鍵が無くても、知らない値があっても、読める所だけを読む。** 自動で作られる読み方は、既定値のある欄でも鍵が
+        /// 無ければ全体を失敗にする。欄を足す前の設定ファイルや、新しい版が書いた値(知らない言語・書き出し先)で
+        /// 全体が読めなくなり、次の保存で規則の差分もスタンプも既定値に上書きされていた(2026-09-21 の監査)。
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            /// 鍵が無ければ既定値。鍵はあるのに読めなければ、既定値にしたうえで「読み落とした」と覚えておく。
+            var skipped = false
+            func read<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+                guard c.contains(key) else { return fallback }
+                if let value = try? c.decode(T.self, forKey: key) { return value }
+                skipped = true
+                return fallback
+            }
+            rulesDiff = read(.rulesDiff, "")
+            let readStamps = read(.stamps, [Lossy<Stamp>]()), readMappings = read(.mappings, [Lossy<FieldMapping>]())
+            stamps = readStamps.compactMap(\.value)
+            mappings = readMappings.compactMap(\.value)
+            language = read(.language, AppLanguage.system)
+            quitsWhenLastWindowCloses = read(.quitsWhenLastWindowCloses, false)
+            skippedSomething = skipped || stamps.count != readStamps.count || mappings.count != readMappings.count
+        }
+
+        /// 読めずに飛ばした所がある(新しい版が書いた値など)。保存する前に、元のファイルの写しを残す合図。
+        var skippedSomething = false
+
+        enum CodingKeys: String, CodingKey { case rulesDiff, stamps, mappings, language, quitsWhenLastWindowCloses }
     }
 
-    func load() {
-        guard let data = try? Data(contentsOf: Self.url), let stored = try? JSONDecoder().decode(Stored.self, from: data)
-        else { return }
-        stamps = stored.stamps
-        mappings = Dictionary(stored.mappings.map { ($0.target, $0) }, uniquingKeysWith: { a, _ in a })
-        language = stored.language
-        quitsWhenLastWindowCloses = stored.quitsWhenLastWindowCloses
-        setRulesDiff(stored.rulesDiff)
+    /// 並びの 1 件。読めない 1 件で、並びの全体を失敗にしない。
+    private struct Lossy<Value: Decodable>: Decodable {
+        var value: Value?
+        init(from decoder: any Decoder) throws { value = try? Value(from: decoder) }
     }
 
-    func save() {
+    /// 設定ファイルの読み書きで起きた問題。言葉にするのは画面に出すとき(起動の途中、言語を効かせる前に起きうるため)。
+    enum StorageIssue: Hashable {
+        /// 読めなかったので既定値で始めた。読めなかったファイルは、この名前で残してある。
+        case unreadableKept(String)
+        /// 一部だけ読めた(新しい版が書いた値などを飛ばした)。元のファイルは、この名前で残してある。
+        case partlyReadKept(String)
+        /// 読めず、写しも残せなかった。上書きしないので、設定の変更は保存されない。
+        case unreadableNotKept
+        case notSaved(String)
+    }
+
+    /// nil なら問題なし。
+    private(set) var storageIssue: StorageIssue?
+
+    /// 画面に出す文。
+    var storageIssueText: String? {
+        switch storageIssue {
+        case nil: nil
+        case .unreadableKept(let name):
+            "The settings file could not be read, so qooMeta started with the defaults. The unreadable file was kept as “%@”.".ui(name)
+        case .partlyReadKept(let name):
+            "Part of the settings file could not be read and was skipped. The file as it was is kept as “%@”.".ui(name)
+        case .unreadableNotKept:
+            "The settings file could not be read, and no copy of it could be kept. qooMeta will not overwrite it, so changes to the settings are not saved.".ui
+        case .notSaved(let reason): "The settings could not be saved: %@".ui(reason)
+        }
+    }
+
+    /// 読めなかった設定ファイルを、まだ退避できていない。このあいだは上書きしない(中身を失わないため)。
+    private var holdsSaving = false
+
+    func dismissStorageIssue() { storageIssue = nil }
+
+    func load() { load(from: Self.url) }
+
+    /// 設定ファイルを読む。**読めなかったファイルは、別の名前で残してから使い始める**(黙って既定値で上書きしない)。
+    func load(from url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            let stored = try JSONDecoder().decode(Stored.self, from: Data(contentsOf: url))
+            // 読めずに飛ばした所は、次の保存で消える。その前に、元のファイルの写しを残す。
+            if stored.skippedSomething { keepCopy(of: url, partly: true) }
+            stamps = stored.stamps
+            mappings = Dictionary(stored.mappings.map { ($0.target, $0) }, uniquingKeysWith: { a, _ in a })
+            language = stored.language
+            quitsWhenLastWindowCloses = stored.quitsWhenLastWindowCloses
+            setRulesDiff(stored.rulesDiff, keepingUnreadable: true)
+        } catch {
+            // JSON として壊れている、または読めない。中身は利用者の規則やスタンプかもしれないので、写しを残す。
+            keepCopy(of: url, partly: false)
+        }
+    }
+
+    /// 読めなかった(または一部を読み落とした)設定ファイルの写しを、隣に残す。残せなければ、上書きを止める。
+    private func keepCopy(of url: URL, partly: Bool) {
+        let folder = url.deletingLastPathComponent(), prefix = "settings.unreadable-"
+        // 同じ中身の写しがもうあれば、それを指す(直さないまま起動するたびに、写しを増やさない)。
+        let original = try? Data(contentsOf: url)
+        let kept = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix(prefix) }
+        if let original, let same = kept.first(where: { (try? Data(contentsOf: $0)) == original }) {
+            storageIssue = partly ? .partlyReadKept(same.lastPathComponent) : .unreadableKept(same.lastPathComponent)
+            return
+        }
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "")
+        let copy = folder.appendingPathComponent("\(prefix)\(stamp).json")
+        do {
+            try FileManager.default.copyItem(at: url, to: copy)
+            storageIssue = partly ? .partlyReadKept(copy.lastPathComponent) : .unreadableKept(copy.lastPathComponent)
+        } catch {
+            holdsSaving = true
+            storageIssue = .unreadableNotKept
+        }
+    }
+
+    func save() { save(to: Self.url) }
+
+    func save(to url: URL) {
+        guard !holdsSaving else { return }
         let stored = Stored(rulesDiff: rulesDiff, stamps: stamps, mappings: Array(mappings.values), language: language,
                             quitsWhenLastWindowCloses: quitsWhenLastWindowCloses)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        guard let data = try? encoder.encode(stored) else { return }
-        try? FileManager.default.createDirectory(at: Self.url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: Self.url, options: .atomic)
+        do {
+            let data = try encoder.encode(stored)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            // 保存できなかったことを黙っていない(次に起動したとき、直したはずの規則が消えていることになる)。
+            storageIssue = .notSaved(error.localizedDescription)
+        }
     }
 }
 

@@ -35,6 +35,7 @@ public enum FolderScanner {
         }
         var result: [ScannedFile] = []
         visit(root, rootPath: root.path, isRoot: true, into: &result)
+        try Task.checkCancellation()
         return result.sorted { $0.relativePath < $1.relativePath }
     }
 
@@ -57,7 +58,12 @@ public enum FolderScanner {
                 result.append(scanned(item, rootPath: root.path, isFolder: false))
             }
         }
-        return (root, result.sorted { $0.relativePath < $1.relativePath })
+        try Task.checkCancellation()
+        // フォルダと、その中のファイルを一緒に選ぶと、同じ本が 2 度入る。本の ID(相対パス)が重なると、一覧に同じ ID の行が
+        // 並び、作業ファイルにも重なったまま残る。選び方は利用者の自由なので、ここで 1 つにする。
+        var seen = Set<String>()
+        let unique = result.filter { seen.insert($0.path).inserted }
+        return (root, unique.sorted { $0.relativePath < $1.relativePath })
     }
 
     static func isDirectory(_ url: URL) -> Bool {
@@ -88,20 +94,44 @@ public enum FolderScanner {
 
     static func isImage(_ url: URL) -> Bool { imageExtensions.contains(url.pathExtension.lowercased()) }
 
-    static func visit(_ folder: URL, rootPath: String, isRoot: Bool, into result: inout [ScannedFile]) {
-        let (files, folders) = children(of: folder)
+    typealias Children = (files: [URL], folders: [URL])
+    /// 1 つのフォルダを見るあいだに覚えておく、下のフォルダの項目の数の上限。
+    static let rememberedItemLimit = 20_000
+
+    static func visit(_ folder: URL, rootPath: String, isRoot: Bool, into result: inout [ScannedFile],
+                      children known: Children? = nil) {
+        // 走査は取り消せる(大きなネットワークの蔵書を選び間違えたとき、終わるまで裏で読み続けないように)。
+        // 取り消されたあとの結果は使わない(呼び出し側が `scan` の投げる `CancellationError` で捨てる)。
+        if Task.isCancelled { return }
+        let (files, folders) = known ?? children(of: folder)
         let bookFiles = files.filter { bookFileExtensions.contains($0.pathExtension.lowercased()) }
+        // 規則 2 を確かめるのに読んだ下のフォルダの中身は、降りるときにもう一度読まない
+        // (ネットワークの蔵書では、フォルダを読む回数がそのまま待ち時間になる)。
+        // 覚えておく量には上限を付ける(下のフォルダが何万もある棚で、その中身をすべて抱え込まない)。
+        var read: [URL: Children] = [:]
+        var remembered = 0
         if !isRoot {
             // 規則 1・2: このフォルダ自体が 1 冊。
             let isBook = files.contains(where: isImage)
-                || (bookFiles.isEmpty && folders.contains { children(of: $0).files.contains(where: isImage) })
+                || (bookFiles.isEmpty && folders.contains { child in
+                    let inside = children(of: child)
+                    if remembered < rememberedItemLimit {
+                        read[child] = inside
+                        remembered += inside.files.count + inside.folders.count
+                    }
+                    return inside.files.contains(where: isImage)
+                })
             if isBook {
                 result.append(scanned(folder, rootPath: rootPath, isFolder: true))
                 return
             }
         }
         for file in bookFiles { result.append(scanned(file, rootPath: rootPath, isFolder: false)) }
-        for child in folders { visit(child, rootPath: rootPath, isRoot: false, into: &result) }
+        for child in folders {
+            // 渡したら手放す(深い木で、読んだ中身を抱えたまま降りていかない)。
+            let inside = read.removeValue(forKey: child)
+            visit(child, rootPath: rootPath, isRoot: false, into: &result, children: inside)
+        }
     }
 
     static func scanned(_ url: URL, rootPath: String, isFolder: Bool) -> ScannedFile {

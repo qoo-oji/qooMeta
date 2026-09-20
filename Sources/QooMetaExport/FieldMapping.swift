@@ -166,9 +166,7 @@ public struct FieldMapping: Sendable, Hashable, Codable {
             }
         }
 
-        static func number(_ value: Double) -> String {
-            value == value.rounded() ? String(Int(value)) : String(value)
-        }
+        static func number(_ value: Double) -> String { BookMetadata.volumeSortText(value) }
     }
 
     public init(target: ExportTarget, slots: [Key: ExportSlot]) {

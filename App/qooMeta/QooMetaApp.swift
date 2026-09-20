@@ -46,6 +46,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         MainActor.assumeIsolated { AppSettings.shared.quitsWhenLastWindowCloses }
     }
+
+    /// 保存していない修正があれば、終わる前に確かめる。窓を閉じるときの確かめ(`dismissalConfirmationDialog`)は
+    /// ⌘Q では出ないので、ここで受ける ―― 確かめないと、直した内容が何も言わずに消える(2026-09-21 の監査)。
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            guard AppModel.anyHasUnsavedChanges else { return .terminateNow }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Quit without saving?".ui
+            alert.informativeText = "The corrections you have not saved are lost.".ui
+            alert.addButton(withTitle: "Cancel".ui)
+            alert.addButton(withTitle: "Quit without saving".ui)
+            alert.buttons.last?.hasDestructiveAction = true
+            return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        }
+    }
 }
 
 /// 窓の中身: 1 回きりの流れ(対象 → 解析方法 → 確認 → 書き出し)。
@@ -61,6 +77,24 @@ struct RootView: View {
             Text(model.error ?? "")
         }
         .focusedSceneValue(\.appModel, model)
+        // 保存していない修正があるまま窓を閉じようとしたら、確かめる。取り消せば窓は残り、⌘S で保存できる
+        // (「保存して閉じる」は置かない ―― 保存先を選ぶ画面を取り消しても、窓はそのまま閉じてしまうため)。
+        .dismissalConfirmationDialog("Close without saving?", shouldPresent: model.workspace?.hasUnsavedChanges == true) {
+            // 閉じると決めた窓の修正は、続く終了の確かめでもう一度聞かない(最後の窓を閉じたら終わる設定のとき)。
+            Button("Close without saving", role: .destructive) { model.isClosingWithoutSaving = true }
+        } message: {
+            Text("The corrections you have not saved are lost.")
+        }
+        // 設定ファイルが読めなかった・保存できなかったことは、黙っていない。1 つの View に alert を 2 つ重ねないよう、背景に付ける。
+        .background {
+            Color.clear.alert("There is a problem with the settings file",
+                              isPresented: Binding(get: { model.settings.storageIssue != nil },
+                                                   set: { if !$0 { model.settings.dismissStorageIssue() } })) {
+                Button("Close") { model.settings.dismissStorageIssue() }
+            } message: {
+                Text(model.settings.storageIssueText ?? "")
+            }
+        }
         .overlay {
             if model.isOpening {
                 ProgressView("Loading…").padding(24).background(.regularMaterial, in: .rect(cornerRadius: 12))
@@ -111,12 +145,26 @@ final class AppModel {
     var picked: Picked?
     var presetFits: [PresetFit] = []
     var isFitting = false
+    /// 数え直しの回(`computeFits`)。
+    private var fitRound = 0
     var chosenPreset: String?
     var workspace: Workspace?
     var error: String?
     var isOpening = false
     /// アプリの設定(規則の差分・スタンプ・書き出しの対応表)。作業ファイルとは分ける。
     let settings = AppSettings.shared
+
+    /// 開いている窓の持ちもの(終了のとき、保存していない修正が残っていないかを見るため)。窓が消えれば一緒に消える。
+    private static let open = NSHashTable<AppModel>.weakObjects()
+
+    static var anyHasUnsavedChanges: Bool {
+        open.allObjects.contains { !$0.isClosingWithoutSaving && $0.workspace?.hasUnsavedChanges == true }
+    }
+
+    /// 利用者が「保存せずに閉じる」と決めた窓。
+    var isClosingWithoutSaving = false
+
+    init() { Self.open.add(self) }
 
     /// 行ける先(通り過ぎた段へは戻れる)。
     var furthestStep: Step {
@@ -148,8 +196,17 @@ final class AppModel {
 
     // MARK: - 段 1: 対象を選ぶ
 
-    /// 選び直す前に確かめる(保存していない修正があるとき)。決めたら `confirmedPick` が走る。
-    var pendingPick: [URL]?
+    /// いまの一覧を捨てることになる操作。保存していない修正があるときは、行う前に確かめる。
+    enum Discarding {
+        case pick([URL])
+        case openWorkfile(URL)
+    }
+
+    /// 確かめを待っている操作。決めたら `confirmDiscarding` が走る。
+    var pendingDiscard: Discarding?
+    /// いま走っている走査。**選び直したら、前の走査は取り消して結果も捨てる** ―― 遅い走査(ネットワークの蔵書)が
+    /// 後から終わると、その結果が新しい一覧を押しのけ、直している途中の内容が消えていた(2026-09-21 の監査)。
+    private var scanning: Task<Void, Never>?
 
     func chooseFolder() {
         let panel = NSOpenPanel()
@@ -158,7 +215,7 @@ final class AppModel {
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        offer([url])
+        offer(.pick([url]))
     }
 
     /// 本のファイルを直に選ぶ(フォルダの中の一部だけを処理したいとき)。フォルダも混ぜて選べる。
@@ -169,25 +226,41 @@ final class AppModel {
         panel.allowsMultipleSelection = true
         panel.prompt = "Choose".ui
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        offer(panel.urls)
+        offer(.pick(panel.urls))
     }
 
-    /// 選んだものを受け取る。保存していない修正があれば、捨ててよいか先に聞く。
-    private func offer(_ urls: [URL]) {
-        if workspace?.hasUnsavedChanges == true { pendingPick = urls } else { Task { await pick(urls) } }
+    /// いまの一覧を捨てる操作を受け取る。保存していない修正があれば、捨ててよいか先に聞く。
+    private func offer(_ action: Discarding) {
+        if workspace?.hasUnsavedChanges == true { pendingDiscard = action } else { perform(action) }
     }
 
-    func confirmPendingPick() {
-        guard let urls = pendingPick else { return }
-        pendingPick = nil
-        Task { await pick(urls) }
+    func confirmDiscarding() {
+        guard let action = pendingDiscard else { return }
+        pendingDiscard = nil
+        perform(action)
+    }
+
+    private func perform(_ action: Discarding) {
+        switch action {
+        case .pick(let urls):
+            scanning?.cancel()
+            scanning = Task { await pick(urls) }
+        case .openWorkfile(let url):
+            scanning?.cancel()
+            open(workfileAt: url)
+        }
     }
 
     private func pick(_ urls: [URL]) async {
         isOpening = true
-        defer { isOpening = false }
+        // 取り消された走査は、あとから来た走査の「読み込み中」を消さない。
+        defer { if !Task.isCancelled { isOpening = false } }
         do {
-            let found = try await Task.detached { try FolderScanner.scan(items: urls) }.value
+            // 走査そのものも取り消せるように、取り消しを中の Task へ伝える(`Task.detached` は親の取り消しを継がない)。
+            let scan = Task.detached { try FolderScanner.scan(items: urls) }
+            let found = try await withTaskCancellationHandler { try await scan.value } onCancel: { scan.cancel() }
+            // 待っているあいだに選び直されていたら、この結果は使わない。
+            guard !Task.isCancelled else { return }
             guard !found.files.isEmpty else {
                 error = "No books found. qooMeta reads %@, and folders that hold images.".ui(
                     FolderScanner.bookFileExtensions.sorted().joined(separator: ", "))
@@ -203,6 +276,8 @@ final class AppModel {
             // 選び直したら、前の結果は捨てる(古い一覧が残っていると、どの蔵書の話か分からなくなる)。
             workspace = nil
             presetFits = []
+        } catch is CancellationError {
+            // 選び直された。何も出さない。
         } catch {
             self.error = String(describing: error)
         }
@@ -213,8 +288,12 @@ final class AppModel {
     /// プリセットごとに、何冊のファイル名が型に合うかを数える。**選ぶ前に結果が見える**ようにするため。
     func computeFits() async {
         guard let picked else { return }
+        // 数え直しは重ねて走りうる(段を行き来する、規則を続けて直す)。**いちばん新しい回の結果だけ**を使う
+        // ―― 古い回が後から終わると、直す前の数が画面に戻ってしまう。
+        fitRound += 1
+        let round = fitRound
         isFitting = true
-        defer { isFitting = false }
+        defer { if round == fitRound { isFitting = false } }
         let entries = settings.rules.presetCatalog.entries
         let names = picked.files.map(\.baseName)
         let formats = settings.rules.formats
@@ -238,6 +317,7 @@ final class AppModel {
                 return await group.reduce(into: [:]) { $0[$1.0] = (read: $1.1, leftover: $1.2) }
             }
         }.value
+        guard round == fitRound else { return }
         presetFits = entries.map {
             PresetFit(id: $0.id, title: $0.preset.displayName, note: RuleLabels.preset($0.id).help,
                       read: counts[$0.id]?.read ?? 0, leftover: counts[$0.id]?.leftover ?? 0)
@@ -262,6 +342,8 @@ final class AppModel {
             step = .review
             return
         }
+        // 組み立てている最中にもう一度押されても、一覧を 2 つ作らない。
+        guard !isOpening else { return }
         Task {
             isOpening = true
             defer { isOpening = false }
@@ -278,11 +360,17 @@ final class AppModel {
         panel.allowedContentTypes = [.json]
         panel.prompt = "Open".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // 開くと、いまの一覧は入れ替わる。保存していない修正があれば先に確かめる(前は、何も聞かずに入れ替えていた)。
+        offer(.openWorkfile(url))
+    }
+
+    private func open(workfileAt url: URL) {
         Task {
             isOpening = true
             defer { isOpening = false }
             do {
-                let file = try Workfile.decoded(Data(contentsOf: url))
+                // 読むのは main の外で(大きな作業ファイルやネットワークの先のファイルで、画面を止めない)。
+                let file = try await Task.detached { try Workfile.decoded(Data(contentsOf: url)) }.value
                 let workspace = await Workspace.open(file, rules: settings.rules)
                 workspace.markSaved(to: url)
                 self.workspace = workspace
