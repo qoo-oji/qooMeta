@@ -38,6 +38,42 @@ public enum FolderScanner {
         return result.sorted { $0.relativePath < $1.relativePath }
     }
 
+    /// 選んだ項目(フォルダでも、ファイルをいくつでも)から本を集める。起点は、選んだ項目の共通の親フォルダ
+    /// (本の ID は、そこからの相対パス)。**フォルダを 1 つだけ選んだときは、そのフォルダが起点**
+    /// (`scan(root:)` と同じ。起点そのものは本にしない)。
+    ///
+    /// いくつか選んだ中のフォルダは、起点ではないので**それ自体が 1 冊になりうる**(画像フォルダ)。
+    /// 利用者がその 1 つを本として選んだのだから、そのほうが素直。
+    public static func scan(items: [URL]) throws -> (root: URL, files: [ScannedFile]) {
+        let items = items.map(\.standardizedFileURL)
+        guard !items.isEmpty else { throw CocoaError(.fileReadInvalidFileName) }
+        if items.count == 1, isDirectory(items[0]) { return (items[0], try scan(root: items[0])) }
+        let root = commonParent(of: items)
+        var result: [ScannedFile] = []
+        for item in items {
+            if isDirectory(item) {
+                visit(item, rootPath: root.path, isRoot: false, into: &result)
+            } else if bookFileExtensions.contains(item.pathExtension.lowercased()) {
+                result.append(scanned(item, rootPath: root.path, isFolder: false))
+            }
+        }
+        return (root, result.sorted { $0.relativePath < $1.relativePath })
+    }
+
+    static func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+    }
+
+    /// 選んだ項目をすべて含む、いちばん深いフォルダ。
+    static func commonParent(of items: [URL]) -> URL {
+        var shared = items[0].deletingLastPathComponent().pathComponents
+        for item in items.dropFirst() {
+            let other = item.deletingLastPathComponent().pathComponents
+            shared = Array(zip(shared, other).prefix { $0 == $1 }.map(\.0))
+        }
+        return shared.isEmpty ? URL(fileURLWithPath: "/") : URL(fileURLWithPath: "/" + shared.dropFirst().joined(separator: "/"))
+    }
+
     /// 直下の項目(隠しファイルは見ない。パッケージの中へは降りない。シンボリックリンクは辿らないので、循環しない)。
     static func children(of folder: URL) -> (files: [URL], folders: [URL]) {
         let items = (try? FileManager.default.contentsOfDirectory(

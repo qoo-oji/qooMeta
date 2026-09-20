@@ -9,11 +9,11 @@ import UniformTypeIdentifiers
 struct ExportView: View {
     @Bindable var workspace: Workspace
     @Bindable var settings: AppSettings
-    @Environment(\.dismiss) private var dismiss
-
     @State private var target: ExportTarget = .stackNest
     @State private var preview: ExportPreview?
     @State private var error: String?
+    /// 書き出したファイル(流れの終わりなので、どこへ出したかを残して見せる)。
+    @State private var written: URL?
 
     var mapping: FieldMapping { settings.mapping(for: target) }
 
@@ -57,15 +57,20 @@ struct ExportView: View {
             HStack {
                 Button("Reset to the default") { settings.setMapping(.standard(for: target)) }
                 if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                if let written {
+                    Label("Written to %@".ui(written.lastPathComponent), systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green)
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([written]) }
+                }
                 Spacer()
-                Button("Close") { dismiss() }
                 Button("Export…") { write() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(workspace.books.isEmpty)
             }
         }
         .padding(16)
-        .frame(width: 560, height: 520)
+        .frame(maxWidth: 640, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .task(id: "\(target.rawValue)\(mapping.slots.map(\.value.rawValue).sorted().joined())\(workspace.books.count)") {
             await refresh()
         }
@@ -99,7 +104,7 @@ struct ExportView: View {
                     try Exporter.qooViewerJSON(set, identities: workspace.fileIdentities, mapping: mapping)
                 }
                 try data.write(to: url, options: .atomic)
-                dismiss()
+                written = url
             } catch {
                 self.error = String(describing: error)
             }

@@ -6,8 +6,6 @@ struct WorkspaceView: View {
     @Bindable var workspace: Workspace
     @Bindable var settings: AppSettings
     @State private var showsDetail = true
-    @State private var showsPresets = false
-    @State private var showsExport = false
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -26,16 +24,8 @@ struct WorkspaceView: View {
                 ToolbarItem { ProgressView().controlSize(.small) }
             }
             ToolbarItem {
-                Button { showsPresets = true } label: { Label("Assign Presets", systemImage: "folder.badge.gearshape") }
-                    .help("Choose which preset reads the file names in each folder. What a preset does is set under Rules → File name parsing")
-            }
-            ToolbarItem {
                 Button { openWindow(id: RulesEditorView.windowID) } label: { Label("Rules", systemImage: "list.bullet.indent") }
                     .help("Look at and correct the rules that derive the series and volume: policies, word rules and word lists")
-            }
-            ToolbarItem {
-                Button { showsExport = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
-                    .help("Choose where to export and see which fields are dropped before writing")
             }
             ToolbarItem {
                 Button { showsDetail.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
@@ -43,55 +33,8 @@ struct WorkspaceView: View {
         }
         // 規則の窓で変えた内容は、開いている一覧にすぐ効かせる(すべての本を読み直す)。
         .onChange(of: settings.rules.contentHash) { Task { await workspace.setRules(settings.rules) } }
-        .sheet(isPresented: $showsPresets) { PresetAssignmentView(workspace: workspace) }
-        .sheet(isPresented: $showsExport) { ExportView(workspace: workspace, settings: settings) }
         .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta (unsaved changes)" : "qooMeta")
         .navigationSubtitle("%1$lld / %2$lld books".ui(workspace.visibleBooks.count, workspace.books.count))
-    }
-}
-
-// MARK: - フォルダごとの型の並び
-
-/// フォルダごとに、どの型の並び(プリセット)で名前を読むかを決める。
-/// 同人誌と商業の本が混ざった蔵書のために、**本ごとにプリセットを選べる**(割り当ては作業ファイルに残る)。
-struct PresetAssignmentView: View {
-    @Bindable var workspace: Workspace
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Assigning a preset to each folder").font(.headline)
-            Text("Choose which format list reads the file names in each folder. Changing an assignment reads the books of that folder again.")
-                .font(.caption).foregroundStyle(.secondary)
-            Form {
-                Picker("Default", selection: Binding(get: { workspace.presets.defaultPreset },
-                                                 set: { workspace.setPreset($0, forFolder: nil) })) {
-                    Text("Bundled default (%@)".ui(workspace.formats.displayName(of: workspace.formats.defaultName))).tag(String?.none)
-                    ForEach(workspace.formats.names, id: \.self) { Text(verbatim: workspace.formats.displayName(of: $0)).tag(String?.some($0)) }
-                }
-                if workspace.topLevelFolders.isEmpty {
-                    Text("There are no folders directly below; everything is read with the default").foregroundStyle(.secondary)
-                } else {
-                    Section("Folders directly below") {
-                        ForEach(workspace.topLevelFolders, id: \.folder) { row in
-                            Picker("%1$@ (%2$lld books)".ui(row.folder, row.count),
-                                   selection: Binding(get: { workspace.presets.folders[row.folder] },
-                                                      set: { workspace.setPreset($0, forFolder: row.folder) })) {
-                                Text("Follow the default").tag(String?.none)
-                                ForEach(workspace.formats.names, id: \.self) { Text(verbatim: workspace.formats.displayName(of: $0)).tag(String?.some($0)) }
-                            }
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            HStack {
-                Spacer()
-                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(16)
-        .frame(width: 460, height: 420)
     }
 }
 

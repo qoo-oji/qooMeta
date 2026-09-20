@@ -52,6 +52,35 @@ import Testing
         #expect(try FolderScanner.scan(root: root).map(\.relativePath) == ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2"])
     }
 
+    /// 選んだ項目から集める(流れの段 1)。フォルダを 1 つなら起点、いくつか選べば共通の親が起点。
+    @Test func picksTheItemsTheUserChose() throws {
+        let root = try Self.tree([
+            "棚/[架空工房] 月の庭 1.zip", "棚/[架空工房] 月の庭 2.zip", "棚/読んでね.txt",
+            "棚/[架空工房] 星の海/001.jpg",
+            "別の棚/[架空作家] 風の丘.cbz",
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        // フォルダを 1 つだけ選んだときは、そのフォルダが起点(起点そのものは本にしない)。
+        let one = try FolderScanner.scan(items: [root.appendingPathComponent("棚")])
+        #expect(one.root.lastPathComponent == "棚")
+        #expect(one.files.map(\.relativePath) == ["[架空工房] 星の海", "[架空工房] 月の庭 1.zip", "[架空工房] 月の庭 2.zip"])
+        // ファイルを選べばそれだけ。本にならないものは拾わない。共通の親が起点になる。
+        let some = try FolderScanner.scan(items: [
+            root.appendingPathComponent("棚/[架空工房] 月の庭 1.zip"),
+            root.appendingPathComponent("棚/読んでね.txt"),
+            root.appendingPathComponent("別の棚/[架空作家] 風の丘.cbz"),
+        ])
+        #expect(some.root.standardizedFileURL == root.standardizedFileURL)
+        #expect(some.files.map(\.relativePath) == ["別の棚/[架空作家] 風の丘.cbz", "棚/[架空工房] 月の庭 1.zip"])
+        // 混ぜて選んだ中のフォルダは、起点ではないので 1 冊になりうる(画像フォルダ)。
+        let mixed = try FolderScanner.scan(items: [
+            root.appendingPathComponent("棚/[架空工房] 星の海"),
+            root.appendingPathComponent("棚/[架空工房] 月の庭 1.zip"),
+        ])
+        #expect(mixed.files.map(\.relativePath) == ["[架空工房] 星の海", "[架空工房] 月の庭 1.zip"])
+        #expect(mixed.files.first?.isFolder == true)
+    }
+
     /// フォルダの本であることは作業ファイルに残り、書き出しのファイルの種類(StackNest は 4)に渡る。
     @Test func folderBooksSurviveTheWorkfile() throws {
         let book = Workfile.Book(id: "棚/[架空工房] 星の海 第1.5巻", name: "[架空工房] 星の海 第1.5巻", isFolder: true)

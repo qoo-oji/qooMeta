@@ -426,16 +426,6 @@ final class Workspace {
     /// その本の名前を読んだ型の並び(フォルダの割り当てに従う)。
     func formats(for id: String) -> FilenameFormats { formats[presets.preset(for: id)] }
 
-    /// 起点の直下のフォルダ(割り当ての単位)と、その冊数。
-    var topLevelFolders: [(folder: String, count: Int)] {
-        var counts: [String: Int] = [:]
-        for id in order {
-            guard let slash = id.firstIndex(of: "/") else { continue }
-            counts[String(id[..<slash]), default: 0] += 1
-        }
-        return counts.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
-    }
-
     /// フォルダ(nil なら既定)に使う型の並びを替える。当たる本の名前を読み直す。
     func setPreset(_ name: String?, forFolder folder: String?) {
         var updated = presets

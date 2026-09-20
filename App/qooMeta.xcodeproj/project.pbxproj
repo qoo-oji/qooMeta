@@ -17,6 +17,7 @@
 		93B52A0640283F3E27829F56 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B18F5A13C7BB642774DDFB1 /* DetailView.swift */; };
 		947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 74CE0620A1873D2F829A351F /* QooMetaKit */; };
 		A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934559B81EEEF1E3B3E9DA44 /* Workspace.swift */; };
+		A8E1D278E63A338023183B62 /* FlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DB2856F960656F4827707B6 /* FlowView.swift */; };
 		A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */; };
 		AEC71417CE1F93E02F2A71D3 /* QooMetaExport in Frameworks */ = {isa = PBXBuildFile; productRef = 2449A647BAACCAC89BA1146A /* QooMetaExport */; };
 		B16951CD9CADDB71EB5A281C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 65C865450ED6D8B81C407CAD /* Localizable.xcstrings */; };
@@ -33,6 +34,7 @@
 		0CBE6AC3A9BF51E635EC3162 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
 		1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetEditorView.swift; sourceTree = "<group>"; };
+		2DB2856F960656F4827707B6 /* FlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowView.swift; sourceTree = "<group>"; };
 		33523722EB945A78FD030518 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		3B18F5A13C7BB642774DDFB1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		65C865450ED6D8B81C407CAD /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 				6F4760B3275FF3971B539296 /* DemoData.swift */,
 				3B18F5A13C7BB642774DDFB1 /* DetailView.swift */,
 				EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */,
+				2DB2856F960656F4827707B6 /* FlowView.swift */,
 				33523722EB945A78FD030518 /* GeneralSettingsView.swift */,
 				65C865450ED6D8B81C407CAD /* Localizable.xcstrings */,
 				0CBE6AC3A9BF51E635EC3162 /* Localization.swift */,
@@ -190,6 +193,7 @@
 				FF17B661D9ED57B280285700 /* DemoData.swift in Sources */,
 				93B52A0640283F3E27829F56 /* DetailView.swift in Sources */,
 				B60229BB9E92F064DE2EE985 /* ExportView.swift in Sources */,
+				A8E1D278E63A338023183B62 /* FlowView.swift in Sources */,
 				0E9D5B82C1D889870FF49E92 /* GeneralSettingsView.swift in Sources */,
 				7BF76DE96EF4BB7DE6443B99 /* Localization.swift in Sources */,
 				10F407650B50A45F6D6689D5 /* PresetEditorView.swift in Sources */,
