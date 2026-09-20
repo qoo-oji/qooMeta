@@ -16,7 +16,9 @@ struct SeriesRulesView: View {
     static let windowID = "series-rules"
 
     @Bindable var settings: AppSettings
-    @State private var pane: Pane = .policies
+    /// 左で選んでいるもの。**既定は「やりたいこと」の先頭**(設定の一覧から始めない)。
+    @State private var selection: Selection = .goal(Goal.all[0].id)
+    @State private var showsAllSettings = false
     @State private var editing: RulesEditing
     @State private var confirmsReset = false
 
@@ -25,16 +27,22 @@ struct SeriesRulesView: View {
         _editing = State(initialValue: RulesEditing(settings: settings))
     }
 
+    /// 左ペインで選べるもの: やりたいこと(導線)か、設定そのもの。
+    enum Selection: Hashable {
+        case goal(String)
+        case pane(Pane)
+    }
+
     enum Pane: String, CaseIterable, Identifiable {
         case policies, markers, readers, steps, lists, json
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .policies: "Sorting settings"
-            case .markers: "Searching inside a title"
+            case .policies: "All the choices"
+            case .markers: "How words in a title are told apart"
             case .readers: "Reading the volume"
-            case .steps: "Grouping and naming"
+            case .steps: "How a series is built"
             case .lists: "Word lists"
             case .json: "Diff (JSON)"
             }
@@ -55,28 +63,52 @@ struct SeriesRulesView: View {
         var isOrdered: Bool { self == .markers || self == .readers }
     }
 
+    private var subtitle: String {
+        switch selection {
+        case .goal(let id): Goal.all.first { $0.id == id }?.title ?? ""
+        case .pane(let pane): pane.title
+        }
+    }
+
     var body: some View {
         let catalog = settings.rules.catalog
         NavigationSplitView {
-            List(Pane.allCases, selection: Binding(get: { pane }, set: { pane = $0 ?? pane })) { pane in
-                Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
-                    .badge(pane.isOrdered ? Text("Ordered") : nil)
-                    .tag(pane)
+            List(selection: Binding(get: { selection }, set: { selection = $0 ?? selection })) {
+                // **やりたいことから入る。** 設定の名前を並べても、自分の困りごとと結び付かない
+                // (2026-09-20、利用者の指摘)。ここを選べば、それに効く設定だけが右に出る。
+                Section("What do you want to change?") {
+                    ForEach(Goal.all) { goal in
+                        Label(LocalizedStringKey(goal.title), systemImage: goal.symbol)
+                            .tag(Selection.goal(goal.id))
+                    }
+                }
+                // ふだんは「やりたいこと」で足りるので、畳んでおく(2026-09-20、利用者の判断)。
+                Section("All the settings", isExpanded: $showsAllSettings) {
+                    ForEach(Pane.allCases) { pane in
+                        Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
+                            .badge(pane.isOrdered ? Text("Ordered") : nil)
+                            .tag(Selection.pane(pane))
+                    }
+                }
             }
-            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+            .navigationSplitViewColumnWidth(min: 250, ideal: 280, max: 340)
         } detail: {
             VStack(spacing: 0) {
                 PhaseBanner(flow: "Title → series name and volume", fileName: "series-rules.json",
                             symbol: "books.vertical")
                 Divider()
                 Group {
-                    switch pane {
-                    case .policies: PoliciesPane(editing: editing, catalog: catalog)
-                    case .markers: MarkersPane(editing: editing, catalog: catalog)
-                    case .readers: ReadersPane(editing: editing, catalog: catalog)
-                    case .steps: StepsPane(editing: editing, catalog: catalog)
-                    case .lists: ListsPane(editing: editing, catalog: catalog)
-                    case .json: DiffPane(editing: editing, half: .series)
+                    switch selection {
+                    case .goal(let id):
+                        if let goal = Goal.all.first(where: { $0.id == id }) {
+                            GoalPane(editing: editing, catalog: catalog, goal: goal)
+                        }
+                    case .pane(.policies): PoliciesPane(editing: editing, catalog: catalog)
+                    case .pane(.markers): MarkersPane(editing: editing, catalog: catalog)
+                    case .pane(.readers): ReadersPane(editing: editing, catalog: catalog)
+                    case .pane(.steps): StepsPane(editing: editing, catalog: catalog)
+                    case .pane(.lists): ListsPane(editing: editing, catalog: catalog)
+                    case .pane(.json): DiffPane(editing: editing, half: .series)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,7 +117,7 @@ struct SeriesRulesView: View {
             }
         }
         .navigationTitle("Series and volume extraction")
-        .navigationSubtitle(LocalizedStringKey(pane.title))
+        .navigationSubtitle(LocalizedStringKey(subtitle))
         .confirmationDialog("Reset every series rule to the default?", isPresented: $confirmsReset) {
             Button("Reset to the default", role: .destructive) { editing.reset(.series) }
         } message: {
@@ -129,6 +161,173 @@ final class RulesEditing {
 
     func reset(_ half: RuleChanges.Half) {
         errors = settings.resetRules(half)
+    }
+}
+
+// MARK: - やりたいこと(導線)
+
+/// 利用者の**やりたいこと**と、それに効く設定の対応。
+///
+/// 設定を種類ごとに並べても、「これがやりたい」から辿り着けない ―― どの設定が自分の困りごとに効くのかは、
+/// 仕組みを知らないと分からない(2026-09-20、利用者の指摘)。やりたいことを先に選ばせ、**それに効く設定だけ**を
+/// 1 画面に集める。どこにある設定かは画面の側が知っていればよい。
+struct Goal: Identifiable {
+    /// 1 つの操作対象。どのペインに住んでいるかは問わない。
+    enum Control {
+        case policy(String)
+        /// 規則の入切(値は持たない、または値はほかの所で出す)。
+        case ruleToggle(String)
+        case parameter(rule: String, name: String)
+        case list(String)
+    }
+
+    let id: String
+    let title: String
+    let symbol: String
+    /// 「こうすると、こうなります」の 1 行。
+    let help: String
+    let controls: [Control]
+
+    /// 並びは**当たる頻度の順**。まとまり方の相談がいちばん多く、雑誌はいちばん少ない。
+    static let all: [Goal] = [
+        Goal(id: "join", title: "Books that belong together end up apart",
+             symbol: "arrow.triangle.merge",
+             help: "qooMeta splits a group when the books differ in genre or source work, and when the shared part of their titles looks too thin to trust. Loosen the ones that are splitting your books.",
+             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled"),
+                        .ruleToggle("reject-hiragana-ending"), .ruleToggle("reject-single-script"),
+                        .ruleToggle("reject-common-english"),
+                        .parameter(rule: "sharedPrefix", name: "minPrefix"),
+                        .parameter(rule: "sharedPrefix", name: "minWholeTitle")]),
+        Goal(id: "split", title: "Books that do not belong together are put in one series",
+             symbol: "arrow.triangle.branch",
+             help: "Tighten the same settings the other way: split on a difference qooMeta is now ignoring, or ask for more shared characters before two titles count as one series.",
+             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled"),
+                        .parameter(rule: "sharedPrefix", name: "minPrefix"),
+                        .parameter(rule: "sharedPrefix", name: "minWholeTitle")]),
+        Goal(id: "volume", title: "A volume number is missing or wrong",
+             symbol: "number",
+             help: "Which shapes count as a volume number, and what may stand before or after it.",
+             controls: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"),
+                        .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position"),
+                        .ruleToggle("sharedLeadingKanji"),
+                        .list("volumePrefixes"), .list("volumeCounters")]),
+        Goal(id: "duplicate", title: "The same work shows up twice",
+             symbol: "square.on.square",
+             help: "Two files of one work, one of them carrying a word for a version or a publication form. Say whether they are the same book or two books.",
+             controls: [.policy("editions"), .policy("sources"),
+                        .list("editionWords"), .list("sourceWords")]),
+        Goal(id: "name", title: "The series name is cut off, or carries something extra",
+             symbol: "textformat",
+             help: "How the name is tidied once the books are grouped: what is dropped from its end, and what is kept.",
+             controls: [.ruleToggle("includeClosingBrackets"), .ruleToggle("includeFollowing"),
+                        .ruleToggle("trimTrailing"), .ruleToggle("dropLastWord"),
+                        .list("trimTrailing"), .list("keepFollowing"), .list("labelIntroducers")]),
+        Goal(id: "compilation", title: "A compilation is in the wrong place",
+             symbol: "books.vertical",
+             help: "Where a compilation or a side story goes, and what volume number it is given once it is there.",
+             controls: [.policy("compilations"), .policy("compilationVolume"),
+                        .parameter(rule: "compilation", name: "volumeOffset"),
+                        .list("compilationWords")]),
+        Goal(id: "first", title: "A book on its own is given volume 1, or is not",
+             symbol: "1.circle",
+             help: "What to do with a book that carries no number at all.",
+             controls: [.policy("unnumberedFirst"), .list("notFirstMarkers"), .list("notFirstPrefixes")]),
+        Goal(id: "word", title: "A word in the title is read as something it is not",
+             symbol: "eye.slash",
+             help: "A word qooMeta took for a version, a compilation or a volume when it is simply part of the title. Add it here and it is left alone.",
+             controls: [.list("plainWords")]),
+        Goal(id: "standalone", title: "Keep certain books out of every series",
+             symbol: "square.slash",
+             help: "Books whose title holds one of these words are left on their own. Write a whole title here to leave that one book out.",
+             controls: [.ruleToggle("standalone"), .list("standaloneWords")]),
+        Goal(id: "magazine", title: "Issues of a magazine are grouped the wrong way",
+             symbol: "newspaper",
+             help: "Whether a magazine becomes one series, or one series for each year.",
+             controls: [.policy("magazines")]),
+    ]
+}
+
+/// やりたいこと 1 つ。効く設定だけを、住んでいるペインに関わらず 1 画面に集める。
+private struct GoalPane: View {
+    var editing: RulesEditing
+    var catalog: RuleCatalog
+    var goal: Goal
+
+    var body: some View {
+        Form {
+            Section {
+                Text(key: goal.help).font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(Array(goal.controls.enumerated()), id: \.offset) { _, control in
+                switch control {
+                case .policy(let id):
+                    if let policy = catalog.policies.first(where: { $0.id == id }) {
+                        if id == "compilations", let rule = catalog.entries.first(where: { $0.id == "compilation" }),
+                           let single = rule.parameters.first(where: { $0.name == CompilationPlacementRow.single }) {
+                            CompilationPlacementRow(editing: editing, policy: policy, rule: rule, single: single)
+                        } else {
+                            PolicyRow(editing: editing, policy: policy)
+                        }
+                    }
+                case .ruleToggle(let id):
+                    if let rule = catalog.entries.first(where: { $0.id == id }) { GoalRuleToggle(editing: editing, rule: rule) }
+                case .parameter(let ruleID, let name):
+                    if let rule = catalog.entries.first(where: { $0.id == ruleID }),
+                       let parameter = rule.parameters.first(where: { $0.name == name }) {
+                        ParameterRow(editing: editing, entry: rule, parameter: parameter, catalog: catalog)
+                    }
+                case .list(let id):
+                    if let list = catalog.lists.first(where: { $0.id == id }) { GoalList(editing: editing, list: list) }
+                }
+            }
+            Section {
+                Text("Every one of these also sits in “All the settings” below, among the rest.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 規則 1 つの入切(名前と説明つき)。
+private struct GoalRuleToggle: View {
+    var editing: RulesEditing
+    var rule: RuleCatalog.Entry
+
+    var body: some View {
+        let label = RuleLabels.rule(rule.id)
+        HStack(alignment: .top) {
+            ModifiedDot(isModified: rule.isModified)
+            Toggle(isOn: Binding(get: { rule.isEnabled },
+                                 set: { on in editing.change { $0.setEnabled(on, rule: rule.id) } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: RuleLabels.title(ofRule: rule.id))
+                    if !label.help.isEmpty { Text(key: label.help).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+            .disabled(!rule.canDisable)
+            .help(rule.canDisable ? "" : "Whether it acts is settled by a policy".ui)
+        }
+    }
+}
+
+/// 語の一覧 1 つ(名前と説明つき)。
+private struct GoalList: View {
+    var editing: RulesEditing
+    var list: RuleCatalog.ListEntry
+
+    var body: some View {
+        let label = RuleLabels.list(list.id)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                ModifiedDot(isModified: !list.added.isEmpty || !list.removed.isEmpty)
+                Text(key: label.title).font(.headline)
+                Spacer()
+                Text(verbatim: "\(list.items.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            if !label.help.isEmpty { Text(key: label.help).font(.caption).foregroundStyle(.secondary) }
+            RuleListEditor(editing: editing, list: list)
+        }
     }
 }
 
