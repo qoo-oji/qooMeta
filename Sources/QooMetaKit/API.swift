@@ -140,6 +140,8 @@ public struct SeriesID: Sendable, Hashable, Comparable, CustomStringConvertible 
 public struct BookProposal: Sendable, Hashable {
     public enum Flag: String, Sendable, Hashable, CaseIterable {
         case inferredVolume, edition, source, compilation, magazineIssue, confirmed
+        /// 語の規則(`treat: standalone`)でシリーズに入れなかった。
+        case standalone
     }
 
     public let id: String

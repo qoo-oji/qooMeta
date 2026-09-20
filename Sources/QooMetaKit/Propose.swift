@@ -170,7 +170,13 @@ extension RuleEngine {
         let metadata = input.confirmation.fields.applied(to: reading.metadata)
         let compared = compareTitle(metadata.title)
         // 型が名前から直に読んだシリーズ・巻数(`@series` `@volume`)は、利用者が確定した値と同じ扱いで中核へ渡す。
-        let confirmation = Self.confirming(metadata, over: input.confirmation)
+        var confirmation = Self.confirming(metadata, over: input.confirmation)
+        // 「シリーズに入れない語」(語の規則 `treat: standalone`)のある本は、利用者が「シリーズに入れない」と直した本と同じ扱いで
+        // 中核へ渡す。利用者や型がシリーズを決めた本には効かない(はっきり決めた値が優先)。
+        switch confirmation {
+        case .none, .fields: if compared.standsAlone { confirmation = .notInSeries(fields: confirmation.fields) }
+        case .series, .notInSeries: break
+        }
         // 巻数を型で読んだ本は、比べるタイトルの後ろにその表記を付ける(「月の庭」+「12」)。名前の中に巻が書いてある本と
         // 同じ形になるので、中核の規則(タイトル + 巻)がそのまま効く。
         // `@title` の無い型が組み立てたタイトル(「月の庭 (3)」)には、もう巻が入っているので付けない。
@@ -181,7 +187,8 @@ extension RuleEngine {
                             // 書き手は著者の並びの先頭。無ければ空(書き手の空の本どうしで 1 つの単位になる)。
                             writerKey: text.key(metadata.authors.first ?? ""), genre: metadata.genre,
                             source: metadata.source, hasEditionMarks: !compared.editions.isEmpty,
-                            hasSourceMarks: !compared.sources.isEmpty, confirmation: confirmation,
+                            hasSourceMarks: !compared.sources.isEmpty, standsAlone: compared.standsAlone,
+                            confirmation: confirmation,
                             volumeHead: volumeHead(compareTitle: compareText))
         return PreparedBook(input: input, core: core, reading: reading, metadata: metadata, unitKey: unitKey(core))
     }
@@ -398,6 +405,7 @@ extension RuleEngine {
         if book.core.hasEditionMarks { flags.insert(.edition) }
         if book.core.hasSourceMarks { flags.insert(.source) }
         if r?.isCompilation == true { flags.insert(.compilation) }
+        if book.core.standsAlone { flags.insert(.standalone) }
         if series?.kind == .magazineYear || (series != nil && r?.volume?.fromMagazineIssue == true) { flags.insert(.magazineIssue) }
         if book.input.confirmation != .none { flags.insert(.confirmed) }
         // シリーズと巻数は、単位の計算で決まったものを欄へ入れる。

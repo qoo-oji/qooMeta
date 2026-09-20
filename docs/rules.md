@@ -244,9 +244,19 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 | `edition` | `edition` | 版の印(下) |
 | `source` | `source` | 入手経路の印(下) |
 | `compilationMark` | `compilation` | 総集編の語(`総集編` `番外編` …)。置き場所は方針 `compilations`、組み方は `grouping.compilation` |
+| `standalone` | `standalone` | **シリーズに入れない語**。この語のある本は、どのシリーズにも入れません(一覧で「シリーズに入れない」と直した本と同じ扱い)。**同梱の一覧 `standaloneWords` は空**で、使う人が足します |
 
 どの規則も `words`(語の一覧)と `patterns`(正規表現)、`enabled` を持ちます。`treat` は規則の扱いで、`keep` /
-`edition` / `source` / `compilation` から選びます。
+`edition` / `source` / `compilation` / `standalone` から選びます。
+
+**「この本はシリーズに入れない」を規則で書く**には、`standaloneWords` に語を足します。種類ごと外すなら種類の語
+(`設定資料集`)、1 冊だけ外すならその本の題名をそのまま書きます。例外は、ここでも「上に置いたそのまま読む語」です
+(`設定資料集つき` を `plainWords` に足せば、その本はシリーズに残ります)。利用者や型(`@series`)がシリーズを決めた本には効きません。
+
+```json
+{ "kind": "qoometa.series-rules", "schemaVersion": 2, "base": "builtin",
+  "lists": { "standaloneWords": { "$add": ["設定資料集"] }, "plainWords": { "$add": ["設定資料集つき"] } } }
+```
 
 差分では、規則を ID で指します。**同梱に無い ID を書くと、新しい規則になります**(要るのは `treat`。並びの先頭に入ります)。
 位置を変えるなら `$order`(挙げた ID を、この順で先頭に寄せる)。

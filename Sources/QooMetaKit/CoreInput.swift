@@ -22,6 +22,8 @@ struct CoreBook: Sendable {
     /// 版・入手経路の印があったか(説明に書くだけ。組には効かない)。
     let hasEditionMarks: Bool
     let hasSourceMarks: Bool
+    /// 「シリーズに入れない語」があったか(説明に書くだけ。効き目は `confirmation` に入れてある)。
+    var standsAlone = false
     let confirmation: Confirmation
     /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比べる形で)。
     let volumeHead: Int?
@@ -37,9 +39,9 @@ extension RuleEngine {
 
     /// タイトルから比べるタイトルを作る(版・入手経路の印を除き、総集編の語順を直す)。中核の一部で、前段が何であっても
     /// タイトルの値にこれをかける。印は、比べるタイトルから除かないとき(方針 separateBooks)も見分けて返す。
-    func compareTitle(_ title: String) -> (text: String, editions: [String], sources: [String]) {
+    func compareTitle(_ title: String) -> (text: String, editions: [String], sources: [String], standsAlone: Bool) {
         let split = markers.split(title)
-        return (compilation.normalizedTitle(split.base) ?? split.base, split.editions, split.sources)
+        return (compilation.normalizedTitle(split.base) ?? split.base, split.editions, split.sources, split.standsAlone)
     }
 
     /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比べる形で)。

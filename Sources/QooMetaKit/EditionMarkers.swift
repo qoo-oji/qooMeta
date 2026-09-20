@@ -77,6 +77,8 @@ final class EditionMarkers: Sendable {
         var base: String
         var editions: [String]
         var sources: [String]
+        /// 「シリーズに入れない語」(`treat: standalone`)がある。
+        var standsAlone = false
     }
 
     private let words: WordRules
@@ -95,12 +97,14 @@ final class EditionMarkers: Sendable {
         var editions: [String] = [], sources: [String] = []
         var base = ""
         var last = 0
+        var standsAlone = false
         for claim in words.claims(in: title) {
             let strips: Bool
+            if claim.treat == .standalone { standsAlone = true }
             switch claim.treat {
             case .edition: editions.append(ns.substring(with: claim.word)); strips = stripsEditions
             case .source: sources.append(ns.substring(with: claim.word)); strips = stripsSources
-            case .keep, .compilation: strips = false
+            case .keep, .compilation, .standalone: strips = false
             }
             // 外す範囲が前の印の範囲と重なることがある(あいだの空白を両方が読む)。重なった分は二度外さない。
             guard strips, claim.whole.location + claim.whole.length > last else { continue }
@@ -111,8 +115,8 @@ final class EditionMarkers: Sendable {
         base += ns.substring(from: last)
         base = TextRules.normalizeDisplay(base)
         // 印だけでできたタイトル(「DL版」)なら、元のまま比べる。
-        guard !base.isEmpty else { return Split(base: title, editions: [], sources: []) }
-        return Split(base: base, editions: editions, sources: sources)
+        guard !base.isEmpty else { return Split(base: title, editions: [], sources: [], standsAlone: standsAlone) }
+        return Split(base: base, editions: editions, sources: sources, standsAlone: standsAlone)
     }
 }
 

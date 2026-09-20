@@ -145,6 +145,16 @@
             }
           ]
         },
+        "standaloneWords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
         "volumePrefixes": {
           "oneOf": [
             {
@@ -344,9 +354,10 @@
                   "keep",
                   "edition",
                   "source",
-                  "compilation"
+                  "compilation",
+                  "standalone"
                 ],
-                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語"
+                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語 / standalone = この語のある本は、どのシリーズにも入れない"
               },
               "since": {
                 "type": "integer",
@@ -395,9 +406,10 @@
                   "keep",
                   "edition",
                   "source",
-                  "compilation"
+                  "compilation",
+                  "standalone"
                 ],
-                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語"
+                "description": "keep = そのまま読む(下の規則から語を守る。例外はこれを上に置いて書く) / edition・source = 版・入手経路の印 / compilation = 総集編の語 / standalone = この語のある本は、どのシリーズにも入れない"
               },
               "since": {
                 "type": "integer",

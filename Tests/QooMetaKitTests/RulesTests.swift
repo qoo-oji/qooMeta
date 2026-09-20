@@ -203,7 +203,7 @@ import QooMetaRules
         "markers": { "my-guides": { "treat": "keep", "words": ["完全版ガイド"] }, "$order": ["plain", "my-guides"] }
         """#)).rules)
         #expect(proposeSync([BookInput(id: "0", name: names[0])], rules: mine, dictionaries: [:])["0"]?.flags.contains(.edition) == false)
-        #expect(mine.catalog.entries.filter { $0.stage == "markers" }.map(\.id) == ["plain", "my-guides", "edition", "source", "compilationMark"])
+        #expect(mine.catalog.entries.filter { $0.stage == "markers" }.map(\.id) == ["plain", "my-guides", "edition", "source", "compilationMark", "standalone"])
         // 版の規則より下に置いた「何もしない規則」は、版の印を止めない(順番が意味を持つ)。
         let below = try #require(Self.compile(Self.diff(#"""
         "markers": { "my-guides": { "treat": "keep", "words": ["完全版ガイド"] }, "$order": ["edition", "my-guides"] }
@@ -223,6 +223,31 @@ import QooMetaRules
         let old = Self.compile(Self.diff(#""lists": { "editionPrefixWords": { "$add": ["x"] } }"#))
         #expect(old.rules != nil)
         #expect(old.warnings.map(\.code) == [.retiredID])
+    }
+
+    /// 「この本はシリーズに入れない」を規則で書く: 語の規則の `treat: standalone`。同梱の一覧は空(道具の側で偏りをかけない)。
+    @Test func standaloneWordsKeepBooksOutOfSeries() throws {
+        let names = ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 設定資料集", "[架空工房] 月の庭 3 設定資料集つき"]
+        func propose(_ rules: CompiledRules, confirming: [Int: QooMetaKit.Confirmation] = [:]) -> ProposalSet {
+            proposeSync(names.enumerated().map { BookInput(id: "\($0.offset)", name: $0.element, confirmation: confirming[$0.offset] ?? .none) },
+                        rules: rules, dictionaries: [:])
+        }
+        // 既定では、共通部分で「月の庭」に入る。
+        #expect(propose(.builtin)["2"]?.metadata.series == "月の庭")
+        let rules = try #require(Self.compile(Self.diff(#""lists": { "standaloneWords": { "$add": ["設定資料集"] } }"#)).rules)
+        let set = propose(rules)
+        #expect(set["2"]?.metadata.series == "")
+        #expect(set["2"]?.flags.contains(.standalone) == true)
+        #expect(set["2"]?.flags.contains(.confirmed) == false)
+        #expect(set["0"]?.metadata.series == "月の庭" && set["1"]?.metadata.series == "月の庭")
+        // 例外は、上に置いた「そのまま読む語」(同じ決まり)。「設定資料集つき」の本はシリーズに残る。
+        let kept = try #require(Self.compile(Self.diff(#"""
+        "lists": { "standaloneWords": { "$add": ["設定資料集"] }, "plainWords": { "$add": ["設定資料集つき"] } }
+        """#)).rules)
+        #expect(propose(kept)["3"]?.metadata.series == "月の庭")
+        #expect(propose(rules)["3"]?.metadata.series == "")
+        // 利用者がシリーズを決めた本には効かない。
+        #expect(propose(rules, confirming: [2: .series(name: "月の庭", volume: nil, fields: .init())])["2"]?.metadata.series == "月の庭")
     }
 
     @Test func newerRulesAreSkippedWithAWarning() throws {

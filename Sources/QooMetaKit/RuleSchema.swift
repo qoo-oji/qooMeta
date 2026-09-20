@@ -80,7 +80,7 @@ enum RuleSchema {
         "ignoredInComparison": .characters, "variantKanji": .pairs, "boundaryCharacters": .characters,
         "trimTrailing": .characters, "keepFollowing": .characters, "brackets": .pairs, "labelIntroducers": .words,
         "editionWords": .words, "sourceWords": .words, "compilationWords": .words,
-        "plainWords": .words, "volumePrefixes": .words,
+        "plainWords": .words, "standaloneWords": .words, "volumePrefixes": .words,
         "volumeCounters": .words, "wholeOnlyCounters": .words, "kanjiCounters": .words, "positionFirst": .words,
         "positionMiddle": .words, "positionLast": .words, "notFirstMarkers": .words, "notFirstPrefixes": .words,
     ]
@@ -143,7 +143,8 @@ enum RuleSchema {
     /// - `keep`: そのまま読む(何もしない。下の規則から語を守るための規則で、例外はこれを上に置いて書く)
     /// - `edition`・`source`: 版・入手経路の印(方針 editions・sources が扱いを決める)
     /// - `compilation`: 総集編の語(方針 compilations が置き場所を決める)
-    static let markerTreatments = ["keep", "edition", "source", "compilation"]
+    /// - `standalone`: この語のある本は、どのシリーズにも入れない(利用者が一覧で「シリーズに入れない」と直した本と同じ扱い)
+    static let markerTreatments = ["keep", "edition", "source", "compilation", "standalone"]
 
     /// 語の規則 1 件の形(`id` は別に見る)。
     static let markerNode = Node([
@@ -151,7 +152,7 @@ enum RuleSchema {
     ], rule: true, enabled: true)
 
     /// 同梱の語の規則の ID(例の `covers` と、規則の編集画面が ID で指すのに使う。利用者は別の ID の規則を足せる)。
-    static let builtInMarkerIDs = ["plain", "edition", "source", "compilationMark"]
+    static let builtInMarkerIDs = ["plain", "edition", "source", "compilationMark", "standalone"]
 
     /// 巻の読み手の種類と、そのパラメータ。今は種類ごとに 1 つずつで、ID で指す。
     static let readerTypes: [(id: String, type: String, fields: [Field])] = [

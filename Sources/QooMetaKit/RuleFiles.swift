@@ -391,7 +391,7 @@ struct SeriesRules: Sendable {
 
     /// 語の規則 1 件(series-rules.json の `markers` の 1 件)。
     struct WordRule: Sendable {
-        enum Treatment: String, Sendable { case keep, edition, source, compilation }
+        enum Treatment: String, Sendable { case keep, edition, source, compilation, standalone }
         var id: String
         var treat: Treatment
         var words: [String]

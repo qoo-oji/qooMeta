@@ -50,7 +50,7 @@
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
-- 確かめ: `swift build`・`swift test`(119 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
+- 確かめ: `swift build`・`swift test`(120 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
 
 ## 同人誌のプリセットを 2 つに分けた(2026-09-20、利用者の指示)
 
@@ -138,6 +138,9 @@ rules.md の `markers`。
   同じものを取り合う段階(`markers` の語、`volume.readers` の巻の表記)だけ。`grouping`・`naming` は前の規則の結果を次が受け取る
   工程で、並べ替えても良くなる順が無い。オブジェクトで書いた段階は JSON の順に働き、配列の段階だけ並べ替えられる
   (rules-format-design.md「規則の順番と例外」)。
+- **「この本はシリーズに入れない」を規則で書ける**(利用者の求め): 語の規則の扱い `standalone`(規則 `standalone`、一覧
+  `standaloneWords`。同梱は空)。効き目は `Confirmation.notInSeries` と同じ経路(`Propose.prepareOne`)。提案の印は
+  `BookProposal.Flag.standalone`(`confirmed` は付かない)。利用者や型がシリーズを決めた本には効かない。
 - **「そのまま読む語」は巻の読み手にも効く**(利用者の問いを受けて足した。`VolumeExtractor.extract`): 読めた巻の表記が
   「そのまま読む語」に重なるなら巻にしない(題名が「No.5」の本は、`plainWords` に足せば巻 5 にならない)。要ったのは配列を
   増やすことではなく、「上で取られた語には、後ろの規則は反応しない」という同じ決まりを段階をまたいで通すことだった。
