@@ -173,7 +173,10 @@ extension RuleEngine {
         let confirmation = Self.confirming(metadata, over: input.confirmation)
         // 巻数を型で読んだ本は、比べるタイトルの後ろにその表記を付ける(「月の庭」+「12」)。名前の中に巻が書いてある本と
         // 同じ形になるので、中核の規則(タイトル + 巻)がそのまま効く。
-        let compareText = metadata.volume.isEmpty ? compared.text : compared.text + " " + metadata.volume
+        // `@title` の無い型が組み立てたタイトル(「月の庭 (3)」)には、もう巻が入っているので付けない。
+        let assembled = reading.formatIndex != nil && !reading.spans.contains { $0.word == .title }
+            && metadata.title == reading.metadata.title
+        let compareText = metadata.volume.isEmpty || assembled ? compared.text : compared.text + " " + metadata.volume
         let core = CoreBook(id: input.id, order: order, title: metadata.title, compareTitle: compareText,
                             // 書き手は著者の並びの先頭。無ければ空(書き手の空の本どうしで 1 つの単位になる)。
                             writerKey: text.key(metadata.authors.first ?? ""), genre: metadata.genre,

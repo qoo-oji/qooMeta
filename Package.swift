@@ -27,6 +27,6 @@ let package = Package(
         .target(name: "QooMetaAI", dependencies: ["QooMetaKit"]),
         .executableTarget(name: "qoometa",
                           dependencies: ["QooMetaKit", "QooMetaRules", "QooMetaExport", "QooMetaScan", "QooMetaAI"]),
-        .testTarget(name: "QooMetaKitTests", dependencies: ["QooMetaKit", "QooMetaRules", "QooMetaExport"]),
+        .testTarget(name: "QooMetaKitTests", dependencies: ["QooMetaKit", "QooMetaRules", "QooMetaExport", "QooMetaScan"]),
     ]
 )

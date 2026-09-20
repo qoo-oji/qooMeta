@@ -96,6 +96,8 @@ final class Workspace {
 
     /// フォルダごとの型の並びの割り当て。変えると、当たる本の名前を読み直す。
     private(set) var presets: Workfile.PresetAssignment
+    /// フォルダの本(画像フォルダ)の ID。書き出しのファイルの種類に要る(ID の末尾からは決められない)。
+    private let folderIDs: Set<String>
 
     private(set) var rules: CompiledRules
     private(set) var formats: FormatPresets
@@ -147,6 +149,7 @@ final class Workspace {
         presets = workfile.presets
         self.rules = rules
         formats = rules.formats
+        folderIDs = Set(workfile.books.filter(\.isFolder).map(\.id))
         let all = workfile.inputs
         inputs = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         order = all.map(\.id)
@@ -164,7 +167,7 @@ final class Workspace {
     var workfile: Workfile {
         Workfile(rootPath: rootPath,
                  books: order.compactMap { id in
-                     inputs[id].map { .init(id: $0.id, name: $0.name, confirmation: $0.confirmation) }
+                     inputs[id].map { .init(id: $0.id, name: $0.name, isFolder: folderIDs.contains(id), confirmation: $0.confirmation) }
                  },
                  presets: presets)
     }
@@ -408,7 +411,7 @@ final class Workspace {
     var fileFacts: [String: Exporter.FileFacts] {
         Dictionary(order.map { id in
             (id, Exporter.FileFacts(path: (rootPath as NSString).appendingPathComponent(id),
-                                    fileExtension: (id as NSString).pathExtension))
+                                    fileExtension: folderIDs.contains(id) ? "" : (id as NSString).pathExtension.lowercased()))
         }, uniquingKeysWith: { a, _ in a })
     }
 

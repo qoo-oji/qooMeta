@@ -2265,6 +2265,55 @@
       "covers": [
         "subtitled"
       ]
+    },
+    {
+      "id": "commercial-series-volume-then-author",
+      "preset": "commercial",
+      "files": [
+        "月の庭（1） - 架空作家",
+        "月の庭（2） - 架空作家",
+        "星の海 (3) - 架空作家 [DL版]",
+        "月の庭 - 第二部",
+        "夜の森 総集編（2） - 架空作家"
+      ],
+      "expect": [
+        {
+          "format": 10,
+          "title": "月の庭 (1)",
+          "authors": [
+            "架空作家"
+          ],
+          "series": "月の庭",
+          "volume": "1"
+        },
+        {
+          "series": "月の庭",
+          "volume": "2",
+          "volumeSort": 2
+        },
+        {
+          "format": 9,
+          "title": "星の海 (3)",
+          "authors": [
+            "架空作家"
+          ],
+          "info": "DL版",
+          "series": "星の海",
+          "volume": "3"
+        },
+        {
+          "format": null,
+          "title": "月の庭 - 第二部",
+          "authors": []
+        },
+        {
+          "title": "夜の森 総集編 (2)",
+          "series": "夜の森 総集編",
+          "volume": "2",
+          "volumeSort": 2
+        }
+      ],
+      "covers": []
     }
   ]
 }

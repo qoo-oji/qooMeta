@@ -165,7 +165,7 @@ enum InputDocument {
         case .work(let w):
             Dictionary(w.books.map { book in
                 (book.id, Exporter.FileFacts(path: (w.rootPath as NSString).appendingPathComponent(book.id),
-                                             fileExtension: (book.id as NSString).pathExtension))
+                                             fileExtension: book.fileExtension))
             }, uniquingKeysWith: { a, _ in a })
         }
     }

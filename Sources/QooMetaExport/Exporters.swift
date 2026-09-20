@@ -9,6 +9,7 @@ public enum Exporter {
     /// 本のファイルの事実(走査で分かること)。本体はファイルを見ないので、利用側が渡す。
     public struct FileFacts: Sendable, Hashable {
         public var path: String
+        /// 小文字の拡張子。フォルダの本(画像フォルダ)は空。
         public var fileExtension: String
         /// 取り込んだ日(作成日など)。無ければ Options.defaultDateAdded。
         public var dateAdded: Date?
@@ -18,6 +19,8 @@ public enum Exporter {
             self.fileExtension = fileExtension
             self.dateAdded = dateAdded
         }
+
+        public var isFolder: Bool { fileExtension.isEmpty }
     }
 
     /// qooViewer がファイルを同定する手段(パスが変わっても追える)。
@@ -106,6 +109,8 @@ public enum Exporter {
     /// File Type(StackNest の BookImporter.FileTypeCode と同じ値)。
     static func fileType(forExtension ext: String) -> Int {
         switch ext.lowercased() {
+        // 拡張子が空なのはフォルダの本(StackNest の取り込みは、画像フォルダを 4 で持つ)。
+        case "": 4
         case "rar", "cbr": 3
         case "7z", "cb7": 5
         default: 2

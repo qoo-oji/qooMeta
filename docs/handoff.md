@@ -22,7 +22,7 @@
 - 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
 - **次にやること(利用者の指示、2026-09-20)**: ① **JSON の構成そのもののブラッシュアップ** → ② **JSON を編集する画面**
   (段階 11 の残り = 規則の方針・語の一覧・型の並びの編集)。①→② の順にする(画面は JSON の形の上に載るため)。
-  下の「JSON のブラッシュアップ(着手前のメモ)」に、読んだうえでの候補を書いてある。
+  下の「JSON のブラッシュアップ」に、済んだこと(`filename-formats.json` の第 5 版)と残り(`series-rules.json`)を書いてある。
 - 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
   コミットやブランチの状態はここに書かない(`git log` を見る)。
 
@@ -50,7 +50,7 @@
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
-- 確かめ: `swift build`・`swift test`(106 件)・`.build/release/qoometa rules test`(例 88 件)・`bash scripts/ci/check-all.sh`。
+- 確かめ: `swift build`・`swift test`(115 件)・`.build/release/qoometa rules test`(例 91 件)・`bash scripts/ci/check-all.sh`。
 
 ## 同人誌のプリセットを 2 つに分けた(2026-09-20、利用者の指示)
 
@@ -60,7 +60,7 @@
 - **プリセットは、名前に書かれていない欄の既定値を持てるようにした**(利用者の指示)。`doujinshi-event` は
   ジャンルの既定を「同人誌」にする(催しの型ではジャンルがどの名前にも書かれないが、その蔵書は丸ごと同人誌なので)。
   値は JSON が持ち、コードには書かない。名前から読めた欄は上書きしない。どの型にも合わなかった名前にも入れる。
-- そのため **`filename-formats.json` は第 4 版**: プリセットの値が「型の並びだけの配列」から
+- そのため **`filename-formats.json` は第 4 版**(いまは第 5 版。上の「JSON のブラッシュアップ」): プリセットの値が「型の並びだけの配列」から
   `{ "formats": [...], "defaults": { "genre": "同人誌" } }` に変わった(配列の短い書き方も読める)。差分の書き方は
   `{ "presets": { "doujinshi": { "formats": { "$add": [...], "at": "end" } } } }`(docs/rules-format-design.md の例と同じ形になった)。
 - 例のファイルに `"preset": "<名前>"` を書けるようにした(例ごとに読む並びを選ぶ)。例は 90 件。
@@ -85,16 +85,47 @@ StackNest・ShelfRow の取り込みのコードを読み、**qooMeta が書く 
   `Path` と `Cover Image Path`、ShelfRow の `PathParser` の分解まで確かめた)。
 - qooViewer の `LibraryJSONSchema.swift` も読んだ。`formatVersion: 4` の `metadata`(bookID・author・title・series・seriesIndex)で合っている。
 
-## JSON のブラッシュアップ(着手前のメモ。2026-09-20)
+## JSON のブラッシュアップ(2026-09-20)
 
-読み直して見つけた、直す値打ちのありそうな点。**まだ何も直していない。**
+### 済んだこと: `filename-formats.json` の第 5 版(利用者の指示)
+
+形式の説明の本体は filename-format.md の 4(キーの表・優先順位・差分の書き方)。
+
+- **区切り(`separators`)と既定の欄(`defaults`)は、ファイル全体・プリセット・型の 3 か所に同じ綴りで書け、内側が勝つ**
+  (型 > プリセット > ファイル全体)。区切りは書いた所で丸ごと置き換わり、既定は欄ごと。名前から読めた値がいちばん強い。
+  型に添えるときは `{ "format": "…", "separators": [...], "defaults": {...} }`(添えない型は文字列のまま)。
+- **プリセットの名前は JSON が決める**(`RuleSchema.presetNames` は綴りの候補にしか使わない)。利用者は差分で新しい名前の
+  プリセットを足せる(全体を書く)。`defaultPreset` も差分で変えられる。プリセットに `label`・`note`(画面の見出しと説明)。
+- 区切りは 1 文字に限らない。型は `format` の文字列で見分ける(差分の `$add`・`$remove`)。
+- 外したもの: `retiredIDs`・`aliases`(下のメモの 3)、プリセットを配列だけで書く短い形。
+- **「シリーズ名 (巻数) - 著者」の 2 通り**(`@series (@volume) - @author [@info]` と、`[@info]` の無い形)を、商業誌用と既定の並びの
+  **末尾**に足した(利用者の指示。`commercial` は 10 通り、`mixed` は 26 通り)。丸括弧の前は **`@series`** で読む(利用者の指示:
+  タイトルからシリーズと巻を導く処理を丸ごと通さない。読んだ値は確定した値と同じ扱い = `Propose.confirming`)。
+  そのため **`@series` を書いた型は `@title` を省ける**ようにした。タイトルは、型の `@series (@volume)` の部分に読んだ値を
+  はめたもの(「月の庭 (3)」。利用者の指示。`FilenameFormat.assembledTitle`)。
+  欄で始まる型が入ったので、「最も近い型」は頭の欄の次の文字まで進んだ型だけを候補にする。
+- 手元の蔵書 A(同じ提案ファイル・同じ割り当て)の集計と指紋は変わらない(`ae41e4e8aede473b418c22c0`)。例は 91 件、テストは 115 件。
+- **走査(`FolderScanner`)は、qooViewer が本として開けるものをすべて拾う**(2026-09-20、利用者の指示。それまでは書庫の
+  6 つの拡張子だけだった)。書庫(zip・cbz・rar・cbr・7z・cb7)・PDF・EPUB と、**画像フォルダ**。何を 1 冊と数えるかは
+  qooViewer(`4b912b1` の ArchiveReading・ShelfFolderResolver)と同じ: ① 直下に画像があるフォルダは 1 冊(中へは降りない)、
+  ② 直下に本のファイルが無く、画像を直に持つフォルダが並ぶフォルダも 1 冊(章ごとに分けた本)、③ ほかは棚(直下の本の
+  ファイルを拾い、下のフォルダを同じ規則で見る)。**起点そのものは本にしない**(qooMeta で足した決まり。起点の直下に
+  画像フォルダの本だけが並ぶ蔵書が、規則 ② で丸ごと 1 冊にならないように)。
+  - フォルダの本は、名前 = フォルダの名前の全体、拡張子 = 空(`ScannedFile.isFolder`)。作業ファイルは `isFolder` を持つ
+    (`Workfile.Book`。ID の末尾からは決められないため)。Stackroom XML の `File Type` は 4(StackNest の取り込みと同じ値。
+    PDF・EPUB は StackNest も 2 で持つ)。
+  - 規則 ② の弱点: **起点より下で**、画像フォルダの本だけが並ぶ棚(書庫が 1 つも無い)は、棚ごと 1 冊になる(qooViewer も同じ)。
+    冊数で気づける。困る利用者が出たら、起点と同じ扱いにする階層を選べるようにする。
+- 同梱の並びは、JSON とコード(`FilenameFormats.presetTexts` など。規則ファイルを読む前の予備)の 2 か所にある。
+  同じであることはテスト(`bundledDefaultsCompileCleanly`)で守る。
+
+### 残り: `series-rules.json`(着手前のメモ。まだ直していない)
 
 1. **`editionPrefixWords` が `editionWords` とほぼ重複している**(`series-rules.json` の `lists`)。利用者が `editionWords` に
    語を足しても「フルカラー総集編」の判定には効かない。一覧の参照を配列の中にも書けるようにして
    (`"words": ["@list:editionWords", "フルカラー", "カラー", "モノクロ"]`)、重複を消すのが素直。
-2. ~~プリセットがただの文字列の配列~~(2026-09-20 に片付いた。第 4 版で `{"formats": [...], "defaults": {...}}` に変えた)。
-   画面に出す**見出しや説明**(`label`・`note`)は、まだ持てない。
-3. **`filename-formats.json` の `retiredIDs`・`aliases` は、このファイルでは意味が無い**(型には ID が無い)。消してよい。
+2. ~~プリセットがただの文字列の配列~~(片付いた。第 5 版で `label`・`note` も持てる)。
+3. ~~`filename-formats.json` の `retiredIDs`・`aliases`~~(片付いた。第 5 版で外した)。
 4. **総集編の設定が 2 か所に分かれている**: 切り替えは方針 `compilationVolume`、足す数は規則 `grouping.compilation.volumeOffset`。
    方針は「決まった値から選ぶ」ものなので分かれるのは設計どおりだが、画面では 1 か所に見せる。
 5. **docs が古い**: `rules-format-design.md` の方針の表が `compilationVolume` を `none`/`afterRange` のままにしている

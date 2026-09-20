@@ -24,6 +24,8 @@ struct RuleLoader {
     var issues: [RulesIssue] = []
     /// 差分が変えた値の道筋(`rules show` で、どちらの値が効いているかを示す)。
     var changedPaths: [String] = []
+    /// 差分でプリセットに区切りを初めて書くときの土台(ファイル全体の区切り。重ねた後の値)。
+    var inheritedSeparators: JSONValue = .array([])
     /// 既定値の `retiredIDs`・`aliases`(差分を読むときに使う)。
     var retiredIDs: Set<String> = []
     var aliases: [String: String] = [:]
@@ -59,8 +61,8 @@ struct RuleLoader {
         case nil: report(.missingKey, "kind")
         case let v?: report(.invalidValue, "kind", "文字列であるべきところが\(v.kindName)")
         }
-        // 形式の版はファイルごと(filename-formats は第 4 版、ほかは第 2 版)。
-        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 4.0 : 2.0
+        // 形式の版はファイルごと(filename-formats は第 5 版、ほかは第 2 版)。
+        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 5.0 : 2.0
         switch o["schemaVersion"] {
         case .number(let v)? where v == expectedVersion: break
         case .number(let v)?: report(.unsupportedSchemaVersion, "schemaVersion", JSONValue.number(v).rendered())
@@ -93,13 +95,13 @@ struct RuleLoader {
         checkRetirement(o)
     }
 
+    /// フォーマットの既定値。型には ID が無いので、`retiredIDs`・`aliases` は持たない(第 5 版で外した)。
     mutating func checkFormatDefaults(_ root: JSONValue) {
         guard let o = root.objectValue else { return }
         let stageNames = RuleSchema.formatStages.fields.map(\.name)
-        let allowed = Self.envelopeKeys + ["retiredIDs", "aliases"] + stageNames
+        let allowed = Self.envelopeKeys + stageNames
         unknownKeys(o, "", allowed: allowed)
         check(root, .object(RuleSchema.formatStages), "", full: true, ignoring: Set(allowed).subtracting(stageNames))
-        checkRetirement(o)
     }
 
     mutating func checkRetirement(_ o: [String: JSONValue]) {
@@ -179,6 +181,11 @@ struct RuleLoader {
             checkChoice(value, choices, path)
         case .fixedString:
             if value.stringValue == nil { report(.invalidValue, path, "文字列であるべきところが\(value.kindName)") }
+        case .string:
+            guard let s = value.stringValue, !s.isEmpty else { report(.invalidValue, path, "空でない文字列であるべきところ"); return }
+            if s.count > Limits.patternLength { report(.tooLarge, path, "\(s.count) 文字") }
+        case .separators:
+            checkListValue(value, .words, path)
         case .list(let kind):
             if let ref = value.stringValue {
                 checkListReference(ref, kind, path)
@@ -190,20 +197,15 @@ struct RuleLoader {
         case .formats:
             guard let items = value.arrayValue else { report(.invalidValue, path, "配列であるべきところが\(value.kindName)"); return }
             if items.count > Limits.items { report(.tooLarge, path, "\(items.count) 件") }
-            for (i, item) in items.enumerated() where (item.stringValue ?? "").isEmpty {
-                report(.invalidValue, "\(path)[\(i)]", "空でない文字列であるべきところ")
-            }
+            for (i, item) in items.enumerated() { checkFormatEntry(item, "\(path)[\(i)]") }
         case .object(let node):
             checkObject(value, node, path, full: full, ignoring: ignoring)
         case .readers:
             checkReaders(value, path, full: full)
         case .presets:
             guard let o = value.objectValue else { report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
-            unknownKeys(o, path, allowed: RuleSchema.presetNames)
-            for name in RuleSchema.presetNames {
-                if let preset = o[name] { checkPreset(preset, "\(path).\(name)", full: full) }
-                else if full { report(.missingKey, "\(path).\(name)") }
-            }
+            // どの名前のプリセットがあるかは JSON が決める(コードは名前を決め打ちしない)。
+            for name in o.keys.sorted() where checkPresetName(name, path) { checkPreset(o[name]!, "\(path).\(name)") }
         case .presetDefaults:
             guard let o = value.objectValue else { report(.invalidValue, path, "欄の名前をキーにしたオブジェクトであるべきところが\(value.kindName)"); return }
             unknownKeys(o, path, allowed: RuleSchema.presetDefaultFields)
@@ -214,11 +216,28 @@ struct RuleLoader {
         }
     }
 
-    /// 1 つのプリセット。型の並びだけを配列で書いてもよい(既定を持たないプリセットの短い書き方)。
-    mutating func checkPreset(_ value: JSONValue, _ path: String, full: Bool) {
-        if value.arrayValue != nil { check(value, .formats, path, full: full) }
-        else { checkObject(value, RuleSchema.presetNode, path, full: false) }
+    /// 1 つのプリセット(全体)。要るのは `formats` だけ。
+    mutating func checkPreset(_ value: JSONValue, _ path: String) {
+        checkObject(value, RuleSchema.presetNode, path, full: true)
     }
+
+    /// プリセットの名前。`$` で始まる名前は差分の操作と紛れるので使えない。
+    mutating func checkPresetName(_ name: String, _ path: String) -> Bool {
+        if name.isEmpty || name.hasPrefix("$") || name.count > Limits.wordLength {
+            report(.invalidValue, Self.join(path, name), "プリセットの名前は、$ で始まらない 1〜\(Limits.wordLength) 文字")
+            return false
+        }
+        return true
+    }
+
+    /// 1 つの型: 文字列か、その型だけの区切り・既定の欄を添えたオブジェクト。型の書き方そのものは組み立てのときに確かめる。
+    mutating func checkFormatEntry(_ item: JSONValue, _ path: String) {
+        if item.objectValue != nil { checkObject(item, RuleSchema.formatEntryNode, path, full: true); return }
+        if (item.stringValue ?? "").isEmpty { report(.invalidValue, path, "空でない文字列か、\"format\" を持つオブジェクトであるべきところ") }
+    }
+
+    /// 型の文字列(並びの中で型を見分ける鍵。オブジェクトで書いた型も、`format` の文字列で見分ける)。
+    static func formatText(_ item: JSONValue) -> JSONValue { item["format"] ?? item }
 
     mutating func checkObject(_ value: JSONValue, _ node: RuleSchema.Node, _ path: String, full: Bool,
                               ignoring: Set<String> = []) {
@@ -241,7 +260,7 @@ struct RuleLoader {
         }
         for field in node.fields {
             guard let v = o[field.name] else {
-                if full { report(.missingKey, Self.join(path, field.name)) }
+                if full, !field.optional { report(.missingKey, Self.join(path, field.name)) }
                 continue
             }
             check(v, field.shape, Self.join(path, field.name), full: full)
@@ -416,12 +435,26 @@ struct RuleLoader {
                 skipUnknown(key, diff[key]!, "", candidates: allowed)
             }
         }
+        // 書いた順に重ねる(`separators` を `presets` より先に。プリセットに初めて区切りを書くときの土台になる)。
         for field in RuleSchema.formatStages.fields {
-            if let d = diff[field.name], let b = merged[field.name] {
+            if field.name == "presets" { inheritedSeparators = merged["separators"] ?? .array([]) }
+            if let d = diff[field.name], let b = merged[field.name] ?? missingBase(field) {
                 merged[field.name] = apply(d, to: b, field.shape, field.name)
             }
         }
         return .object(merged)
+    }
+
+    /// 省けるキーが既定値の側に無いとき、差分を重ねる土台。区切りは外側(ファイル全体)の値から始める
+    /// (「このプリセットでは × も区切りにする」を `$add` だけで書けるように)。
+    func missingBase(_ field: RuleSchema.Field) -> JSONValue? {
+        guard field.optional else { return nil }
+        switch field.shape {
+        case .string: return .null
+        case .separators: return inheritedSeparators
+        case .presetDefaults: return .object([:])
+        default: return nil
+        }
     }
 
     mutating func applyLists(_ diff: JSONValue, to base: JSONValue) -> JSONValue {
@@ -453,6 +486,14 @@ struct RuleLoader {
         case .fixedString:
             if diff != base { report(.invalidValue, path, "変えられない") }
             return base
+        case .string:
+            let before = issues.count
+            check(diff, shape, path, full: false)
+            guard issues.count == before else { return base }
+            if diff != base { changedPaths.append(path) }
+            return diff
+        case .separators:
+            return applyArrayOps(diff, to: base, path, allowsAt: false) { this, item, p in this.checkListItem(item, .words, p) }
         case .list(let kind):
             if let ref = diff.stringValue {
                 let before = issues.count
@@ -469,8 +510,9 @@ struct RuleLoader {
         case .patterns:
             return applyArrayOps(diff, to: base, path, allowsAt: false) { this, item, p in this.checkPattern(item, p) }
         case .formats:
-            return applyArrayOps(diff, to: base, path, allowsAt: true) { this, item, p in
-                if (item.stringValue ?? "").isEmpty { this.report(.invalidValue, p, "空でない文字列であるべきところ") }
+            // 型は `format` の文字列で見分ける(区切りを添えた型も、文字列だけを書けば外せる)。
+            return applyArrayOps(diff, to: base, path, allowsAt: true, identity: Self.formatText) { this, item, p in
+                this.checkFormatEntry(item, p)
             }
         case .object(let node):
             return applyObject(diff, to: base, node, path)
@@ -496,15 +538,22 @@ struct RuleLoader {
                 report(.invalidValue, path, "プリセットの名前をキーにしたオブジェクトであるべきところが\(diff.kindName)")
                 return base
             }
-            for name in changes.keys.sorted() {
-                guard let current = merged[name] else {
-                    skipUnknown(name, changes[name]!, path, candidates: RuleSchema.presetNames)
+            for name in changes.keys.sorted() where checkPresetName(name, path) {
+                if let current = merged[name] {
+                    merged[name] = applyObject(changes[name]!, to: current, RuleSchema.presetNode, "\(path).\(name)")
                     continue
                 }
-                // 既定値の側がオブジェクト(型の並び + 既定の欄)なら、その形で重ねる。配列だけの短い書き方にも合わせる。
-                merged[name] = current.arrayValue != nil
-                    ? apply(changes[name]!, to: current, .formats, "\(path).\(name)")
-                    : applyObject(changes[name]!, to: current, RuleSchema.presetNode, "\(path).\(name)")
+                // 既定値に無い名前は、利用者の新しいプリセット。重ねる相手が無いので、全体を書く(`$add` などの操作は書けない)。
+                let before = issues.count
+                if changes[name]!["formats"]?.arrayValue == nil {
+                    report(.invalidValue, "\(path).\(name)", "新しいプリセットは全体を書く({ \"formats\": [\"…\"] })。同梱のプリセットを変えるなら名前を確かめる",
+                           suggestion: Spelling.suggestion(for: name, among: merged.keys.sorted()))
+                } else {
+                    checkPreset(changes[name]!, "\(path).\(name)")
+                }
+                guard issues.count == before else { continue }
+                merged[name] = changes[name]!
+                changedPaths.append("\(path).\(name)")
             }
             return .object(merged)
         }
@@ -528,7 +577,7 @@ struct RuleLoader {
             if extraAllowed.contains(key) { continue }
             var name = key
             if node.field(name) == nil, let renamed = aliases[name], node.field(renamed) != nil { name = renamed }
-            guard let field = node.field(name), let current = merged[name] else {
+            guard let field = node.field(name), let current = merged[name] ?? missingBase(field) else {
                 skipUnknown(key, value, path, candidates: candidates)
                 continue
             }
@@ -624,7 +673,9 @@ struct RuleLoader {
     }
 
     /// 配列への `$add`・`$remove`・`$replace`。`allowsAt` なら `$add` の位置を `"at": "start" | "end"` で選べる(既定は先頭)。
+    /// `identity` は、2 つの項目が同じものかを見る鍵(既定は値そのもの)。
     mutating func applyArrayOps(_ diff: JSONValue, to base: JSONValue, _ path: String, allowsAt: Bool,
+                                identity: (JSONValue) -> JSONValue = { $0 },
                                 checkItem: (inout RuleLoader, JSONValue, String) -> Void) -> JSONValue {
         guard let ops = diff.objectValue else {
             report(.invalidValue, path, "差分では { \"$add\": [...], \"$remove\": [...] } か { \"$replace\": [...] } で書く"
@@ -651,9 +702,10 @@ struct RuleLoader {
         }
         guard var current = base.arrayValue else { return base }
         let original = current
-        if let removed = items("$remove") { current.removeAll { removed.contains($0) } }
+        if let removed = items("$remove")?.map(identity) { current.removeAll { removed.contains(identity($0)) } }
         if let added = items("$add") {
-            let fresh = added.enumerated().filter { i, item in !current.contains(item) && !added[..<i].contains(item) }.map(\.element)
+            let present = current.map(identity), keys = added.map(identity)
+            let fresh = added.enumerated().filter { i, _ in !present.contains(keys[i]) && !keys[..<i].contains(keys[i]) }.map(\.element)
             var atEnd = false
             if let at = ops["at"] {
                 switch at.stringValue {

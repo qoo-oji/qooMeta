@@ -27,33 +27,41 @@ public struct Workfile: Codable, Sendable, Hashable {
     public struct Book: Codable, Sendable, Hashable, Identifiable {
         /// 起点からの相対パス(本の ID)。
         public var id: String
-        /// 拡張子を除いたファイル名。
+        /// 本の名前(ファイルは拡張子を除いたもの。フォルダの本は名前の全体)。
         public var name: String
+        /// フォルダの本(画像フォルダ)か。ID の末尾からは決められない(「第1.5巻」というフォルダに拡張子は無い)ので覚えておく。
+        public var isFolder: Bool
         /// 利用者の修正(欄・シリーズ・巻)。何も直していなければ `.none`。
         public var confirmation: Confirmation
 
-        public init(id: String, name: String, confirmation: Confirmation = .none) {
+        public init(id: String, name: String, isFolder: Bool = false, confirmation: Confirmation = .none) {
             self.id = id
             self.name = name
+            self.isFolder = isFolder
             self.confirmation = confirmation
         }
+
+        /// 書き出しに使う拡張子(フォルダの本は空)。
+        public var fileExtension: String { isFolder ? "" : (id as NSString).pathExtension.lowercased() }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
             name = try c.decode(String.self, forKey: .name)
+            isFolder = try c.decodeIfPresent(Bool.self, forKey: .isFolder) ?? false
             confirmation = try c.decodeIfPresent(Confirmation.self, forKey: .confirmation) ?? .none
         }
 
-        /// 直していない本は `confirmation` を書かない(作業ファイルを小さく、差分を読みやすく保つ)。
+        /// 直していない本は `confirmation` を、ファイルの本は `isFolder` を書かない(作業ファイルを小さく、差分を読みやすく保つ)。
         public func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(id, forKey: .id)
             try c.encode(name, forKey: .name)
+            if isFolder { try c.encode(isFolder, forKey: .isFolder) }
             if confirmation != .none { try c.encode(confirmation, forKey: .confirmation) }
         }
 
-        enum CodingKeys: String, CodingKey { case id, name, confirmation }
+        enum CodingKeys: String, CodingKey { case id, name, isFolder, confirmation }
     }
 
     /// フォルダごとの型の並びの割り当て(CLI の `--presets` と同じ形)。

@@ -271,42 +271,43 @@
 
 ## ファイル名のフォーマット(`qoometa.filename-formats`)
 
-**この節は 2026-09-20 に書き直した**(第 4 版)。ここにあった第 2 版の案(`@circle`・`@relation`・`@keywordA`、
-`profiles`・`protectedTokens`)は、qooLibrary に引っ張られた形で、段階 6 で捨てた。書き方は
-[filename-format.md](filename-format.md) が本体で、ここには形式だけを書く。
+**この節は 2026-09-20 に書き直した**(第 5 版)。ここにあった第 2 版の案(`@circle`・`@relation`・`@keywordA`、
+`profiles`・`protectedTokens`)は、qooLibrary に引っ張られた形で、段階 6 で捨てた。書き方と**形式の説明の本体は
+[filename-format.md](filename-format.md) の 4**(キーの表・優先順位・差分の書き方)。ここには要点だけを書く。
 
 ```json
 {
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 4,
-  "separators": [",", "，", "、"],
+  "schemaVersion": 5,
   "defaultPreset": "mixed",
+  "separators": [",", "，", "、"],
   "presets": {
-    "doujinshi": {
+    "commercial": {
+      "label": "商業誌",
       "formats": [
-        "(@genre) [@author (@author)] @title (@source) [@info]",
-        "[@author] @title"
+        "[@author] @title (@volume)",
+        { "format": "@series (@volume) - @author", "separators": ["×"] }
       ]
     },
     "doujinshi-event": {
-      "formats": ["(@event) [@author] @title (@source)"],
-      "defaults": { "genre": "同人誌" }
+      "defaults": { "genre": "同人誌" },
+      "formats": ["(@event) [@author] @title (@source)"]
     }
-  },
-  "retiredIDs": [],
-  "aliases": {}
+  }
 }
 ```
 
 - **予約語**は `@title @author @genre @event @source @info @series @volume @ignore`。欄への対応はコードが持つ(JSON では書き換えない)。
 - **プリセット**(名前を付けた型の並び)は本ごとに選ぶ。並びは上から試し、名前全体に一致した最初の型で読む。
   同じ位置を奪い合う型(先頭の丸括弧が `@genre` の型と `@event` の型)は**同居できない**ので、プリセットを分ける。
-- **`defaults`**: 名前に書かれていない欄に入れる値(ジャンル・イベント・原作・情報)。名前から読めた欄は上書きしない。
-  催しの名前で管理する蔵書はジャンルがどの名前にも書かれないので、プリセットの側で決められるようにした(2026-09-20)。
-- プリセットは、型の並びだけなら配列で書いてもよい(`"doujinshi": ["…", "…"]`)。
-- 差分では、プリセットを名前で指す: `{ "presets": { "doujinshi": { "formats": { "$add": [...], "at": "end" } } } }`。
-  `formats` は順序が意味を持つので、`$add` は `{ "$add": [...], "at": "start" | "end" }`(既定は `start`。利用者の形を先に試す)。
-  `defaults` は欄ごとに置き換え(`null` でその欄の既定を消す)。
+  プリセットの名前は JSON が決める(コードは決め打ちしない。利用者は差分で新しいプリセットを足せる)。
+- **`separators`(著者の区切り)と `defaults`(名前に書かれていない欄の値)は、ファイル全体・プリセット・型の 3 か所に書け、
+  内側に書いたものが勝つ**(型 > プリセット > ファイル全体)。`separators` は書いた所で丸ごと置き換わり、`defaults` は欄ごと。
+  名前から読めた値は、どの既定よりも強い。
+- 1 つの型は文字列か、`{ "format": "…", "separators": [...], "defaults": {...} }`。
+- 第 4 版から変えたこと: 型ごと・プリセットごとの `separators`、ファイル全体・型ごとの `defaults`、`label`・`note`、
+  利用者のプリセット、`defaultPreset` を差分で変えられること、区切りが 1 文字に限られないこと。
+  `retiredIDs`・`aliases`(型には ID が無いので意味が無かった)と、プリセットを配列だけで書く短い形(書き方を 1 つにする)は外した。
 
 ## 例のファイル(`qoometa.examples`)
 

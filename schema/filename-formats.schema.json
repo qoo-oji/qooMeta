@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
-  "title": "qooMeta のファイル名のフォーマット(第 4 版)",
-  "description": "既定値の全体、または base: builtin の差分。説明は docs/filename-format.md",
+  "title": "qooMeta のファイル名のフォーマット(第 5 版)",
+  "description": "既定値の全体の形。base: builtin の差分は、配列を { \"$add\": [...], \"$remove\": [...], \"at\": \"start\" | \"end\" } か { \"$replace\": [...] } で書く(docs/filename-format.md の 4)",
   "type": "object",
   "required": [
     "kind",
@@ -17,7 +17,7 @@
       "const": "qoometa.filename-formats"
     },
     "schemaVersion": {
-      "const": 4
+      "const": 5
     },
     "revision": {
       "type": "string"
@@ -26,27 +26,23 @@
       "const": "builtin",
       "description": "差分のファイルにだけ書く。同梱の既定値に重ねる"
     },
-    "retiredIDs": {
-      "$ref": "#/$defs/retiredIDs"
-    },
-    "aliases": {
-      "$ref": "#/$defs/aliases"
-    },
-    "separators": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "description": "著者の値を分ける文字列(既定は , ， 、)"
-    },
     "defaultPreset": {
       "type": "string",
-      "description": "本がプリセットを選ばなかったときに使う名前"
+      "minLength": 1,
+      "description": "本がプリセットを選ばなかったときに使う名前(presets にある名前)"
+    },
+    "separators": {
+      "$ref": "#/$defs/separators"
+    },
+    "defaults": {
+      "$ref": "#/$defs/defaults"
     },
     "presets": {
       "type": "object",
-      "description": "名前を付けた型の並び。本ごと(実際にはフォルダごと)に選ぶ",
+      "description": "名前を付けた型の並び。本ごと(実際にはフォルダごと)に選ぶ。名前は自由(利用者は差分で足せる)",
+      "propertyNames": {
+        "pattern": "^[^$]"
+      },
       "additionalProperties": {
         "$ref": "#/$defs/preset"
       }
@@ -54,66 +50,95 @@
   },
   "$defs": {
     "preset": {
-      "description": "1 つのプリセット。型の並びだけなら配列で書いてもよい",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formats"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "画面に出す見出し(無ければ名前を出す)"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "画面に出す説明"
+        },
+        "separators": {
+          "$ref": "#/$defs/separators"
+        },
+        "defaults": {
+          "$ref": "#/$defs/defaults"
+        },
+        "formats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/format"
+          },
+          "description": "型の並び。上から照合し、名前全体に一致した最初の型で読む"
+        }
+      }
+    },
+    "format": {
+      "description": "1 つの型。文字列か、その型だけの区切り・既定の欄を添えたオブジェクト。予約語は @title @author @genre @event @source @info @series @volume @ignore",
       "oneOf": [
         {
-          "$ref": "#/$defs/formats"
+          "type": "string",
+          "minLength": 1
         },
         {
           "type": "object",
           "additionalProperties": false,
+          "required": [
+            "format"
+          ],
           "properties": {
-            "formats": {
-              "$ref": "#/$defs/formats"
+            "format": {
+              "type": "string",
+              "minLength": 1
+            },
+            "separators": {
+              "$ref": "#/$defs/separators"
             },
             "defaults": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "名前に書かれていない欄に入れる値(名前から読めたときは触らない)",
-              "properties": {
-                "genre": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "event": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "source": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "info": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              }
+              "$ref": "#/$defs/defaults"
             }
           }
         }
       ]
     },
-    "formats": {
+    "separators": {
       "type": "array",
       "items": {
         "type": "string",
         "minLength": 1
       },
-      "description": "型の並び。上から照合し、名前全体に一致した最初の型で読む。予約語は @title @author @genre @event @source @info @series @volume @ignore"
+      "description": "著者の値を分ける文字列。ファイル全体 → プリセット → 型 の順に、内側に書いたものが丸ごと置き換える(足し合わせない)"
     },
-    "retiredIDs": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "廃止した規則の ID(既定値にだけ書く)"
-    },
-    "aliases": {
+    "defaults": {
       "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      },
-      "description": "旧 ID → 新 ID(既定値にだけ書く)"
+      "additionalProperties": false,
+      "description": "名前に書かれていない欄に入れる値。欄ごとに、内側(型 > プリセット > ファイル全体)に書いたものが勝つ。名前から読めた値は上書きしない",
+      "properties": {
+        "genre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "info": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   }
 }

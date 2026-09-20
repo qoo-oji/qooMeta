@@ -9,6 +9,7 @@ import Foundation
 // シリーズ名と巻数は、ふつうはタイトルから中核の規則で導く。ただし、名前の中に**はっきり書いてある**とき
 // (商業の本の「(12)」「第01巻」)は `@series` `@volume` で読める(2026-09-20、利用者の判断)。読んだ値は、利用者が確定した値と
 // 同じ扱いで中核へ渡す。`@volume` は数字だけの値に当たる(全角の数字は半角に畳む)。
+// `@series` を書いた型は `@title` を省ける(`@series (@volume) - @author`)。タイトルは、型のその部分に値をはめて組み立てる(「月の庭 (3)」)。
 
 /// 予約語。
 public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
@@ -56,7 +57,7 @@ public enum FormatError: Error, Sendable, Hashable, CustomStringConvertible {
         case .empty: "型が空"
         case .unknownWord(let w): "予約語ではない: \(w)"
         case .repeated(let w): "\(w.spelling) は 1 つの型に 1 度だけ書ける"
-        case .missingTitle: "@title が無い"
+        case .missingTitle: "@title か @series が要る"
         case .unbalanced(let c): "括弧の対が合わない: \(c)"
         case .adjacent(let a, let b): "\(a.spelling) と \(b.spelling) のあいだに区切りの文字が要る"
         }
@@ -77,9 +78,19 @@ public struct FilenameFormat: Sendable, Hashable {
     /// 書いたとおりの型。
     public let text: String
     let tokens: [Token]
+    /// この型だけの著者の区切り。nil ならプリセットの区切りで分ける(**書いたら丸ごと置き換える**。足し合わせない)。
+    ///
+    /// 同じ「×」でも、角括弧の中では 1 つの名義の一部で、` - @author` の形の商業の本では連名の区切り、ということがある。
+    /// どの字で分けるかは命名の形ごとに違うので、型ごとに決められるようにする(2026-09-20、利用者の指示)。
+    public var separators: [String]?
+    /// この型で読んだ本にだけ入れる既定の欄(欄ごとにプリセットの既定より勝つ)。名前から読めた欄は触らない。
+    public var defaults: [BookMetadata.Field: [String]]
 
-    public init(_ text: String) throws(FormatError) {
+    public init(_ text: String, separators: [String]? = nil,
+                defaults: [BookMetadata.Field: [String]] = [:]) throws(FormatError) {
         self.text = text
+        self.separators = separators
+        self.defaults = defaults
         tokens = try Self.compile(text)
     }
 
@@ -149,8 +160,40 @@ public struct FilenameFormat: Sendable, Hashable {
         }
         if let o = open.last { throw .unbalanced(o) }
         if tokens.allSatisfy({ $0 == .space }) { throw .empty }
-        if !seen.contains(.title) { throw .missingTitle }
+        // `@series` を書いた型は `@title` を省ける(タイトルは、型のシリーズと巻数の部分に値をはめて組み立てる)。
+        if !seen.contains(.title), !seen.contains(.series) { throw .missingTitle }
         return tokens
+    }
+
+    /// 型の頭に続く、何にでも当たる部品(欄と空白)の数。ここまでしか進まなかった名前は、この型に近いとは言えない
+    /// (`@title` で始まる型は、どんな名前でも頭の欄までは「合う」)。
+    var leadingFreeTokens: Int {
+        tokens.prefix { if case .literal = $0 { false } else { true } }.count
+    }
+
+    /// `@title` の無い型のタイトル: 型の `@series` から `@volume` までの部分(じかに付いた括弧などの文字も含む)に、
+    /// 読んだ値をはめたもの。`@series (@volume) - @author` なら「月の庭 (3)」、`@series 第@volume巻` なら「月の庭 第3巻」。
+    /// 型に書いた文字をそのまま使う(名前の側の全角の括弧や空白の数ではなく)ので、同じ型で読んだ本は同じ形にそろう。
+    func assembledTitle(series: String, volume: String) -> String {
+        func isPart(_ token: Token) -> Bool {
+            if case .field(let word, _) = token { return word == .series || word == .volume }
+            return false
+        }
+        guard var lower = tokens.firstIndex(where: isPart), var upper = tokens.lastIndex(where: isPart) else { return series }
+        // 欄にじかに付いた文字(括弧・「第」「巻」)までを含める。空白やほかの欄で止める。
+        while lower > 0, case .literal = tokens[lower - 1] { lower -= 1 }
+        while upper + 1 < tokens.count, case .literal = tokens[upper + 1] { upper += 1 }
+        var text = ""
+        for token in tokens[lower...upper] {
+            switch token {
+            case .literal(let c): text.append(c)
+            case .space: text.append(" ")
+            case .field(.series, _): text += series
+            case .field(.volume, _): text += volume
+            case .field: break
+            }
+        }
+        return TextRules.normalizeDisplay(text)
     }
 
     /// 照合の結果: 欄ごとの値の位置(名前の中の文字の位置)。
@@ -210,8 +253,14 @@ public struct FilenameFormat: Sendable, Hashable {
     }
 }
 
-/// 型の並びと、並びの欄の区切り(アプリの設定として 1 組)。
+/// 型の並びと、並びの欄の区切り(1 つのプリセット)。
+///
+/// 区切りと既定の欄は ファイル全体 → プリセット → 型 の 3 か所に書け、**内側に書いたものが勝つ**
+/// (docs/filename-format.md の 4)。ここが持つのは、ファイル全体とプリセットを重ねた後の値。型の分は型が持つ。
 public struct FilenameFormats: Sendable, Hashable {
+    /// 画面に出す見出しと説明(無ければプリセットの名前を出す)。
+    public var label: String?
+    public var note: String?
     public var formats: [FilenameFormat]
     /// 著者の値を分ける文字列(並びの欄は著者だけ)。既定は `,` と `、`(全角のカンマも `,` と同じ)。
     /// `×` `&` `・` は 1 つの名義の中にも現れ、取り違えると著者の先頭(中核の比べる単位)が壊れるので既定に入れない。
@@ -225,10 +274,12 @@ public struct FilenameFormats: Sendable, Hashable {
     public static let defaultSeparators = [",", "，", "、"]
 
     public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators,
-                defaults: [BookMetadata.Field: [String]] = [:]) {
+                defaults: [BookMetadata.Field: [String]] = [:], label: String? = nil, note: String? = nil) {
         self.formats = formats
         self.separators = separators
         self.defaults = defaults
+        self.label = label
+        self.note = note
     }
 
     /// 同梱のプリセット(docs/filename-format.md の 5)。**同人誌用と商業誌用に分ける**(2026-09-20、利用者の判断。末尾の丸括弧が
@@ -271,8 +322,15 @@ public struct FilenameFormats: Sendable, Hashable {
                 texts.append("\(genre)[@author] @title\(tail)")
             }
         }
-        return texts
+        return texts + trailingAuthorTexts
     }()
+
+    /// 著者を末尾に ` - ` で付ける形(「シリーズ名 (12) - 著者」)。丸括弧の前はシリーズ名そのものなので、`@series` で読む
+    /// (2026-09-20、利用者の指示)。読んだシリーズと巻数は利用者が確定した値と同じ扱いになり、**タイトルから導く処理を通らない**。
+    /// **数字だけの丸括弧のすぐ後ろ**に ` - ` が続くときだけ当たるので、「題名 - 副題」の本の副題を著者に取り違えない
+    /// (括弧の無い `@title - @author` は、その取り違えがあるので同梱しない)。
+    /// 角括弧で始まる形と両方に当たる名前は、これまでどおり角括弧の形で読むように、並びの末尾に置く。
+    static let trailingAuthorTexts = ["@series (@volume) - @author [@info]", "@series (@volume) - @author"]
 
     /// 同梱の既定の並び: 命名の違う本が混ざった蔵書をそのまま読むための 1 本。形ごとに、**数字だけの末尾の丸括弧は巻数**
     /// (`(@volume)`)を先に試し、そうでなければ原作(`(@source)`)として読む。`@volume` は数字だけに当たるので、
@@ -286,7 +344,7 @@ public struct FilenameFormats: Sendable, Hashable {
                 }
             }
         }
-        return texts
+        return texts + trailingAuthorTexts
     }()
 
     public static let preset = FilenameFormats(formats: presetTexts.map { try! FilenameFormat($0) })
@@ -301,9 +359,9 @@ public struct FilenameFormats: Sendable, Hashable {
         var nearest: (index: Int, progress: FilenameFormat.Progress)?
         for (index, format) in formats.enumerated() {
             let (match, progress) = format.match(chars)
-            if let match { return reading(chars, match, formatIndex: index) }
+            if let match { return reading(chars, match, format: format, formatIndex: index) }
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。
-            if progress.tokens > 0, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
+            if progress.tokens > format.leadingFreeTokens, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
         }
         let title = TextRules.normalizeDisplay(name)
         var reading = FormatReading(metadata: BookMetadata(title: title), formatIndex: nil,
@@ -314,14 +372,15 @@ public struct FilenameFormats: Sendable, Hashable {
         return reading
     }
 
-    /// 名前から読めなかった欄に、プリセットの既定を入れる。
-    func applyDefaults(_ metadata: inout BookMetadata) {
-        for (field, values) in defaults where metadata.values(field).isEmpty {
+    /// 名前から読めなかった欄に、既定を入れる。型の既定が、欄ごとにプリセットの既定より勝つ。
+    func applyDefaults(_ metadata: inout BookMetadata, format: FilenameFormat? = nil) {
+        let merged = defaults.merging(format?.defaults ?? [:]) { _, inner in inner }
+        for (field, values) in merged where metadata.values(field).isEmpty {
             metadata.set(field, to: values)
         }
     }
 
-    func reading(_ chars: [Character], _ match: FilenameFormat.Match, formatIndex: Int) -> FormatReading {
+    func reading(_ chars: [Character], _ match: FilenameFormat.Match, format: FilenameFormat, formatIndex: Int) -> FormatReading {
         var metadata = BookMetadata()
         var spans: [FormatReading.Span] = []
         for (word, range) in match.fields {
@@ -334,17 +393,23 @@ public struct FilenameFormats: Sendable, Hashable {
             // 値は表示の形にそろえる(合成済みにし、連なった空白を 1 つにする)。名前の見た目は変えず、欄の値だけ。
             let value = FilenameFormat.foldValue(word, TextRules.normalizeDisplay(String(chars[lower..<upper])))
             if field.isList {
-                metadata.set(field, to: metadata.values(field) + split(value))
+                metadata.set(field, to: metadata.values(field) + split(value, by: format.separators ?? separators))
             } else {
                 metadata.set(field, to: [value])
             }
         }
-        applyDefaults(&metadata)
+        // `@title` の無い型(`@series (@volume) - @author`)は、型のシリーズと巻数の部分に読んだ値をはめてタイトルにする
+        // (「月の庭 (3)」。2026-09-20、利用者の指示)。タイトルは書き出しの題名になるので空にはしない。
+        if metadata.title.isEmpty, !metadata.series.isEmpty {
+            metadata.set(.title, to: [format.assembledTitle(series: metadata.series, volume: metadata.volume)])
+        }
+        applyDefaults(&metadata, format: format)
         return FormatReading(metadata: metadata, formatIndex: formatIndex, spans: spans, nearest: nil)
     }
 
-    /// 著者の値を区切りで分ける(前後の空白を除き、空の値は捨てる)。
-    public func split(_ value: String) -> [String] {
+    /// 著者の値を区切りで分ける(前後の空白を除き、空の値は捨てる)。`separators` を省くとプリセットの区切り。
+    public func split(_ value: String, by separators: [String]? = nil) -> [String] {
+        let separators = separators ?? self.separators
         var parts = [TextRules.normalizeDisplay(value)]
         for separator in separators where !separator.isEmpty {
             parts = parts.flatMap { $0.components(separatedBy: separator) }
@@ -394,6 +459,9 @@ public struct FormatPresets: Sendable, Hashable {
     }
 
     public var names: [String] { presets.keys.sorted() }
+
+    /// 画面に出す見出し(`label`。書いていなければ名前そのもの)。
+    public func title(of name: String) -> String { presets[name]?.label ?? name }
 
     /// 同梱のプリセット(コードの側の既定。規則ファイルを読む前に使う)。
     public static let bundled = FormatPresets(

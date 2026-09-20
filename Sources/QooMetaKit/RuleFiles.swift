@@ -3,7 +3,7 @@ import Foundation
 
 /// 既定値の規則のデータ(同梱の 2 つの JSON。読み込むのは QooMetaRules)。
 ///
-/// - `filename-formats.json`: 型の並び(名前のどこが何の欄か)と、著者の区切り。
+/// - `filename-formats.json`: 型の並び(名前のどこが何の欄か)と、著者の区切り・既定の欄。
 /// - `series-rules.json`: タイトルからシリーズ名と巻を取り出す規則。
 ///
 /// どちらも**蔵書の名前を含まない**(一般的な語と記号だけ)。公開リポジトリに置く。形式は docs/rules-format-design.md。
@@ -305,27 +305,38 @@ struct RuleCompiler {
                 notFirstPrefixes: words(firstVolume?["excludePrefixes"], lists)))
     }
 
-    /// filename-formats.json → 名前を付けた型の並び(プリセット)と区切り。型の書き間違いは、番号付きで誤りにする。
+    /// filename-formats.json → 名前を付けた型の並び(プリセット)。型の書き間違いは、番号付きで誤りにする。
+    ///
+    /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の順に**内側が勝つ**。区切りは書いた所で丸ごと置き換わり、
+    /// 既定の欄は欄ごとに置き換わる。ここでファイル全体とプリセットを重ね、型の分は型に持たせる(読むときに重ねる)。
     mutating func formats(_ root: JSONValue) -> FormatPresets? {
-        let separators = words(root["separators"], [:])
+        func separators(_ v: JSONValue?) -> [String]? { v?.arrayValue?.compactMap(\.stringValue).filter { !$0.isEmpty } }
+        func defaults(_ v: JSONValue?) -> [BookMetadata.Field: [String]] {
+            var result: [BookMetadata.Field: [String]] = [:]
+            for (field, value) in v?.objectValue ?? [:] {
+                guard let field = BookMetadata.Field(rawValue: field), let text = value.stringValue, !text.isEmpty else { continue }
+                result[field] = [text]
+            }
+            return result
+        }
+        let fileSeparators = separators(root["separators"]) ?? FilenameFormats.defaultSeparators
+        let fileDefaults = defaults(root["defaults"])
         var presets: [String: FilenameFormats] = [:]
         for (name, preset) in root["presets"]?.objectValue ?? [:] {
-            // プリセットは「型の並び + 既定の欄」。型の並びだけを配列で書いた短い形も読む。
-            let list = preset.arrayValue != nil ? preset : (preset["formats"] ?? .array([]))
             var compiled: [FilenameFormat] = []
-            for (i, text) in words(list, [:]).enumerated() {
-                do { compiled.append(try FilenameFormat(text)) } catch {
+            for (i, entry) in (preset["formats"]?.arrayValue ?? []).enumerated() {
+                guard let text = RuleLoader.formatText(entry).stringValue else { continue }
+                do {
+                    compiled.append(try FilenameFormat(text, separators: separators(entry["separators"]),
+                                                       defaults: defaults(entry["defaults"])))
+                } catch {
                     report(.invalidValue, "presets.\(name).formats[\(i)]", error.description)
                 }
             }
-            var defaults: [BookMetadata.Field: [String]] = [:]
-            for (field, value) in preset["defaults"]?.objectValue ?? [:] {
-                guard let field = BookMetadata.Field(rawValue: field), let text = value.stringValue, !text.isEmpty else { continue }
-                defaults[field] = [text]
-            }
             presets[name] = FilenameFormats(formats: compiled,
-                                            separators: separators.isEmpty ? FilenameFormats.defaultSeparators : separators,
-                                            defaults: defaults)
+                                            separators: separators(preset["separators"]) ?? fileSeparators,
+                                            defaults: fileDefaults.merging(defaults(preset["defaults"])) { _, inner in inner },
+                                            label: preset["label"]?.stringValue, note: preset["note"]?.stringValue)
         }
         let defaultName = root["defaultPreset"]?.stringValue ?? "mixed"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }

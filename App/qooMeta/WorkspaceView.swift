@@ -59,8 +59,8 @@ struct PresetAssignmentView: View {
             Form {
                 Picker("既定", selection: Binding(get: { workspace.presets.defaultPreset },
                                                  set: { workspace.setPreset($0, forFolder: nil) })) {
-                    Text("同梱の既定(\(workspace.formats.defaultName))").tag(String?.none)
-                    ForEach(workspace.formats.names, id: \.self) { Text($0).tag(String?.some($0)) }
+                    Text("同梱の既定(\(workspace.formats.title(of: workspace.formats.defaultName)))").tag(String?.none)
+                    ForEach(workspace.formats.names, id: \.self) { Text(workspace.formats.title(of: $0)).tag(String?.some($0)) }
                 }
                 if workspace.topLevelFolders.isEmpty {
                     Text("直下のフォルダはありません(すべて既定で読みます)").foregroundStyle(.secondary)
@@ -71,7 +71,7 @@ struct PresetAssignmentView: View {
                                    selection: Binding(get: { workspace.presets.folders[row.folder] },
                                                       set: { workspace.setPreset($0, forFolder: row.folder) })) {
                                 Text("既定に従う").tag(String?.none)
-                                ForEach(workspace.formats.names, id: \.self) { Text($0).tag(String?.some($0)) }
+                                ForEach(workspace.formats.names, id: \.self) { Text(workspace.formats.title(of: $0)).tag(String?.some($0)) }
                             }
                         }
                     }

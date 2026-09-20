@@ -79,6 +79,55 @@ import Testing
         #expect(set.read("[作画×原作] 月の庭").metadata.authors == ["作画", "原作"])
     }
 
+    /// 「シリーズ名 (巻数) - 著者」の形(商業誌用と既定の並び)。数字だけの丸括弧のすぐ後ろの ` - ` でだけ分ける。
+    /// 丸括弧の前はシリーズ名として読み、`@title` の無い型なのでタイトルは型のその部分(`@series (@volume)`)に値をはめる。
+    @Test func trailingAuthorAfterTheVolume() {
+        let r = FilenameFormats.commercialPreset.read("月の庭（３） - 架空作家")
+        #expect(r.metadata.series == "月の庭")
+        #expect(r.metadata.title == "月の庭 (3)")
+        // じかに付いた文字までがタイトルに入る。巻数の無い型ならシリーズ名だけ。
+        #expect(try! FilenameFormats(formats: [FilenameFormat("[@author] @series 第@volume巻 [@info]")])
+            .read("[架空工房] 月の庭 第０３巻 [DL版]").metadata.title == "月の庭 第03巻")
+        #expect(try! FilenameFormats(formats: [FilenameFormat("@series - @author")]).read("月の庭 - 架空作家").metadata.title == "月の庭")
+        #expect(r.metadata.volume == "3")
+        #expect(r.spans.map(\.word) == [.series, .volume, .author])
+        #expect(r.metadata.authors == ["架空作家"])
+        // 末尾の角括弧は著者に入れない(情報の欄へ)。
+        let withInfo = FilenameFormats.commercialPreset.read("月の庭 (3) - 架空作家 [DL版]")
+        #expect(withInfo.metadata.authors == ["架空作家"])
+        #expect(withInfo.metadata.info == "DL版")
+        // タイトルの中の ` - ` では分けない。巻数の無い「題名 - 副題」は、どの型にも合わないまま。
+        #expect(FilenameFormats.commercialPreset.read("月の庭 - 第二部 (3) - 架空作家").metadata.series == "月の庭 - 第二部")
+        #expect(FilenameFormats.commercialPreset.read("月の庭 - 第二部").formatIndex == nil)
+        // 角括弧で始まる名前は、これまでどおり角括弧の形で読む。
+        #expect(FilenameFormats.commercialPreset.read("[架空工房] 月の庭 (3)").metadata.authors == ["架空工房"])
+    }
+
+    /// 区切りは型ごとに決められる。書いた型では、プリセットの区切りを丸ごと置き換える(足し合わせない)。
+    @Test func separatorsPerFormat() throws {
+        let set = FilenameFormats(formats: [
+            try FilenameFormat("[@author] @title"),
+            try FilenameFormat("@title (@volume) - @author", separators: ["×"]),
+        ])
+        // 角括弧の形では「×」は名義の一部。
+        #expect(set.read("[作画×原作, 協力] 月の庭").metadata.authors == ["作画×原作", "協力"])
+        // 末尾の著者の形では「×」で分け、プリセットの「,」では分けない。
+        #expect(set.read("月の庭 (3) - 作画×原作, 協力").metadata.authors == ["作画", "原作, 協力"])
+    }
+
+    /// 既定の欄も型ごとに書ける。欄ごとに、型の既定がプリセットの既定より勝つ。名前から読めた値がいちばん強い。
+    @Test func defaultsPerFormat() throws {
+        let set = FilenameFormats(formats: [
+            try FilenameFormat("(@genre) [@author] @title"),
+            try FilenameFormat("[@author] @title", defaults: [.genre: ["架空の分類乙"]]),
+        ], defaults: [.genre: ["架空の分類甲"], .info: ["架空の付記"]])
+        let inner = set.read("[架空工房] 月の庭")
+        #expect(inner.metadata.genre == "架空の分類乙")
+        #expect(inner.metadata.info == "架空の付記")
+        #expect(set.read("(架空の分類丙) [架空工房] 月の庭").metadata.genre == "架空の分類丙")
+        #expect(set.read("括弧の無い名前").metadata.genre == "架空の分類甲")
+    }
+
     @Test func spansPointAtTheValues() {
         let name = "[架空工房] 月の庭"
         let r = Self.read(name)
@@ -113,6 +162,8 @@ import Testing
         #expect(error("[@circle] @title") == .unknownWord("@circle"))
         #expect(error("(@genre) (@genre) @title") == .repeated(.genre))
         #expect(error("[@author]") == .missingTitle)
+        // `@series` を書いた型は `@title` を省ける。
+        #expect(error("@series (@volume) - @author") == nil)
         #expect(error("[@author] @title (") == .unbalanced("("))
         #expect(error("[@author] @title]") == .unbalanced("]"))
         #expect(error("@title @author") == .adjacent(.title, .author))
@@ -121,13 +172,16 @@ import Testing
 
     @Test func bundledPresets() {
         // 既定の並びは、形ごとに「数字だけの丸括弧 = 巻数」を先に試し、そうでなければ原作として読む。
-        #expect(FilenameFormats.presetTexts.count == 24)
+        #expect(FilenameFormats.presetTexts.count == 26)
         #expect(FilenameFormats.presetTexts.first == "(@genre) [@author (@author)] @title (@volume) [@info]")
-        #expect(FilenameFormats.presetTexts.last == "[@author] @title")
+        // 著者を末尾に付ける形は、角括弧の形より後ろ(両方に当たる名前は、これまでどおり角括弧の形で読む)。
+        #expect(FilenameFormats.presetTexts.suffix(3) == ["[@author] @title", "@series (@volume) - @author [@info]", "@series (@volume) - @author"])
         // 同人誌用は末尾の丸括弧が原作、商業誌用は巻数(著者の中の丸括弧も使わない)。
         #expect(FilenameFormats.doujinshiPresetTexts.count == 16)
         #expect(FilenameFormats.doujinshiPresetTexts.allSatisfy { !$0.contains("@volume") })
-        #expect(FilenameFormats.commercialPresetTexts.count == 8)
+        #expect(FilenameFormats.commercialPresetTexts.count == 10)
+        #expect(FilenameFormats.commercialPresetTexts.last == "@series (@volume) - @author")
+        #expect(!FilenameFormats.doujinshiPresetTexts.contains("@series (@volume) - @author"))
         #expect(FilenameFormats.commercialPresetTexts.first == "(@genre) [@author] @title (@volume) [@info]")
         #expect(FilenameFormats.commercialPresetTexts.allSatisfy { !$0.contains("@source") })
     }

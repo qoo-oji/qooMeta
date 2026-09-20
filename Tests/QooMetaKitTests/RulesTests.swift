@@ -16,8 +16,8 @@ import QooMetaRules
     }
 
     static func diff(_ body: String, kind: String = "qoometa.series-rules") -> String {
-        // 形式の版はファイルごと(filename-formats は第 4 版)。
-        let version = kind == "qoometa.filename-formats" ? 4 : 2
+        // 形式の版はファイルごと(filename-formats は第 5 版)。
+        let version = kind == "qoometa.filename-formats" ? 5 : 2
         return #"{ "kind": "\#(kind)", "schemaVersion": \#(version), "base": "builtin", "# + body + " }"
     }
 
@@ -35,7 +35,12 @@ import QooMetaRules
         let rules = try #require(c.rules)
         #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .greek, .roman, .position])
         #expect(rules.series.grouping.minPrefix == 4)
-        #expect(rules.formats[nil].formats.count == 24)
+        #expect(rules.formats[nil].formats.count == 26)
+        // 同梱の JSON と、規則ファイルを読む前に使うコードの側の並びは同じ。
+        for name in rules.formats.names {
+            #expect(rules.formats[name].formats.map(\.text) == FormatPresets.bundled[name].formats.map(\.text))
+        }
+        #expect(rules.formats["commercial"].label == "商業誌")
         #expect(rules.formats.names == ["commercial", "doujinshi", "doujinshi-event", "mixed"])
         // 催しの型のプリセットだけが、名前に書かれないジャンルの既定を持つ。
         #expect(rules.formats["doujinshi-event"].defaults[.genre] == ["同人誌"])
@@ -229,6 +234,71 @@ import QooMetaRules
         #expect(rules.series.grouping.minPrefix == 5)
         #expect(rules.formats[nil].formats.last?.text == "@title - @author")
         #expect(rules.formats[nil].separators.contains("・"))
+    }
+
+    /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の順に、内側に書いたものが勝つ。
+    @Test func innerSeparatorsAndDefaultsWin() throws {
+        let c = Self.compile(Self.diff(#"""
+        "separators": { "$add": ["/"] },
+        "defaults": { "info": "架空の付記" },
+        "presets": {
+          "commercial": { "separators": { "$add": ["×"] }, "defaults": { "genre": "架空の分類甲" } },
+          "my-shelf": {
+            "label": "自分の棚",
+            "separators": ["&"],
+            "formats": [
+              { "format": "@title (@volume) - @author", "separators": ["×"], "defaults": { "genre": "架空の分類乙" } },
+              "[@author] @title"
+            ]
+          }
+        }
+        """#, kind: "qoometa.filename-formats"))
+        let rules = try #require(c.rules, "\(c.errors)")
+        // ファイル全体の区切りは、区切りを書いていないプリセットに効く。
+        #expect(Set(rules.formats["doujinshi"].separators) == [",", "，", "、", "/"])
+        // プリセットに初めて書く `$add` は、ファイル全体の区切りに足したものになる。
+        #expect(Set(rules.formats["commercial"].separators) == [",", "，", "、", "/", "×"])
+        #expect(rules.formats["commercial"].defaults == [.info: ["架空の付記"], .genre: ["架空の分類甲"]])
+        // 同梱に無い名前は、利用者の新しいプリセット。区切りは書いた所で丸ごと置き換わる。
+        let mine = rules.formats["my-shelf"]
+        #expect(mine.label == "自分の棚")
+        #expect(mine.read("[甲&乙, 丙] 月の庭").metadata.authors == ["甲", "乙, 丙"])
+        let trailing = mine.read("月の庭 (3) - 甲×乙&丙")
+        #expect(trailing.metadata.authors == ["甲", "乙&丙"])
+        #expect(trailing.metadata.genre == "架空の分類乙")
+        #expect(trailing.metadata.info == "架空の付記")
+        #expect(rules.changedPaths.contains("presets.my-shelf"))
+    }
+
+    @Test func defaultPresetCanBeChangedButMustExist() throws {
+        let ok = Self.compile(Self.diff(#""defaultPreset": "commercial""#, kind: "qoometa.filename-formats"))
+        #expect(try #require(ok.rules).formats.defaultName == "commercial")
+        let bad = Self.compile(Self.diff(#""defaultPreset": "nowhere""#, kind: "qoometa.filename-formats"))
+        #expect(bad.errors.map(\.path) == ["defaultPreset"])
+    }
+
+    @Test func formatsAreIdentifiedByTheirText() throws {
+        // 区切りを添えた型で足し直しても、同じ型は 2 つにならない。文字列だけを書けば外せる。
+        let c = Self.compile(Self.diff(#"""
+        "presets": { "commercial": { "formats": {
+          "$remove": ["@series (@volume) - @author"],
+          "$add": [{ "format": "[@author] @title", "separators": ["×"] }, { "format": "@title - @author", "separators": ["×"] }],
+          "at": "end" } } }
+        """#, kind: "qoometa.filename-formats"))
+        let texts = try #require(c.rules, "\(c.errors)").formats["commercial"].formats.map(\.text)
+        #expect(!texts.contains("@series (@volume) - @author"))
+        #expect(texts.filter { $0 == "[@author] @title" }.count == 1)
+        #expect(texts.last == "@title - @author")
+    }
+
+    @Test func newPresetsMustBeWrittenInFull() {
+        // 同梱の名前の書き間違いは、新しいプリセットとして黙って受け取らない。
+        let c = Self.compile(Self.diff(#""presets": { "comercial": { "formats": { "$add": ["@title - @author"] } } }"#,
+                                       kind: "qoometa.filename-formats"))
+        #expect(c.errors.map(\.path) == ["presets.comercial"])
+        #expect(c.errors.first?.suggestion == "commercial")
+        let old = Self.compile(Self.diff(#""retiredIDs": []"#, kind: "qoometa.filename-formats"))
+        #expect(!old.errors.isEmpty)
     }
 
     @Test func badFormatsAreReportedByIndex() {

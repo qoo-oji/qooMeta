@@ -13,7 +13,7 @@ import QooMetaKit
 let usage = """
 使い方:
   qoometa scan <フォルダ> --out <提案.json>
-      書庫ファイルを集め、名前を解析し、規則でシリーズを提案する(集計を出す)
+      本(書庫・PDF・EPUB・画像フォルダ)を集め、名前を解析し、規則でシリーズを提案する(集計を出す)
   qoometa judge --in <提案.json> [--out <提案.json>] [--limit N]
       規則のシリーズを端末内モデル(Apple Intelligence)で判定する(macOS 26 以降)
   qoometa stats --in <提案.json> [--rules-only] [--explain]

@@ -26,14 +26,19 @@ enum RuleSchema {
         case patterns
         /// 差分では変えられない文字列(照合の処理との対応など)。
         case fixedString
+        /// 差分で置き換えられる文字列(既定のプリセットの名前、見出し、説明)。
+        case string
+        /// 著者の区切り(空でない文字列の並び。1 文字とは限らない)。
+        case separators
         case object(Node)
         /// 巻の読み手(並び順が優先順位。差分では ID で指し、`$order` で並べ替える)。
         case readers
-        /// 名前を付けた型の並び(`presets`)。差分では名前で指す。
+        /// 名前を付けた型の並び(`presets`)。差分では名前で指す。同梱に無い名前は、利用者の新しいプリセット。
         case presets
         /// プリセットが入れる既定の欄(`defaults`)。書いた欄だけ。
         case presetDefaults
         /// 型の並び(書いた順が優先順位。差分の `$add` は `at` で先頭か末尾かを選ぶ)。
+        /// 1 つの型は文字列か、その型だけの区切り・既定の欄を添えたオブジェクト(`formatEntry`)。
         case formats
     }
 
@@ -41,6 +46,8 @@ enum RuleSchema {
         var name: String
         var shape: Shape
         var since = 1
+        /// 既定値のファイルでも省けるキー(省いたときの値は、形式の側で決まっている)。
+        var optional = false
     }
 
     /// オブジェクトの形。`rule` なら規則(`since`・`required` を書ける。`hasEnabled` なら `enabled` も)。
@@ -63,6 +70,7 @@ enum RuleSchema {
     }
 
     static func f(_ name: String, _ shape: Shape) -> Field { Field(name: name, shape: shape) }
+    static func optional(_ name: String, _ shape: Shape) -> Field { Field(name: name, shape: shape, optional: true) }
 
     // MARK: - シリーズの規則
 
@@ -148,17 +156,27 @@ enum RuleSchema {
 
     // MARK: - ファイル名のフォーマット
 
-    /// 予約語(Stackroom 式)→ 照合の処理の予約語と qooMeta の欄。差分で変えられるのは作者の区切りだけ。
-    /// filename-formats.json の中身(第 3 版): 著者の区切りと、名前を付けた型の並び(プリセット)。
+    /// filename-formats.json の中身(第 5 版): 既定のプリセットの名前と、名前を付けた型の並び(プリセット)。
+    ///
+    /// 著者の区切り(`separators`)と既定の欄(`defaults`)は ファイル全体 → プリセット → 型 の 3 か所に同じ綴りで書け、
+    /// **内側に書いたものが勝つ**。ファイル全体の `separators` だけは必ず書く(いちばん外側の値が無いと、読み方が決まらない)。
     static let formatStages = Node([
-        f("separators", .list(.characters)), f("defaultPreset", .fixedString), f("presets", .presets),
+        f("defaultPreset", .string), f("separators", .separators), optional("defaults", .presetDefaults), f("presets", .presets),
     ])
 
-    /// 同梱のプリセットの名前(差分では、この名前で並びを変える)。
+    /// 同梱のプリセットの名前(綴りの候補を出すのに使う。利用者は差分で別の名前のプリセットを足せる)。
     static let presetNames = ["mixed", "doujinshi", "doujinshi-event", "commercial"]
 
-    /// 1 つのプリセット: 型の並びと、名前に書かれていない欄に入れる既定。
-    static let presetNode = Node([f("formats", .formats), f("defaults", .presetDefaults)])
+    /// 1 つのプリセット。要るのは `formats` だけで、ほかは省ける(省いた区切りと既定は、ファイル全体のものを使う)。
+    static let presetNode = Node([
+        optional("label", .string), optional("note", .string), optional("separators", .separators),
+        optional("defaults", .presetDefaults), f("formats", .formats),
+    ])
+
+    /// 1 つの型をオブジェクトで書いたとき。要るのは `format` だけ。
+    static let formatEntryNode = Node([
+        f("format", .string), optional("separators", .separators), optional("defaults", .presetDefaults),
+    ])
 
     /// 既定を入れられる欄(シリーズと巻は中核が導くので入れられない。タイトルと著者は本ごとに違うので入れない)。
     static let presetDefaultFields = ["genre", "event", "source", "info"]

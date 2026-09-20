@@ -100,7 +100,7 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 ---
 
-## 1. filename-formats.json(第 3 版)
+## 1. filename-formats.json(第 5 版)
 
 ファイル名(拡張子を除いたもの)を、**型**に当てはめて欄に分けます。型は上から試し、**名前全体に当てはまった最初の型**で読みます。
 フォルダ名は読みません。
@@ -113,9 +113,16 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 | キー | 意味 |
 |---|---|
-| `separators` | 著者の値を分ける文字(既定は `,` `，` `、`)。並びの欄は著者だけ |
-| `presets` | 名前を付けた型の並び。同梱は `mixed`(混ざった蔵書。24 通り)・`doujinshi`(同人誌。16 通り)・`commercial`(商業誌。8 通り) |
 | `defaultPreset` | 本がプリセットを選ばなかったときに使う名前(同梱は `mixed`) |
+| `presets` | 名前を付けた型の並び。同梱は `mixed`(混ざった蔵書。26 通り)・`doujinshi`(同人誌。16 通り)・`doujinshi-event`(先頭の丸括弧が催し。16 通り)・`commercial`(商業誌。10 通り)。差分で新しい名前のプリセットを足せます |
+| `separators` | 著者の値を分ける文字列(既定は `,` `，` `、`)。並びの欄は著者だけ |
+| `defaults` | 名前に書かれていない欄(ジャンル・イベント・原作・情報)に入れる値 |
+
+**`separators` と `defaults` は、ファイル全体・プリセット・型の 3 か所に書けて、内側に書いたものが勝ちます**
+(型 > プリセット > ファイル全体)。`separators` は書いた所で丸ごと置き換わり(足し合わせません)、`defaults` は欄ごとです。
+名前から読めた値は、どの既定よりも強いです。型に添えるときは、型をオブジェクトで書きます:
+`{ "format": "@series (@volume) - @author", "separators": ["×"] }`。プリセットには `label`(見出し)と `note`(説明)も書けます。
+詳しくは [filename-format.md](filename-format.md) の 4。
 
 **本ごとにプリセットを選べます。** 商業誌と同人誌がフォルダで分かれている蔵書のために、利用側(アプリ・CLI)が
 フォルダごとに割り当てます(2026-09-20、利用者の指示)。CLI では `--presets <割り当て.json>`:
@@ -141,11 +148,13 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 - 全角と半角の括弧は同じとみなします(`（）` と `()`、`［］` と `[]`)。全角の数字も `@volume` のために半角に畳みます。
 - 括弧の中に書いた欄の値には、その括弧の対の文字は入りません。括弧の外の `@title` には何でも入ります。
 - 欄は長く取るほうを先に試します(区切りが何度も現れる名前は、最後のもので分ける)。
-- 隣り合う 2 つの欄(`@title @author` のように区切りの文字が無いもの)は書けません。型には `@title` が要ります。
+- 隣り合う 2 つの欄(`@title @author` のように区切りの文字が無いもの)は書けません。型には `@title` か `@series` が要ります
+  (`@title` の無い型で読んだ本のタイトルは、型の `@series (@volume)` の部分に値をはめた「月の庭 (3)」になり、シリーズと巻はタイトルから導かず、読んだ値をそのまま使います)。
 - **欄の多い形を先に、少ない形を後に**書いてください(`… @title` を `… @title (@source)` より先に書くと、末尾の丸括弧まで
   タイトルに入ります)。
-- 差分では `"presets": { "mixed": { "$add": ["@title - @author"], "at": "end" } }` のように、プリセットの名前で指します。
-- 書き間違い(知らない予約語など)は、読み込みのときに位置付き(`presets.mixed[0]`)の誤りになります。
+- 差分では `"presets": { "mixed": { "formats": { "$add": ["@title - @author"], "at": "end" } } }` のように、プリセットの名前で指します。
+  同梱に無い名前を書くと新しいプリセットになります(全体を書く: `{ "my-shelf": { "formats": ["…"] } }`)。
+- 書き間違い(知らない予約語など)は、読み込みのときに位置付き(`presets.mixed.formats[0]`)の誤りになります。
 
 ---
 
@@ -314,9 +323,11 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
   "volume": { "readers": { "roman": { "enabled": false } } } }
 ```
 
-**フォーマットを足す**(利用者の形を先に試す):
+**フォーマットを足す**(利用者の形を先に試す。この型だけ `×` でも著者を分ける):
 
 ```json
-{ "kind": "qoometa.filename-formats", "schemaVersion": 2, "base": "builtin",
-  "profiles": { "doujinshi": { "formats": { "$add": ["[@circle] @title {@keywordA}"] } } } }
+{ "kind": "qoometa.filename-formats", "schemaVersion": 5, "base": "builtin",
+  "presets": { "commercial": { "formats": { "$add": [
+    { "format": "@title 第@volume巻 - @author", "separators": [",", "×"] }
+  ] } } } }
 ```

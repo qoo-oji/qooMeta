@@ -91,10 +91,10 @@ final class AppModel {
         do {
             let files = try await Task.detached { try FolderScanner.scan(root: url) }.value
             guard !files.isEmpty else {
-                error = "書庫ファイルが見つかりませんでした(\(FolderScanner.archiveExtensions.sorted().joined(separator: "・")))"
+                error = "本が見つかりませんでした(\(FolderScanner.bookFileExtensions.sorted().joined(separator: "・")) と、画像の入ったフォルダ)"
                 return
             }
-            let books = files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName) }
+            let books = files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName, isFolder: $0.isFolder) }
             workspace = await Workspace.open(Workfile(rootPath: url.path, books: books), rules: settings.rules)
         } catch {
             self.error = String(describing: error)

@@ -1,16 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 4,
-  "revision": "2026.09.20",
+  "schemaVersion": 5,
+  "revision": "2026.09.20.3",
+  "defaultPreset": "mixed",
   "separators": [
     ",",
     "，",
     "、"
   ],
-  "defaultPreset": "mixed",
   "presets": {
     "mixed": {
+      "label": "混ざった蔵書",
+      "note": "同人誌と商業誌の命名が混ざった蔵書をそのまま読む。数字だけの末尾の丸括弧は巻数、そうでなければ原作",
       "formats": [
         "(@genre) [@author (@author)] @title (@volume) [@info]",
         "(@genre) [@author (@author)] @title (@volume)",
@@ -35,10 +37,14 @@
         "[@author] @title (@source) [@info]",
         "[@author] @title (@source)",
         "[@author] @title [@info]",
-        "[@author] @title"
+        "[@author] @title",
+        "@series (@volume) - @author [@info]",
+        "@series (@volume) - @author"
       ]
     },
     "doujinshi": {
+      "label": "同人誌(先頭の丸括弧はジャンル)",
+      "note": "末尾の丸括弧は原作。角括弧の中の丸括弧は 2 人目からの著者",
       "formats": [
         "(@genre) [@author (@author)] @title (@source) [@info]",
         "(@genre) [@author (@author)] @title (@source)",
@@ -59,6 +65,11 @@
       ]
     },
     "doujinshi-event": {
+      "label": "同人誌(先頭の丸括弧は催し)",
+      "note": "先頭の丸括弧を頒布会の名前として読む。名前に書かれないジャンルは既定で入れる",
+      "defaults": {
+        "genre": "同人誌"
+      },
       "formats": [
         "(@event) [@author (@author)] @title (@source) [@info]",
         "(@event) [@author (@author)] @title (@source)",
@@ -76,12 +87,11 @@
         "[@author] @title (@source)",
         "[@author] @title [@info]",
         "[@author] @title"
-      ],
-      "defaults": {
-        "genre": "同人誌"
-      }
+      ]
     },
     "commercial": {
+      "label": "商業誌",
+      "note": "末尾の丸括弧は巻数(数字だけ)。「シリーズ名 (巻数) - 著者」の形も読む",
       "formats": [
         "(@genre) [@author] @title (@volume) [@info]",
         "(@genre) [@author] @title (@volume)",
@@ -90,10 +100,10 @@
         "[@author] @title (@volume) [@info]",
         "[@author] @title (@volume)",
         "[@author] @title [@info]",
-        "[@author] @title"
+        "[@author] @title",
+        "@series (@volume) - @author [@info]",
+        "@series (@volume) - @author"
       ]
     }
-  },
-  "retiredIDs": [],
-  "aliases": {}
+  }
 }
