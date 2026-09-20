@@ -31,8 +31,8 @@ struct SeriesRulesView: View {
 
         var title: String {
             switch self {
-            case .policies: "How books are treated"
-            case .markers: "Words in a title"
+            case .policies: "Sorting settings"
+            case .markers: "Searching inside a title"
             case .readers: "Reading the volume"
             case .steps: "Grouping and naming"
             case .lists: "Word lists"
@@ -66,8 +66,7 @@ struct SeriesRulesView: View {
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 0) {
-                PhaseBanner(title: "Deriving the series and volume",
-                            flow: "Title → series name and volume", fileName: "series-rules.json",
+                PhaseBanner(flow: "Title → series name and volume", fileName: "series-rules.json",
                             symbol: "books.vertical")
                 Divider()
                 Group {
@@ -97,7 +96,8 @@ struct SeriesRulesView: View {
 
 /// どの段の規則を直しているかを、画面の上にいつも出す。
 struct PhaseBanner: View {
-    var title: LocalizedStringKey
+    /// 何が何になるかの 1 行。**窓の題と同じ言葉は出さない**(題のすぐ下で同じ言葉を繰り返していた。
+    /// 2026-09-20、利用者の指摘)。
     var flow: LocalizedStringKey
     var fileName: String
     var symbol: String
@@ -105,10 +105,7 @@ struct PhaseBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: symbol).foregroundStyle(.tint).font(.title3)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.headline)
-                Text(flow).font(.caption).foregroundStyle(.secondary)
-            }
+            Text(flow).font(.callout)
             Spacer()
             Text(verbatim: fileName).font(.caption.monospaced()).foregroundStyle(.tertiary)
         }
@@ -185,24 +182,37 @@ private struct PoliciesPane: View {
     var editing: RulesEditing
     var catalog: RuleCatalog
 
-    private static let groups: [(title: String, ids: [String])] = [
-        ("Editions and publication forms of the same work", ["editions", "sources"]),
-        ("Compilations and side stories", ["compilations", "compilationVolume"]),
-        ("How series are split", ["differentRelation", "differentGenre", "subtitled"]),
-        ("Volumes", ["unnumberedFirst", "magazines"]),
+    /// **困りごとの多い順**に並べる。エンジンの並び(版 → 総集編 → 分け方 → 巻)をそのまま出していたので、
+    /// いちばんよく直すもの(シリーズが分かれる・まとまりすぎる)が 3 番目に埋もれていた(2026-09-20、利用者の指摘)。
+    /// 見出しは「どの設定か」ではなく**どんなときに触るか**で書き、1 行の手引きを添える。
+    private static let groups: [(title: String, note: String, ids: [String])] = [
+        ("When books land in different series",
+         "Turn to these when books that belong together end up apart, or when books that do not belong together are put in one series.",
+         ["differentGenre", "differentRelation", "subtitled"]),
+        ("When the same work appears twice",
+         "Turn to these when one book shows up twice because one of the two carries a word for a version or a publication form.",
+         ["editions", "sources"]),
+        ("When a volume number is missing or wrong",
+         "Turn to these when a book has no volume number, or carries one it should not.",
+         ["unnumberedFirst", "magazines"]),
+        ("Compilations and side stories",
+         "Where a compilation goes, and what volume number it is given there.",
+         ["compilations", "compilationVolume"]),
     ]
 
     var body: some View {
         let known = Set(Self.groups.flatMap(\.ids))
         Form {
             Section {
-                Text("These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books.")
+                Text("These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books. The ones nearer the top are the ones most often turned to.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             ForEach(Self.groups, id: \.title) { group in
                 // 見出しは**鍵として**渡す。`Section(String)` の口に渡すと、訳を引かずにそのまま出る
                 // (画面に英語のまま出ていた。2026-09-20、利用者の指摘)。
-                Section(LocalizedStringKey(group.title)) {
+                Section {
+                    // 見出しの下に、どんなときに触るかを 1 行。設定の名前だけでは、自分の困りごとと結び付かない。
+                    Text(key: group.note).font(.caption).foregroundStyle(.secondary)
                     let rule = catalog.entries.first { $0.id == "compilation" }
                     ForEach(catalog.policies.filter { group.ids.contains($0.id) }) { policy in
                         // 総集編の置き場所は、敷居(1 冊でもシリーズにするか)と 1 つにまとめて出す。
@@ -219,6 +229,8 @@ private struct PoliciesPane: View {
                             ParameterRow(editing: editing, entry: rule, parameter: $0)
                         }
                     }
+                } header: {
+                    Text(key: group.title)
                 }
             }
             let others = catalog.policies.filter { !known.contains($0.id) }
@@ -452,7 +464,7 @@ private struct MarkersPane: View {
         let rules = catalog.entries.filter { $0.stage == "markers" }
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "Words in a title are looked for **from the top rule down**. A word an upper rule has taken is invisible to the rules below. An exception is written as a “read as it is” rule placed **above** the rule you want to hold back.")
+                OrderExplanation(text: "Words in a title are looked for **from the top rule down**. A word an upper rule has taken is invisible to the rules below. An exception is written as a rule that leaves the word out of the extraction, placed **above** the rule you want to hold back.")
                 OrderedRuleList(rules: rules, selection: $selection, subtitle: { RuleLabels.treatment($0.parameter("treat")?.current.stringValue ?? "").title },
                                 toggle: { id, on in editing.change { $0.setEnabled(on, rule: id) } },
                                 move: { ids in editing.change { $0.setMarkerOrder(ids) } })
@@ -668,10 +680,16 @@ private struct RuleDetail: View {
                     Spacer()
                     Button("Reset to the default") { editing.change { $0.reset(rule: rule.id) } }.disabled(!rule.isModified)
                 }
-                if rule.parameters.isEmpty {
+                // 同じ設定を 2 か所に出さない。総集編の値は「分類の設定」で決めるので、ここでは行き先だけ示す
+                // (どちらが本物か分からない、という指摘。2026-09-20)。
+                if rule.id == "compilation" {
+                    Label("Its settings are under “Sorting settings”, in “Compilations and side stories”.", systemImage: "arrow.up.left.circle")
+                        .foregroundStyle(.secondary)
+                } else if rule.parameters.isEmpty {
                     Text("This rule has no values to change; you can only let it act or hold it back.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(rule.parameters, id: \.name) { ParameterRow(editing: editing, entry: rule, parameter: $0, catalog: catalog) }
                 }
-                ForEach(rule.parameters, id: \.name) { ParameterRow(editing: editing, entry: rule, parameter: $0, catalog: catalog) }
             }
             .padding(16)
         }

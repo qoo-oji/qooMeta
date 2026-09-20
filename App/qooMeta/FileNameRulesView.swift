@@ -29,8 +29,7 @@ struct FileNameRulesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PhaseBanner(title: "Reading the file name",
-                        flow: "File name → fields (title, authors, genre, …)",
+            PhaseBanner(flow: "File name → fields (title, authors, genre, …)",
                         fileName: "filename-formats.json", symbol: "doc.text.magnifyingglass")
             Divider()
             Picker("", selection: $pane) {
