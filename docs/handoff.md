@@ -1,6 +1,6 @@
 # 引き継ぎ
 
-2026-09-19 時点。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
+2026-09-20 時点。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
 
 ## いまの状況
 
@@ -20,6 +20,9 @@
   (`App/qooMeta/Settings.swift`。規則の差分・スタンプ・書き出しの対応表を
   `~/Library/Application Support/qooMeta/settings.json` に持つ)。**残りは規則と型を編集する画面(JSON の編集)**。
 - 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
+- **次にやること(利用者の指示、2026-09-20)**: ① **JSON の構成そのもののブラッシュアップ** → ② **JSON を編集する画面**
+  (段階 11 の残り = 規則の方針・語の一覧・型の並びの編集)。①→② の順にする(画面は JSON の形の上に載るため)。
+  下の「JSON のブラッシュアップ(着手前のメモ)」に、読んだうえでの候補を書いてある。
 - 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
   コミットやブランチの状態はここに書かない(`git log` を見る)。
 
@@ -34,6 +37,35 @@
 | [rules.md](rules.md)・[rules-format-design.md](rules-format-design.md) | 規則ファイルの形式(第 2 版)は有効 | 版・入手経路・本の種別などの方針は古い欄が前提 |
 | [api.md](api.md)・[design.md](design.md) | **古い** | サークル・ネタなど旧来の欄が前提。作り直しで書き直す |
 | `CLAUDE.md` | **最新**(2026-09-19 に冒頭を直した) | 目的、ターゲットと参考の区別、名前を外へ出さない約束 |
+
+## いまのコードの地図(2026-09-20)
+
+| 置き場所 | 中身 |
+|---|---|
+| `Sources/QooMetaKit/` | 中核(シリーズ・巻)、欄(`BookMetadata`)、型の照合(`FilenameFormat`)、規則の読み込み(`RuleLoader`・`RuleFiles`・`RuleSchema`)、変更の索引(`ProposalIndex`)、まとめて編集(`BulkEdit`)、**作業ファイル(`Workfile`)** |
+| `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、**書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`)** |
+| `Sources/QooMetaScan/` | フォルダの走査(本体はファイルに触らないので、ここと CLI・アプリだけがファイルを見る) |
+| `Sources/qoometa/` | CLI。`InputDocument` が提案ファイルと作業ファイルのどちらも読む |
+| `App/qooMeta/` | 画面。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表) |
+
+- アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
+  実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
+- 確かめ: `swift build`・`swift test`(106 件)・`.build/release/qoometa rules test`(例 88 件)・`bash scripts/ci/check-all.sh`。
+
+## JSON のブラッシュアップ(着手前のメモ。2026-09-20)
+
+読み直して見つけた、直す値打ちのありそうな点。**まだ何も直していない。**
+
+1. **`editionPrefixWords` が `editionWords` とほぼ重複している**(`series-rules.json` の `lists`)。利用者が `editionWords` に
+   語を足しても「フルカラー総集編」の判定には効かない。一覧の参照を配列の中にも書けるようにして
+   (`"words": ["@list:editionWords", "フルカラー", "カラー", "モノクロ"]`)、重複を消すのが素直。
+2. **`filename-formats.json` のプリセットが、ただの文字列の配列**。画面で選ばせるには、プリセットごとの見出しや説明を
+   置ける形(`{"label": …, "formats": [...]}`)のほうがよい。第 4 版になる。
+3. **`filename-formats.json` の `retiredIDs`・`aliases` は、このファイルでは意味が無い**(型には ID が無い)。消してよい。
+4. **総集編の設定が 2 か所に分かれている**: 切り替えは方針 `compilationVolume`、足す数は規則 `grouping.compilation.volumeOffset`。
+   方針は「決まった値から選ぶ」ものなので分かれるのは設計どおりだが、画面では 1 か所に見せる。
+5. **docs が古い**: `rules-format-design.md` の方針の表が `compilationVolume` を `none`/`afterRange` のままにしている
+   (いまは `offset` が既定)。`grouping.compilation` の `volumeOffset`・`conditions` も表に無い。
 
 ## 決まったこと(2026-09-19)
 
