@@ -580,9 +580,15 @@ enum ProposalFinalizer {
             // 1 冊だけ算用数字が混ざらないように(2026-09-22、利用者の指摘)。大字なら「壱」、その旧字体なら「壹」。
             let others = indices.filter { $0 != i }.map { document.books[$0].volumeText }.filter { !$0.isEmpty }
             let kanji = !others.isEmpty && others.allSatisfy { $0.allSatisfy(VolumeExtractor.kanjiDigits.contains) }
-            let one = !kanji ? nil
+            var one = !kanji ? nil
                 : others.joined().contains(where: "壹貳參".contains) ? "壹"
                 : others.joined().contains(where: "壱弐参肆伍陸柒捌玖拾佰仟".contains) ? "壱" : "一"
+            // 数を語で書くシリーズ(「に」「さん」…)も同じ: 1 を表す語が対応表にあれば、それで書く。
+            if one == nil, !others.isEmpty, others.allSatisfy(engine.volumes.rules.numberWords.keys.contains) {
+                one = engine.volumes.rules.numberWords.filter { $0.value == 1 }.keys.sorted {
+                    $0.count != $1.count ? $0.count < $1.count : $0 < $1
+                }.first
+            }
             document.books[i].volumeText = one ?? (usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1")
             document.books[i].volumeNumber = 1
             document.books[i].volumeInferred = true

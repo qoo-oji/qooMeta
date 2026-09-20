@@ -280,7 +280,7 @@
     {
       "id": "not-inferred-for-not-first-marker",
       "files": [
-        "[架空工房] 星降る夜の喫茶店 特別編",
+        "[架空工房] 星降る夜の喫茶店 再録",
         "[架空工房] 星降る夜の喫茶店 2"
       ],
       "expect": [
@@ -463,6 +463,78 @@
           "series": "月の庭",
           "volume": "いつつ",
           "volumeSort": 5
+        }
+      ],
+      "covers": [
+        "wordNumber"
+      ]
+    },
+    {
+      "id": "numbers-read-aloud-in-hiragana",
+      "files": [
+        "[架空工房] 月の庭。",
+        "[架空工房] 月の庭。ご",
+        "[架空工房] 月の庭。さん",
+        "[架空工房] 月の庭。なな",
+        "[架空工房] 月の庭。に",
+        "[架空工房] 月の庭。よん",
+        "[架空工房] 月の庭。ろく"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "いち",
+          "volumeSort": 1,
+          "inferred": true
+        },
+        {
+          "series": "月の庭",
+          "volume": "ご",
+          "volumeSort": 5
+        },
+        {
+          "series": "月の庭",
+          "volume": "さん",
+          "volumeSort": 3
+        },
+        {
+          "series": "月の庭",
+          "volume": "なな",
+          "volumeSort": 7
+        },
+        {
+          "series": "月の庭",
+          "volume": "に",
+          "volumeSort": 2
+        },
+        {
+          "series": "月の庭",
+          "volume": "よん",
+          "volumeSort": 4
+        },
+        {
+          "series": "月の庭",
+          "volume": "ろく",
+          "volumeSort": 6
+        }
+      ],
+      "covers": [
+        "wordNumber",
+        "firstVolume"
+      ]
+    },
+    {
+      "id": "a-read-aloud-number-needs-to-stand-on-its-own",
+      "files": [
+        "[架空工房] 星の海 にっこり",
+        "[架空工房] 星の海 ごちそう"
+      ],
+      "expect": [
+        {
+          "volume": null
+        },
+        {
+          "volume": null
         }
       ],
       "covers": [

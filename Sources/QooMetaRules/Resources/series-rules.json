@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.22.13",
+  "revision": "2026.09.22.15",
   "lists": {
     "ignoredInComparison": [
       " ", "　", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",", "「", "」", "『", "』", "【",
@@ -65,12 +65,14 @@
     "volumeFollowers": ["~", "-", "・", "!", "?", ".", ")", "ー"],
     "numberWords": {
       "ふたつ": "2", "みっつ": "3", "よっつ": "4", "いつつ": "5",
-      "ふつかめ": "2", "みっかめ": "3", "よっかめ": "4", "いつかめ": "5"
+      "ふつかめ": "2", "みっかめ": "3", "よっかめ": "4", "いつかめ": "5",
+      "いち": "1", "に": "2", "さん": "3", "よん": "4", "ご": "5",
+      "ろく": "6", "なな": "7", "はち": "8", "きゅう": "9", "じゅう": "10"
     },
     "positionFirst": ["上", "上巻", "前編"],
     "positionMiddle": ["中", "中巻", "中編"],
     "positionLast": ["下", "下巻", "後編"],
-    "sequelWords": ["アフター", "後日談", "その後", "外伝", "番外編", "番外篇", "おまけ", "EXTRA", "続", "補"],
+    "sequelWords": ["アフター", "後日談", "その後", "外伝", "番外編", "番外篇", "特別編", "特別篇", "おまけ", "EXTRA", "続", "補"],
     "notFirstMarkers": ["総集編", "総集篇", "番外編", "外伝", "特別編", "おまけ", "再録", "まとめ版", "anthology", "アンソロジー"],
     "notFirstPrefixes": ["ex", "extra", "sp", "special", "after", "omake"]
   },

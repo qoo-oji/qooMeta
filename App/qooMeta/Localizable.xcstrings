@@ -4956,19 +4956,19 @@
         }
       }
     },
-    "Numbers written out as words (ふたつ, みっかめ)": {
+    "Numbers written out in kana (に, さん, ふたつ)": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Numbers written out as words (ふたつ, みっかめ)"
+            "value": "Numbers written out in kana (に, さん, ふたつ)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "語で書いた数(ふたつ、みっかめ)"
+            "value": "かなで書いた数(に、さん、ふたつ)"
           }
         }
       }
@@ -9070,19 +9070,19 @@
         }
       }
     },
-    "ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own.": {
+    "に → 2, さん → 3, ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose, either read aloud or counted. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own, so “にっこり” is left alone.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own."
+            "value": "に → 2, さん → 3, ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose, either read aloud or counted. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own, so “にっこり” is left alone."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ふたつ → 2、みっかめ → 3 … わざとかなで数を書く名前があります。巻数(表示)は書いてある語のまま、並べる数は右の数字です。語がひとまとまりで書かれているときだけ読みます。"
+            "value": "に → 2、さん → 3、ふたつ → 2、みっかめ → 3 … わざとかなで数を書く名前があります(読み方でも、数え方でも)。巻数(表示)は書いてある語のまま、並べる数は右の数字です。語がひとまとまりで書かれているときだけ読むので、「にっこり」は読みません。"
           }
         }
       }
