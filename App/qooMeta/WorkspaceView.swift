@@ -99,7 +99,6 @@ struct FilterBar: View {
 /// ファイル名の列と巻数(ソート用)は読むだけ ―― どちらも直に持つ値ではなく、名前と規則から導いたもの。
 struct BookTableView: View {
     @Bindable var workspace: Workspace
-    @State private var sortOrder = [KeyPathComparator(\BookRow.fileName)]
     @State private var customization = TableColumnCustomization<BookRow>()
     /// シリーズ名を直したとき、選んでいない本まで動くなら、入れる前に確かめる(詳細の「1 つにする」と同じ)。
     @State private var pendingSeries: PendingSeries?
@@ -115,7 +114,8 @@ struct BookTableView: View {
 
     var body: some View {
         // 列は Group でまとめない(Group に入れた列は見出しを押しても並べ替わらない)。欄の列は TableColumnForEach で作る。
-        Table(workspace.visibleBooks.sorted(using: sortOrder), selection: $workspace.selection, sortOrder: $sortOrder,
+        // 並べ替えた結果は Workspace が作り置きしている(ここで並べ替えると、描くたびに 1 万冊を並べ直すことになる)。
+        Table(workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
               columnCustomization: $customization) {
             TableColumn("File name", value: \BookRow.fileName)
                 .width(min: 160, ideal: 360)

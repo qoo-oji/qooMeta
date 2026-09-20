@@ -19,6 +19,13 @@ struct BookRow: Identifiable, Hashable {
     var seriesID: SeriesID?
     var flags: Set<BookProposal.Flag>
 
+    /// 並べ替えの鍵(1 冊につき 1 度だけ作る)。**比べるたびに作らない** ―― 一覧の並べ替えは 1 万冊なら
+    /// 十数万回の比較になり、そのたびに文字列を組み立てると画面が固まる(2026-09-21、利用者の報告)。
+    private let sortKeys: [BookMetadata.Field: String]
+    /// 検索の当たり先(ファイル名とすべての欄をつないだもの)。これも 1 度だけ作る
+    /// ―― 打つたびに 1 万冊ぶんの欄を組み立て直さないため。
+    private let searchText: String
+
     init(_ proposal: BookProposal, confirmation: Confirmation) {
         id = proposal.id
         fileName = proposal.name
@@ -27,6 +34,29 @@ struct BookRow: Identifiable, Hashable {
         self.confirmation = confirmation
         seriesID = proposal.seriesID
         flags = proposal.flags
+        sortKeys = Self.sortKeys(of: proposal.metadata)
+        searchText = ([proposal.name] + BookMetadata.Field.allCases.flatMap { proposal.metadata.values($0) })
+            .joined(separator: "\u{1}")
+    }
+
+    /// 検索の語を含むか。
+    func matches(_ query: String) -> Bool { searchText.localizedCaseInsensitiveContains(query) }
+
+    /// 欄ごとの並べ替えの鍵。シリーズは シリーズ → 巻(シリーズの無い本は後ろ)、巻は数の順
+    /// (数に読めない表記は後ろ)。
+    private static func sortKeys(of metadata: BookMetadata) -> [BookMetadata.Field: String] {
+        var keys: [BookMetadata.Field: String] = [:]
+        for field in BookMetadata.Field.allCases {
+            keys[field] = metadata.values(field).joined(separator: "、")
+        }
+        if let n = metadata.volumeSort {
+            keys[.volume] = String(format: "%012.3f", n)
+        } else {
+            keys[.volume] = metadata.volume.isEmpty ? "\u{10FFFF}" : "~" + metadata.volume
+        }
+        keys[.series] = metadata.series.isEmpty
+            ? "\u{10FFFF}" + metadata.title : metadata.series + "\u{1}" + (keys[.volume] ?? "")
+        return keys
     }
 
     /// 利用者が直した欄。
@@ -51,19 +81,8 @@ struct BookRow: Identifiable, Hashable {
         return n == n.rounded() ? String(Int(n)) : String(n)
     }
 
-    /// 並べ替えの鍵。シリーズは シリーズ → 巻(シリーズの無い本は後ろ)、巻は数の順(数に読めない表記は後ろ)。
-    subscript(sortKey field: BookMetadata.Field) -> String {
-        switch field {
-        case .series:
-            guard !metadata.series.isEmpty else { return "\u{10FFFF}" + metadata.title }
-            return metadata.series + "\u{1}" + self[sortKey: .volume]
-        case .volume:
-            if let n = metadata.volumeSort { return String(format: "%012.3f", n) }
-            return metadata.volume.isEmpty ? "\u{10FFFF}" : "~" + metadata.volume
-        default:
-            return self[text: field]
-        }
-    }
+    /// 並べ替えの鍵(組み立て済みのものを引くだけ)。
+    subscript(sortKey field: BookMetadata.Field) -> String { sortKeys[field] ?? "" }
 }
 
 /// 絞り込みの値: 値か「(空)」。
@@ -110,11 +129,21 @@ final class Workspace {
     private var tail: Task<Void, Never>?
 
     /// 一覧の絞り込み: ジャンルと著者(nil なら絞らない)、本の状態。
-    var genreFilter: ValueKey?
-    var authorFilter: ValueKey?
-    var stateFilter: StateFilter = .all
-    var searchText = ""
+    var genreFilter: ValueKey? { didSet { refresh() } }
+    var authorFilter: ValueKey? { didSet { refresh() } }
+    var stateFilter: StateFilter = .all { didSet { refresh() } }
+    var searchText = "" { didSet { refresh() } }
     var selection: Set<BookRow.ID> = []
+    /// 一覧の並べ替え(見出しを押して決める)。**画面ではなくここが持つ** ―― 並べ替えた結果を作り置きするため。
+    var sortOrder: [KeyPathComparator<BookRow>] = [KeyPathComparator(\BookRow.fileName)] { didSet { refresh() } }
+
+    /// 一覧にいま出す本(絞り込み + 並べ替えの結果)。**画面を描くたびに作り直さない**
+    /// ―― 1 万冊の絞り込みと並べ替えを毎フレーム行うと、計算の最中に列を動かしただけで画面が固まる
+    /// (2026-09-21、利用者の報告)。中身が変わったとき(本・絞り込み・並べ替え)だけ作り直す。
+    private(set) var rows: [BookRow] = []
+    /// 絞り込みの帯に出す、値ごとの冊数。これも作り置き。
+    private(set) var genreValues: [(key: ValueKey, count: Int)] = []
+    private(set) var authorValues: [(key: ValueKey, count: Int)] = []
 
     /// 本の状態での絞り込み(シリーズと巻を確かめて直す作業の入口)。
     enum StateFilter: String, CaseIterable, Identifiable {
@@ -224,6 +253,7 @@ final class Workspace {
     private func absorb(_ set: ProposalSet) {
         books = set.proposals.map { BookRow($0, confirmation: inputs[$0.id]?.confirmation ?? .none) }
         dropStaleFilters()
+        refresh()
     }
 
     private func absorb(_ delta: ProposalDelta) {
@@ -234,12 +264,15 @@ final class Workspace {
         for id in delta.removedBooks { byID[id] = nil }
         books = order.compactMap { byID[$0] }
         dropStaleFilters()
+        refresh()
     }
 
     /// 書き換えで消えた値の絞り込みは外す(残すと、どの本にも合わない絞り込みで一覧が空になる)。
     private func dropStaleFilters() {
-        if let g = genreFilter, !genreValues.contains(where: { $0.key == g }) { genreFilter = nil }
-        if let a = authorFilter, !authorValues.contains(where: { $0.key == a }) { authorFilter = nil }
+        let genres = Self.counts(books) { $0.metadata.values(.genre) }
+        if let g = genreFilter, !genres.contains(where: { $0.key == g }) { genreFilter = nil }
+        let authors = Self.counts(genreFiltered) { $0.metadata.authors }
+        if let a = authorFilter, !authors.contains(where: { $0.key == a }) { authorFilter = nil }
     }
 
     // MARK: - まとめて書き換える
@@ -476,25 +509,31 @@ final class Workspace {
     }
 
     /// ジャンルの値ごとの冊数(「(空)」は先頭)。
-    var genreValues: [(key: ValueKey, count: Int)] { Self.counts(books) { $0.metadata.values(.genre) } }
-    /// 著者の値ごとの冊数(ジャンルで絞った本で数える)。
-    var authorValues: [(key: ValueKey, count: Int)] { Self.counts(genreFiltered) { $0.metadata.authors } }
-
     /// ジャンルを変えたら、そのジャンルに無い著者の絞り込みは外す。
     func setGenreFilter(_ key: ValueKey?) {
         genreFilter = key
         if let a = authorFilter, !authorValues.contains(where: { $0.key == a }) { authorFilter = nil }
     }
 
+
+    /// 一覧に出す本(作り置き)。
+    var visibleBooks: [BookRow] { rows }
+
+    /// 作り置きを作り直す(本・絞り込み・並べ替えが変わったとき)。
+    private func refresh() {
+        genreValues = Self.counts(books) { $0.metadata.values(.genre) }
+        authorValues = Self.counts(genreFiltered) { $0.metadata.authors }
+        rows = filtered().sorted(using: sortOrder)
+    }
+
     /// 一覧に出す本(ジャンル・著者・状態・検索)。
-    var visibleBooks: [BookRow] {
+    private func filtered() -> [BookRow] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         return genreFiltered.filter { book in
             if let a = authorFilter, !Self.keys(book.metadata.authors).contains(a) { return false }
             guard stateFilter.contains(book) else { return false }
             guard !query.isEmpty else { return true }
-            let fields = BookMetadata.Field.allCases.flatMap { book.metadata.values($0) }
-            return ([book.fileName] + fields).contains { $0.localizedCaseInsensitiveContains(query) }
+            return book.matches(query)
         }
     }
 
