@@ -18,6 +18,12 @@ final class AppSettings {
     var mappings: [ExportTarget: FieldMapping] = [:]
     /// 画面の言葉の言語(`system` なら macOS の設定に従う)。
     private(set) var language: AppLanguage = .system
+    /// すべての窓を閉じたときに、アプリを終わらせるか。
+    ///
+    /// macOS の作法では、窓を閉じてもアプリは残る(Dock から次の一覧を開ける)。qooMeta は 1 回きりの流れを
+    /// 1 つずつ片付ける道具なので、閉じたら終わってほしい利用者もいる ―― どちらが良いかは使い方で変わるので選べるようにする
+    /// (2026-09-20、利用者の指示)。**既定はこれまでどおり残す側**。
+    private(set) var quitsWhenLastWindowCloses = false
 
     /// 規則の差分を読み込んだ結果(誤りがあれば既定のまま使い、理由を持つ)。
     private(set) var rules: CompiledRules = .builtin
@@ -31,6 +37,13 @@ final class AppSettings {
 
     init() {
         load()
+    }
+
+    /// すべての窓を閉じたら終わるかを変える。次に窓を閉じたときから効く(いま開いている窓には何もしない)。
+    func setQuitsWhenLastWindowCloses(_ quits: Bool) {
+        guard quits != quitsWhenLastWindowCloses else { return }
+        quitsWhenLastWindowCloses = quits
+        save()
     }
 
     /// 画面の言葉の言語を変える。すぐ効かせる(`Bundle.main` の引き先を替え、画面を描き直させる)。
@@ -123,6 +136,8 @@ final class AppSettings {
         var stamps: [Stamp] = []
         var mappings: [FieldMapping] = []
         var language: AppLanguage = .system
+        /// 古い設定ファイルには無いので、既定(残す側)で読む。
+        var quitsWhenLastWindowCloses = false
     }
 
     func load() {
@@ -131,11 +146,13 @@ final class AppSettings {
         stamps = stored.stamps
         mappings = Dictionary(stored.mappings.map { ($0.target, $0) }, uniquingKeysWith: { a, _ in a })
         language = stored.language
+        quitsWhenLastWindowCloses = stored.quitsWhenLastWindowCloses
         setRulesDiff(stored.rulesDiff)
     }
 
     func save() {
-        let stored = Stored(rulesDiff: rulesDiff, stamps: stamps, mappings: Array(mappings.values), language: language)
+        let stored = Stored(rulesDiff: rulesDiff, stamps: stamps, mappings: Array(mappings.values), language: language,
+                            quitsWhenLastWindowCloses: quitsWhenLastWindowCloses)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         guard let data = try? encoder.encode(stored) else { return }

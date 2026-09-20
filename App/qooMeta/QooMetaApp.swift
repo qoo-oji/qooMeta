@@ -1,3 +1,4 @@
+import AppKit
 import QooMetaKit
 import QooMetaScan
 import SwiftUI
@@ -5,6 +6,9 @@ import UniformTypeIdentifiers
 
 @main
 struct QooMetaApp: App {
+    /// 最後の窓を閉じたときの振る舞いは AppKit が決めるので、代理を 1 つ置いて設定の値を返す。
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
     /// 言葉を 1 つでも読む前に、選んだ言語を効かせる(窓の題は画面の外で決まるので、あとからでは間に合わない)。
     init() { AppSettings.shared.language.apply() }
 
@@ -31,6 +35,14 @@ struct QooMetaApp: App {
         Settings {
             GeneralSettingsView(settings: .shared)
         }
+    }
+}
+
+/// AppKit へ渡す代理。いまのところ持ちごとは 1 つだけ ―― **すべての窓を閉じたときに終わるか**。
+/// SwiftUI の `Scene` からは決められないので、ここで環境設定の値を返す(2026-09-20、利用者の指示)。
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        MainActor.assumeIsolated { AppSettings.shared.quitsWhenLastWindowCloses }
     }
 }
 

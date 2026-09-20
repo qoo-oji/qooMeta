@@ -17,6 +17,17 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Display")
             }
+
+            Section {
+                Toggle(isOn: Binding(get: { settings.quitsWhenLastWindowCloses },
+                                     set: { settings.setQuitsWhenLastWindowCloses($0) })) {
+                    Text("Quit when the last window closes")
+                }
+                Text("Off by default, as macOS expects: closing every window leaves the app running, so you can open the next list from the Dock. Turning it on takes effect the next time you close a window.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Windows")
+            }
         }
         .formStyle(.grouped)
         .frame(width: 460)

@@ -4157,6 +4157,23 @@
         }
       }
     },
+    "Off by default, as macOS expects: closing every window leaves the app running, so you can open the next list from the Dock. Turning it on takes effect the next time you close a window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off by default, as macOS expects: closing every window leaves the app running, so you can open the next list from the Dock. Turning it on takes effect the next time you close a window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定は切(macOS の作法)。すべてのウインドウを閉じてもアプリは動いたままで、Dock から次の一覧を開ける。入にすると、次にウインドウを閉じたときから効く。"
+          }
+        }
+      }
+    },
     "Offset for compilations and side stories": {
       "extractionState": "manual",
       "localizations": {
@@ -4425,6 +4442,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "標準の内容に戻します"
+          }
+        }
+      }
+    },
+    "Quit when the last window closes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit when the last window closes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのウインドウを閉じたら終了"
           }
         }
       }
@@ -7043,6 +7077,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "総集編の語のある本を、どのシリーズに入れるか"
+          }
+        }
+      }
+    },
+    "Windows": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウインドウ"
           }
         }
       }
