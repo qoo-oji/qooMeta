@@ -722,6 +722,23 @@
         }
       }
     },
+    "A unit here settles a volume only when the whole of what is left is a number and this unit. It is never picked out of the middle of a title.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A unit here settles a volume only when the whole of what is left is a number and this unit. It is never picked out of the middle of a title."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "残り全体が「数 + この単位」のときだけ巻数と認めます。タイトルの途中から取り出すことはありません。"
+          }
+        }
+      }
+    },
     "A volume number is missing or wrong": {
       "extractionState": "manual",
       "localizations": {
@@ -751,7 +768,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "タイトルの一部が、バージョンや巻数として読まれる"
+            "value": "タイトルの語が、バージョンや巻数にされる"
           }
         }
       }
@@ -990,23 +1007,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "すべて"
-          }
-        }
-      }
-    },
-    "All the choices": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All the choices"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "扱いの選択"
           }
         }
       }
@@ -1534,6 +1534,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "フォーマットの並びの変更"
+          }
+        }
+      }
+    },
+    "Change the order rules are looked at in, write an exception of your own, use a regular expression.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the order rules are looked at in, write an exception of your own, use a regular expression."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則の順番を変える、例外を自分で書く、正規表現を使う。"
           }
         }
       }
@@ -2402,23 +2419,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "辞書"
-          }
-        }
-      }
-    },
-    "Diff (JSON)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Diff (JSON)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "差分(JSON)"
           }
         }
       }
@@ -3426,6 +3426,23 @@
         }
       }
     },
+    "How books are grouped and numbered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How books are grouped and numbered"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まとめ方と巻数の選択"
+          }
+        }
+      }
+    },
     "How many books it takes": {
       "extractionState": "manual",
       "localizations": {
@@ -3847,6 +3864,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "「月の庭!」の「!」をシリーズ名に含めます"
+          }
+        }
+      }
+    },
+    "Kept narrower than the list for ordinary digits on purpose: a kanji numeral with nothing in front of it cannot be told from an ordinary word (三人の夜, 十字架). Add 月 here and 三月 becomes volume 3.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept narrower than the list for ordinary digits on purpose: a kanji numeral with nothing in front of it cannot be told from an ordinary word (三人の夜, 十字架). Add 月 here and 三月 becomes volume 3."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "算用数字の一覧より**わざと狭く**してあります。前に「第」などが付かない漢数字は、ふつうの言葉と見分けが付きません(「三人の夜」「十字架」)。ここに「月」を足すと「三月」が 3 巻になります。"
           }
         }
       }
@@ -8403,6 +8437,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "語と正規表現を追加・削除できます"
+          }
+        }
+      }
+    },
+    "Your changes (JSON)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your changes (JSON)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "変えた所 (JSON)"
           }
         }
       }

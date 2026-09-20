@@ -23,7 +23,7 @@ struct FileNameRulesView: View {
         case presets, json
         var id: String { rawValue }
 
-        var title: String { self == .presets ? "Rule sets" : "Diff (JSON)" }
+        var title: String { self == .presets ? "Rule sets" : "Your changes (JSON)" }
         var symbol: String { self == .presets ? "textformat.abc" : "curlybraces" }
     }
 

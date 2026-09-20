@@ -1,3 +1,4 @@
+import AppKit
 import QooMetaKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -39,12 +40,12 @@ struct SeriesRulesView: View {
 
         var title: String {
             switch self {
-            case .policies: "All the choices"
+            case .policies: "How books are grouped and numbered"
             case .markers: "How words in a title are told apart"
             case .readers: "Reading the volume"
             case .steps: "How a series is built"
             case .lists: "Word lists"
-            case .json: "Diff (JSON)"
+            case .json: "Your changes (JSON)"
             }
         }
 
@@ -63,6 +64,16 @@ struct SeriesRulesView: View {
         var isOrdered: Bool { self == .markers || self == .readers }
     }
 
+    /// 左の一覧が**省略されない幅**。語の長さは言語で変わるので、数を決め打ちにせず、
+    /// 実際に出す文字を測って決める(2026-09-20、利用者の指摘)。
+    static var sidebarWidth: CGFloat {
+        let font = NSFont.preferredFont(forTextStyle: .body)
+        let texts = Goal.all.map(\.title) + Pane.allCases.map(\.title)
+        let longest = texts.map { ($0.ui as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        // 記号(16) + 間(8) + 行の内側の余白(左右 20) + 選択の枠と余裕(24)。
+        return min(max(longest + 68, 220), 460)
+    }
+
     private var subtitle: String {
         switch selection {
         case .goal(let id): Goal.all.first { $0.id == id }?.title ?? ""
@@ -73,29 +84,40 @@ struct SeriesRulesView: View {
     var body: some View {
         let catalog = settings.rules.catalog
         NavigationSplitView {
+            let width = Self.sidebarWidth
             List(selection: Binding(get: { selection }, set: { selection = $0 ?? selection })) {
                 // **やりたいことから入る。** 設定の名前を並べても、自分の困りごとと結び付かない
                 // (2026-09-20、利用者の指摘)。ここを選べば、それに効く設定だけが右に出る。
-                Section("What do you want to change?") {
+                Section {
                     // 窓を開いた人が最初に読む 1 行。ここが何をする場所かを言っておかないと、
                     // 項目の意味も読み取れない(2026-09-20、設計の見直し)。
                     Text("Pick what is going wrong and the settings that bear on it appear on the right.")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     ForEach(Goal.all) { goal in
                         Label(LocalizedStringKey(goal.title), systemImage: goal.symbol)
                             .tag(Selection.goal(goal.id))
                     }
+                } header: {
+                    SidebarHeader(title: "What do you want to change?")
                 }
                 // ふだんは「やりたいこと」で足りるので、畳んでおく(2026-09-20、利用者の判断)。
-                Section("All the settings", isExpanded: $showsAllSettings) {
+                Section(isExpanded: $showsAllSettings) {
+                    // ここにしかないもの(順番・例外の追加・正規表現)を先に言う。ただの「詳しい」では、
+                    // 開く理由が分からない(2026-09-20、利用者の問い)。
+                    Text("Change the order rules are looked at in, write an exception of your own, use a regular expression.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     ForEach(Pane.allCases) { pane in
                         Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
                             .badge(pane.isOrdered ? Text("Ordered") : nil)
                             .tag(Selection.pane(pane))
                     }
+                } header: {
+                    SidebarHeader(title: "All the settings")
                 }
             }
-            .navigationSplitViewColumnWidth(min: 250, ideal: 280, max: 340)
+            .navigationSplitViewColumnWidth(min: width, ideal: width, max: max(width + 80, 460))
         } detail: {
             VStack(spacing: 0) {
                 PhaseBanner(flow: "Title → series name and volume", fileName: "series-rules.json",
@@ -127,6 +149,19 @@ struct SeriesRulesView: View {
         } message: {
             Text("Every change you made to the policies, the word rules and the word lists is lost.")
         }
+    }
+}
+
+/// 左の一覧の見出し。**既定の小さな灰色では、畳んだ「詳しい設定」に気づかない**(2026-09-20、利用者の指摘)。
+/// 太さと濃さを上げ、大文字化(`textCase`)も切る。
+private struct SidebarHeader: View {
+    var title: LocalizedStringKey
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .textCase(nil)
     }
 }
 
