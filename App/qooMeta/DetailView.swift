@@ -379,7 +379,7 @@ struct FileNameView: View {
                 Label("Format %1$lld: %2$@".ui(index + 1, formats.formats[index].text), systemImage: "checkmark.circle")
                     .font(.caption).foregroundStyle(.secondary)
             } else if let near = book.reading.nearest {
-                Label("Matched no format. The closest is format %1$lld (%2$@), which broke after character %3$lld. The whole name became a provisional title.".ui(near.formatIndex + 1, formats.formats[near.formatIndex].text, near.matchedCharacters),
+                Label("Matched no format. The closest is format %1$lld (%2$@); it looked for the next fixed character at character %3$lld and did not find it. The whole name became a provisional title.".ui(near.formatIndex + 1, formats.formats[near.formatIndex].text, near.brokeAt + 1),
                       systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             } else {

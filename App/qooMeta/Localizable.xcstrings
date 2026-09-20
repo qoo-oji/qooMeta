@@ -3749,19 +3749,19 @@
         }
       }
     },
-    "Matched no format. The closest is format %1$lld (%2$@), which broke after character %3$lld. The whole name became a provisional title.": {
+    "Matched no format. The closest is format %1$lld (%2$@); it looked for the next fixed character at character %3$lld and did not find it. The whole name became a provisional title.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Matched no format. The closest is format %1$lld (%2$@), which broke after character %3$lld. The whole name became a provisional title."
+            "value": "Matched no format. The closest is format %1$lld (%2$@); it looked for the next fixed character at character %3$lld and did not find it. The whole name became a provisional title."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "どのフォーマットにも合いません。最も近いのはフォーマット %1$lld(%2$@)で、%3$lld 文字目の後で外れました。名前全体を仮のタイトルにしています"
+            "value": "どの型にも合わなかった。いちばん近いのは %1$lld 番目の型 (%2$@) で、%3$lld 文字目に次の決まった文字を探して見つからなかった。名前ぜんぶが仮のタイトルになる。"
           }
         }
       }
@@ -6010,36 +6010,36 @@
         }
       }
     },
-    "The closest format is the one on line %1$lld (%2$@); it broke at character %3$lld — the marked part.": {
+    "The closest format is the one on line %1$lld (%2$@); it looked for the next fixed character at character %3$lld — the marked part.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The closest format is the one on line %1$lld (%2$@); it broke at character %3$lld — the marked part."
+            "value": "The closest format is the one on line %1$lld (%2$@); it looked for the next fixed character at character %3$lld — the marked part."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "いちばん近いのは %1$lld 行目のフォーマット(%2$@)。%3$lld 文字目で外れた ―― 印を付けたところ。"
+            "value": "いちばん近いのは %1$lld 行目のフォーマット (%2$@)。%3$lld 文字目に次の決まった文字を探して見つからなかった —— 印を付けたところ。"
           }
         }
       }
     },
-    "The closest is the format on line %1$lld, which matched the first %2$lld characters.": {
+    "The closest is the format on line %1$lld; it looked for the next fixed character at character %2$lld and did not find it.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The closest is the format on line %1$lld, which matched the first %2$lld characters."
+            "value": "The closest is the format on line %1$lld; it looked for the next fixed character at character %2$lld and did not find it."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "いちばん近いのは %1$lld 行目のフォーマットで、頭から %2$lld 文字まで合いました。"
+            "value": "いちばん近いのは %1$lld 行目の型。%2$lld 文字目に次の決まった文字を探して見つからなかった。"
           }
         }
       }

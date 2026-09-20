@@ -199,10 +199,24 @@ import Testing
     @Test func nearestFormatShowsWhereItBroke() {
         // 角括弧が閉じていない。先頭の丸括弧と著者までは合うので、(@genre) の型が最も近い。
         let formats = ["[@author] @title", "(@genre) [@author] @title"]
-        let r = Self.read("(架空ジャンル) [架空工房 月の庭", formats)
+        let name = "(架空ジャンル) [架空工房 月の庭"
+        let r = Self.read(name, formats)
         #expect(r.formatIndex == nil)
         #expect(r.nearest?.formatIndex == 1)
-        #expect((r.nearest?.matchedCharacters ?? 0) >= "(架空ジャンル) [".count)
+        // 外れた所は「閉じ角括弧を探しに行った所」= 開き角括弧の次。**名前の末尾ではない**:
+        // 欄は何でも飲み込むので、読めた文字数で測ると印がいつも末尾に付いてしまう(2026-09-20、利用者の指摘)。
+        #expect(r.nearest?.brokeAt == "(架空ジャンル) [".count)
+    }
+
+    /// 閉じ角括弧が抜けている名前。どの型にも合わず、印は**抜けている所**に付く(末尾の丸括弧ではない)。
+    @Test func aMissingClosingBracketIsMarkedWhereItIsMissing() {
+        let formats = ["(@genre) [@author (@author)] @title (@source)", "(@genre) [@author (@author)] @title"]
+        let name = "(架空の分類) [架空工房 (架空作家、架空画家) 月の庭 (架空の原作)"
+        var set = FilenameFormats(formats: try! formats.map { try FilenameFormat($0) })
+        set.isVolume = VolumeTest { _ in false }
+        let check = set.check(name)
+        #expect(check.outcome == .unread)
+        #expect(check.problems.first?.lowerBound == "(架空の分類) [架空工房 (架空作家、架空画家)".count)
     }
 
     @Test func compileErrors() {

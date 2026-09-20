@@ -311,7 +311,7 @@ private struct NameCheckRow: View {
                 return "No format came close. The whole name becomes a provisional title.".ui
             }
             let at = row.now.problems.first?.lowerBound ?? 0
-            return "The closest format is the one on line %1$lld (%2$@); it broke at character %3$lld — the marked part.".ui(usable.line(index), usable.text(index), at + 1)
+            return "The closest format is the one on line %1$lld (%2$@); it looked for the next fixed character at character %3$lld — the marked part.".ui(usable.line(index), usable.text(index), at + 1)
         }
     }
 }

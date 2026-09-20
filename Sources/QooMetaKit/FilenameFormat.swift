@@ -294,11 +294,23 @@ public struct FilenameFormat: Sendable, Hashable {
 
     /// どこまで合ったか(合わなかったとき、最も近い型を選ぶため)。
     struct Progress: Comparable {
+        /// 満たした**型に書いた文字**の数(括弧などの決まった文字。欄は数えない)。
+        var literals: Int
         /// 満たした部品の数(型の頭から)。
         var tokens: Int
         /// そこまでに読んだ名前の文字数。
         var characters: Int
-        static func < (a: Progress, b: Progress) -> Bool { (a.tokens, a.characters) < (b.tokens, b.characters) }
+
+        /// 近さは「型に書いた文字をいくつ見つけられたか」で測る。**読めた文字数では測らない**: 欄は何でも飲み込むので、
+        /// 外れた型でも名前の最後まで「読めた」ことになり、印がいつも末尾の 1 文字に付く。閉じ角括弧が抜けている名前で、
+        /// 最後の丸括弧が悪いように見えていた(2026-09-20、利用者の指摘)。
+        ///
+        /// 同じ数だけ見つけた読み方が何通りもあるときは、**いちばん手前で行き止まりになったもの**を採る。
+        /// 閉じ角括弧が抜けた名前は、末尾の「(原作)」を著者の中の丸括弧と読めば同じ数だけ進めてしまうが、
+        /// 直すべきなのは手前のほう。
+        static func < (a: Progress, b: Progress) -> Bool {
+            a.literals == b.literals ? a.characters > b.characters : a.literals < b.literals
+        }
     }
 
     /// 名前全体に一致すれば、欄の位置。欄は長く取るほうを先に試す(区切りが何度も現れるときは最後のもので分ける)。
@@ -310,17 +322,25 @@ public struct FilenameFormat: Sendable, Hashable {
         let folded = name.map(Self.fold)
         func isPlain(_ p: Int) -> Bool { plain?[p] ?? false }
         var failed = Set<Int>()
-        var best = Progress(tokens: 0, characters: 0)
+        // tokens[0..<t] にある「型に書いた文字」の数(近さの測り方は `Progress`)。
+        var literalsBefore = [Int](repeating: 0, count: tokens.count + 1)
+        for (i, token) in tokens.enumerated() {
+            if case .literal = token { literalsBefore[i + 1] = literalsBefore[i] + 1 } else { literalsBefore[i + 1] = literalsBefore[i] }
+        }
+        var best = Progress(literals: 0, tokens: 0, characters: 0)
         var fields: [(word: FormatWord, range: Range<Int>)] = []
         let width = folded.count + 1
 
         func step(_ t: Int, _ p: Int) -> Bool {
-            best = max(best, Progress(tokens: t, characters: p))
             if t == tokens.count { return p == folded.count }
             if failed.contains(t * width + p) { return false }
             switch tokens[t] {
             case .literal(let c):
-                if p < folded.count, folded[p] == c, !isPlain(p), step(t + 1, p + 1) { return true }
+                if p < folded.count, folded[p] == c, !isPlain(p) {
+                    // 近さは、型に書いた文字を**見つけられたときだけ**数える(測り方は `Progress`)。
+                    best = max(best, Progress(literals: literalsBefore[t] + 1, tokens: t + 1, characters: p + 1))
+                    if step(t + 1, p + 1) { return true }
+                }
             case .space:
                 var end = p
                 while end < folded.count, Self.isSpace(folded[end]) { end += 1 }
@@ -504,7 +524,7 @@ public struct FilenameFormats: Sendable, Hashable {
         let title = TextRules.normalizeDisplay(name)
         var reading = FormatReading(metadata: BookMetadata(title: title), formatIndex: nil,
                                     spans: title.isEmpty ? [] : [FormatReading.Span(word: .title, range: 0..<chars.count)],
-                                    nearest: nearest.map { FormatReading.Nearest(formatIndex: $0.index, matchedCharacters: $0.progress.characters) })
+                                    nearest: nearest.map { FormatReading.Nearest(formatIndex: $0.index, brokeAt: $0.progress.characters) })
         // どの型にも合わなかった名前にも既定の欄は入れる(その蔵書がどういう本かは、型に合ったかどうかで変わらない)。
         applyDefaults(&reading.metadata)
         return reading
@@ -591,7 +611,7 @@ extension FilenameFormats {
         let reading = read(name)
         guard reading.formatIndex != nil else {
             // どこで外れたかは、最も近い型がそこまで読めた文字数で分かる(近い型が無ければ、名前ぜんぶが問題)。
-            let from = min(reading.nearest?.matchedCharacters ?? 0, max(chars.count - 1, 0))
+            let from = min(reading.nearest?.brokeAt ?? 0, max(chars.count - 1, 0))
             return FormatCheck(outcome: .unread, formatIndex: reading.nearest?.formatIndex,
                                problems: chars.isEmpty ? [] : [from..<chars.count], spans: [])
         }
@@ -619,7 +639,8 @@ public struct FormatReading: Sendable, Hashable {
 
     public struct Nearest: Sendable, Hashable {
         public var formatIndex: Int
-        public var matchedCharacters: Int
+        /// その型が**次の決まった文字を探して見つからなかった**所(名前の中の文字の番号)。
+        public var brokeAt: Int
     }
 }
 

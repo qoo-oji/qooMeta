@@ -384,7 +384,7 @@ private struct SampleReading: View {
                     Label("Matches no format; the whole name becomes a provisional title", systemImage: "xmark.circle.fill")
                         .foregroundStyle(.orange).font(.callout)
                     if let nearest = reading.nearest {
-                        Text("The closest is the format on line %1$lld, which matched the first %2$lld characters.".ui(usable.line(nearest.formatIndex), nearest.matchedCharacters))
+                        Text("The closest is the format on line %1$lld; it looked for the next fixed character at character %2$lld and did not find it.".ui(usable.line(nearest.formatIndex), nearest.brokeAt + 1))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
