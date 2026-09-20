@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import QooMetaExport
 import QooMetaKit
 import QooMetaRules
 
@@ -96,8 +97,8 @@ final class Workspace {
     /// フォルダごとの型の並びの割り当て。変えると、当たる本の名前を読み直す。
     private(set) var presets: Workfile.PresetAssignment
 
-    let rules: CompiledRules
-    let formats: FormatPresets
+    private(set) var rules: CompiledRules
+    private(set) var formats: FormatPresets
     /// 本ごとの入力(ID → 名前・プリセット・確定した内容)。これが持ちもの。
     private var inputs: [String: BookInput]
     /// 入れた順(一覧の既定の並び)。
@@ -141,7 +142,7 @@ final class Workspace {
 
     // MARK: - 開く
 
-    private init(workfile: Workfile, rules: CompiledRules = .builtin) {
+    private init(workfile: Workfile, rules: CompiledRules) {
         rootPath = workfile.rootPath
         presets = workfile.presets
         self.rules = rules
@@ -171,6 +172,21 @@ final class Workspace {
     func markSaved(to url: URL) {
         fileURL = url
         hasUnsavedChanges = false
+    }
+
+    /// 規則を替える(画面で方針や語の一覧を変えたとき)。すべての本を読み直す(単位が変わりうるため)。
+    func setRules(_ rules: CompiledRules) async {
+        guard rules.contentHash != self.rules.contentHash else { return }
+        self.rules = rules
+        formats = rules.formats
+        isWorking = true
+        await tail?.value
+        let snapshot = await Task.detached { [index] in
+            try? await index.update(rules: rules, dictionaries: SystemDictionaries.all)
+            return await index.snapshot()
+        }.value
+        absorb(snapshot)
+        isWorking = false
     }
 
     // MARK: - 計算
@@ -242,6 +258,18 @@ final class Workspace {
             guard ids.contains(input.id) else { return }
             var fields = input.confirmation.fields
             fields[field] = nil
+            input.confirmation = input.confirmation.withFields(fields)
+        }
+    }
+
+    /// スタンプを押す(値のある欄だけを、選んだ本すべてに入れる)。1 回の操作として取り消せる。
+    func apply(_ stamp: Stamp, to ids: Set<BookRow.ID>) {
+        let values = stamp.values.filter { !$0.value.isEmpty }
+        guard !values.isEmpty else { return }
+        edit("スタンプ「\(stamp.name)」を押す") { input in
+            guard ids.contains(input.id) else { return }
+            var fields = input.confirmation.fields
+            for (field, value) in values { fields[field] = value }
             input.confirmation = input.confirmation.withFields(fields)
         }
     }
@@ -321,6 +349,40 @@ final class Workspace {
         }
     }
 
+    /// 適用前のプレビュー: 選んだ本を 1 つのシリーズにしたとき、**選んでいない本**がいくつ巻き込まれるか。
+    /// 確定した名前は錨なので、同じ単位のほかの本もそのシリーズへ寄る(api.md「確定した値の効き方」)。
+    /// 状態は変えない(`ProposalIndex.preview`)。
+    func previewSetSeries(_ name: String, for ids: Set<BookRow.ID>) async -> SeriesChangePreview {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return SeriesChangePreview() }
+        let volumes = Dictionary(books.map { ($0.id, Self.confirmedVolume($0)) }, uniquingKeysWith: { a, _ in a })
+        let changes = order.compactMap { id -> BookChange? in
+            guard ids.contains(id), var input = inputs[id] else { return nil }
+            input.confirmation = .series(name: trimmed, volume: volumes[id] ?? nil, fields: input.confirmation.fields)
+            return .upsert(input)
+        }
+        let before = Dictionary(books.map { ($0.id, $0.metadata.series) }, uniquingKeysWith: { a, _ in a })
+        let delta = await Task.detached { [index] in try? await index.preview(changes) }.value
+        var preview = SeriesChangePreview()
+        for proposal in delta?.changed ?? [] {
+            let old = before[proposal.id] ?? ""
+            guard old != proposal.metadata.series else { continue }
+            if ids.contains(proposal.id) { preview.selected += 1 } else { preview.others += 1 }
+            if old.isEmpty { preview.gained += 1 } else if proposal.metadata.series.isEmpty { preview.lost += 1 }
+        }
+        return preview
+    }
+
+    struct SeriesChangePreview: Hashable {
+        /// 選んだ本のうち、シリーズが変わる冊数。
+        var selected = 0
+        /// 選んでいないのに巻き込まれる冊数。
+        var others = 0
+        var gained = 0
+        var lost = 0
+        var isEmpty: Bool { selected == 0 && others == 0 }
+    }
+
     /// 今のシリーズ名(確定した名前、無ければ提案)。
     static func currentSeriesName(_ book: BookRow) -> String {
         if case .series(let name, _, _) = book.confirmation { return name }
@@ -332,6 +394,28 @@ final class Workspace {
         if case .series(_, let volume?, _) = book.confirmation { return volume }
         guard !book.metadata.volume.isEmpty, !book.flags.contains(.inferredVolume) else { return nil }
         return book.metadata.volume
+    }
+
+    // MARK: - 書き出し
+
+    /// 書き出しのための今の提案(索引から取る。直している途中の変更が着いてから)。
+    func currentProposals() async -> ProposalSet {
+        await tail?.value
+        return await Task.detached { [index] in await index.snapshot() }.value
+    }
+
+    /// 書き出しに要るファイルの事実。作業ファイルは日付とファイルノードを持たないので、起点からのパスと拡張子だけ。
+    var fileFacts: [String: Exporter.FileFacts] {
+        Dictionary(order.map { id in
+            (id, Exporter.FileFacts(path: (rootPath as NSString).appendingPathComponent(id),
+                                    fileExtension: (id as NSString).pathExtension))
+        }, uniquingKeysWith: { a, _ in a })
+    }
+
+    var fileIdentities: [String: Exporter.FileIdentity] {
+        Dictionary(order.map { id in
+            (id, Exporter.FileIdentity(path: (rootPath as NSString).appendingPathComponent(id)))
+        }, uniquingKeysWith: { a, _ in a })
     }
 
     // MARK: - フォルダごとのプリセット

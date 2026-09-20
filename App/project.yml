@@ -20,6 +20,8 @@ targets:
         product: QooMetaRules
       - package: QooMetaPackage
         product: QooMetaScan
+      - package: QooMetaPackage
+        product: QooMetaExport
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qooProject.qooMeta

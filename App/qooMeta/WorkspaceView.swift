@@ -4,8 +4,10 @@ import SwiftUI
 /// 1 つの窓: 一覧が中心で、上に絞り込みの帯、右に詳細(選んだ本のメタデータを直す)。
 struct WorkspaceView: View {
     @Bindable var workspace: Workspace
+    @Bindable var settings: AppSettings
     @State private var showsDetail = true
     @State private var showsPresets = false
+    @State private var showsExport = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,7 +16,7 @@ struct WorkspaceView: View {
             BookTableView(workspace: workspace)
         }
         .inspector(isPresented: $showsDetail) {
-            DetailView(workspace: workspace)
+            DetailView(workspace: workspace, settings: settings)
                 .inspectorColumnWidth(min: 300, ideal: 380, max: 560)
         }
         .searchable(text: $workspace.searchText, placement: .toolbar, prompt: "欄とファイル名を検索")
@@ -27,10 +29,15 @@ struct WorkspaceView: View {
                     .help("フォルダごとに、どの型の並びで名前を読むかを決める")
             }
             ToolbarItem {
+                Button { showsExport = true } label: { Label("書き出す", systemImage: "square.and.arrow.up") }
+                    .help("書き出し先を選び、落ちる欄を見てから書き出す")
+            }
+            ToolbarItem {
                 Button { showsDetail.toggle() } label: { Label("詳細", systemImage: "sidebar.right") }
             }
         }
         .sheet(isPresented: $showsPresets) { PresetAssignmentView(workspace: workspace) }
+        .sheet(isPresented: $showsExport) { ExportView(workspace: workspace, settings: settings) }
         .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta(未保存の変更)" : "qooMeta")
         .navigationSubtitle("\(workspace.visibleBooks.count) / \(workspace.books.count) 冊")
     }

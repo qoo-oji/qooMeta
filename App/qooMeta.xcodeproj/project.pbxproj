@@ -13,7 +13,10 @@
 		947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 74CE0620A1873D2F829A351F /* QooMetaKit */; };
 		A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934559B81EEEF1E3B3E9DA44 /* Workspace.swift */; };
 		A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */; };
+		AEC71417CE1F93E02F2A71D3 /* QooMetaExport in Frameworks */ = {isa = PBXBuildFile; productRef = 2449A647BAACCAC89BA1146A /* QooMetaExport */; };
+		B60229BB9E92F064DE2EE985 /* ExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */; };
 		CF2BA062F11138C7CF56C2E5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 026D669D5E2477C2E800ACEA /* Assets.xcassets */; };
+		D9DBDC550F15D5AEB5EE9979 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D76B49E8894D1A02F1F09D /* Settings.swift */; };
 		FF17B661D9ED57B280285700 /* DemoData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4760B3275FF3971B539296 /* DemoData.swift */; };
 		FFBE93BE71615B811C14E97B /* QooMetaScan in Frameworks */ = {isa = PBXBuildFile; productRef = ECC807B83697548A0012D159 /* QooMetaScan */; };
 /* End PBXBuildFile section */
@@ -24,8 +27,10 @@
 		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
 		3B18F5A13C7BB642774DDFB1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		6F4760B3275FF3971B539296 /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
+		76D76B49E8894D1A02F1F09D /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		934559B81EEEF1E3B3E9DA44 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QooMetaApp.swift; sourceTree = "<group>"; };
+		EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -37,6 +42,7 @@
 				947D67823314607A4D6559F3 /* QooMetaKit in Frameworks */,
 				3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */,
 				FFBE93BE71615B811C14E97B /* QooMetaScan in Frameworks */,
+				AEC71417CE1F93E02F2A71D3 /* QooMetaExport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -66,7 +72,9 @@
 				026D669D5E2477C2E800ACEA /* Assets.xcassets */,
 				6F4760B3275FF3971B539296 /* DemoData.swift */,
 				3B18F5A13C7BB642774DDFB1 /* DetailView.swift */,
+				EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */,
 				D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */,
+				76D76B49E8894D1A02F1F09D /* Settings.swift */,
 				934559B81EEEF1E3B3E9DA44 /* Workspace.swift */,
 				F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */,
 			);
@@ -101,6 +109,7 @@
 				74CE0620A1873D2F829A351F /* QooMetaKit */,
 				F548B9A73E497C1459503F3C /* QooMetaRules */,
 				ECC807B83697548A0012D159 /* QooMetaScan */,
+				2449A647BAACCAC89BA1146A /* QooMetaExport */,
 			);
 			productName = qooMeta;
 			productReference = 0874B8EB5ABA307C2EF67551 /* qooMeta.app */;
@@ -160,7 +169,9 @@
 			files = (
 				FF17B661D9ED57B280285700 /* DemoData.swift in Sources */,
 				93B52A0640283F3E27829F56 /* DetailView.swift in Sources */,
+				B60229BB9E92F064DE2EE985 /* ExportView.swift in Sources */,
 				A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */,
+				D9DBDC550F15D5AEB5EE9979 /* Settings.swift in Sources */,
 				A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */,
 				5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */,
 			);
@@ -365,6 +376,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2449A647BAACCAC89BA1146A /* QooMetaExport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QooMetaExport;
+		};
 		74CE0620A1873D2F829A351F /* QooMetaKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = QooMetaKit;

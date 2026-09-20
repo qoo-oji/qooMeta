@@ -21,7 +21,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if let workspace = model.workspace {
-                WorkspaceView(workspace: workspace)
+                WorkspaceView(workspace: workspace, settings: model.settings)
             } else {
                 WelcomeView(model: model)
             }
@@ -64,12 +64,14 @@ final class AppModel {
     var workspace: Workspace?
     var error: String?
     var isOpening = false
+    /// アプリの設定(規則の差分・スタンプ・書き出しの対応表)。作業ファイルとは分ける。
+    let settings = AppSettings()
 
     /// 架空のデータ(`-demo`)。実際の蔵書は画面に出さない確かめ方(CLAUDE.md)。
     func openDemoIfAsked() async {
         guard workspace == nil, CommandLine.arguments.contains("-demo") else { return }
         let books = DemoData.files.map { Workfile.Book(id: $0.id, name: $0.name) }
-        workspace = await Workspace.open(Workfile(rootPath: "(架空のデータ)", books: books))
+        workspace = await Workspace.open(Workfile(rootPath: "(架空のデータ)", books: books), rules: settings.rules)
     }
 
     /// フォルダを開いて、書庫ファイルの名前を読み込む。
@@ -93,7 +95,7 @@ final class AppModel {
                 return
             }
             let books = files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName) }
-            workspace = await Workspace.open(Workfile(rootPath: url.path, books: books))
+            workspace = await Workspace.open(Workfile(rootPath: url.path, books: books), rules: settings.rules)
         } catch {
             self.error = String(describing: error)
         }
@@ -109,7 +111,7 @@ final class AppModel {
             defer { isOpening = false }
             do {
                 let file = try Workfile.decoded(Data(contentsOf: url))
-                let workspace = await Workspace.open(file)
+                let workspace = await Workspace.open(file, rules: settings.rules)
                 workspace.markSaved(to: url)
                 self.workspace = workspace
             } catch {

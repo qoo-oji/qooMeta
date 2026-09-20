@@ -5,6 +5,7 @@ import SwiftUI
 /// 揃わない欄は「<複数値>」で、入力すると選んだ全冊のその欄を置き換える(StackNest の詳細ペインと同じ)。
 struct DetailView: View {
     @Bindable var workspace: Workspace
+    @Bindable var settings: AppSettings
 
     /// 利用者が書き換えられる欄。シリーズと巻は中核が導く(シリーズの操作は段階 7)。
     static let editableFields: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .info]
@@ -28,6 +29,7 @@ struct DetailView: View {
                         FieldEditor(workspace: workspace, field: field, books: books)
                     }
                 }
+                StampSection(workspace: workspace, settings: settings, books: books)
                 SeriesSection(workspace: workspace, books: books)
             }
             .formStyle(.grouped)
@@ -47,6 +49,65 @@ struct DetailView: View {
     }
 }
 
+/// スタンプ: よく使う値をまとめて押す。押す先は選んだ本すべて。今の選択から作ることもできる。
+struct StampSection: View {
+    @Bindable var workspace: Workspace
+    @Bindable var settings: AppSettings
+    let books: [BookRow]
+    @State private var newName = ""
+    @State private var showsNew = false
+
+    var ids: Set<BookRow.ID> { Set(books.map(\.id)) }
+
+    var body: some View {
+        Section("スタンプ") {
+            if settings.stamps.isEmpty {
+                Text("よく使う値(ジャンル・原作など)をスタンプにすると、選んだ本へ一度に押せます。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(settings.stamps) { stamp in
+                HStack {
+                    Button(stamp.name) { workspace.apply(stamp, to: ids) }
+                        .help(stamp.summary)
+                    Text(stamp.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer()
+                    Button { settings.stamps.removeAll { $0.id == stamp.id }; settings.save() } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("このスタンプを消す")
+                }
+            }
+            if showsNew {
+                HStack {
+                    TextField("スタンプの名前", text: $newName).onSubmit(createStamp)
+                    Button("作る") { createStamp() }.disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("やめる") { showsNew = false; newName = "" }
+                }
+            } else {
+                Button("いまの値からスタンプを作る") { showsNew = true }
+                    .help("選んだ本で値が揃っている欄(タイトル以外)をスタンプにする")
+            }
+        }
+    }
+
+    /// 選んだ本で値の揃っている欄を、そのままスタンプにする(タイトルは本ごとに違うので入れない)。
+    func createStamp() {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        var values: [BookMetadata.Field: [String]] = [:]
+        for field in DetailView.editableFields where field != .title {
+            let all = Set(books.map { $0.metadata.values(field) })
+            guard all.count == 1, let value = all.first, !value.isEmpty else { continue }
+            values[field] = value
+        }
+        settings.stamps.append(Stamp(name: name, values: values))
+        settings.save()
+        showsNew = false
+        newName = ""
+    }
+}
+
 /// シリーズと巻。規則が導いた値を見せ、1 つにする・外す・巻を確かめる・連番を振る、を選んだ本にまとめてかける。
 /// **直した値は確定した内容として中核へ戻す**ので、同じ単位のほかの本の提案も変わる(錨)。
 struct SeriesSection: View {
@@ -55,12 +116,30 @@ struct SeriesSection: View {
     @State private var name = ""
     @State private var start = 1
     @State private var width = 2
+    /// 適用前の確かめ(選んでいない本が巻き込まれるとき)。
+    @State private var pending: (name: String, preview: Workspace.SeriesChangePreview)?
 
     var ids: Set<BookRow.ID> { Set(books.map(\.id)) }
     var confirmedCount: Int { books.filter(\.hasConfirmedSeries).count }
 
     var body: some View {
         Section("シリーズと巻数") {
+            if let pending {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("「\(pending.name)」にすると、選んでいない \(pending.preview.others) 冊も変わります"
+                          + "(選んだ本で変わるのは \(pending.preview.selected) 冊。新しくシリーズが付く \(pending.preview.gained) 冊、"
+                          + "外れる \(pending.preview.lost) 冊)", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                    HStack {
+                        Button("このまま適用") {
+                            workspace.setSeries(pending.name, for: ids)
+                            name = ""
+                            self.pending = nil
+                        }
+                        Button("やめる") { self.pending = nil }
+                    }
+                }
+            }
             LabeledContent("シリーズ") {
                 HStack(spacing: 6) {
                     Text(uniform(.series) ?? "<複数値>")
@@ -97,10 +176,20 @@ struct SeriesSection: View {
         }
     }
 
+    /// 「1 つにする」を押したとき。**選んでいない本が巻き込まれるときだけ**、適用前に数を見せて確かめる
+    /// (確定した名前は錨なので、同じ単位のほかの本もそのシリーズへ寄る)。
     func applyName() {
         let text = name.isEmpty ? (workspace.suggestedSeriesName(for: ids) ?? "") : name
-        workspace.setSeries(text, for: ids)
-        name = ""
+        guard !text.isEmpty else { return }
+        Task {
+            let preview = await workspace.previewSetSeries(text, for: ids)
+            if preview.others > 0 {
+                pending = (text, preview)
+            } else {
+                workspace.setSeries(text, for: ids)
+                name = ""
+            }
+        }
     }
 
     func uniformSort() -> String? {

@@ -16,6 +16,9 @@
   (`Exporter.preview`)。CLI は `--to stacknest|shelfrow|qooviewer`。**画面の書き出しは段階 11**。
 - **段階 10(CLI)も済み**(2026-09-20)。`--in` に作業ファイルを渡せる(`stats`・`export`・`formats`・`bench`)。
   `config.json` は消した。
+- **段階 11 は途中**(2026-09-20)。済んだのはスタンプ・適用前のプレビュー・書き出しの画面と、アプリの設定
+  (`App/qooMeta/Settings.swift`。規則の差分・スタンプ・書き出しの対応表を
+  `~/Library/Application Support/qooMeta/settings.json` に持つ)。**残りは規則と型を編集する画面(JSON の編集)**。
 - 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
 - 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
   コミットやブランチの状態はここに書かない(`git log` を見る)。
