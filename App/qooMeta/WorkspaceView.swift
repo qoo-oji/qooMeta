@@ -55,23 +55,14 @@ struct FilterBar: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Picker("Genre", selection: Binding(get: { workspace.genreFilter },
-                                               set: { workspace.setGenreFilter($0) })) {
-                Text("All").tag(ValueKey?.none)
-                ForEach(workspace.genreValues, id: \.key) { row in
-                    Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count)).tag(ValueKey?.some(row.key))
-                }
+            // **値の一覧は、開いたときに作る。** 書き手は千を超えることがあり、Picker だと画面を描くたびに
+            // その数だけ項目を組み立てる(2026-09-21、利用者の報告。列を動かすと main が詰まっていた)。
+            ValueFilterMenu(title: "Genre", values: workspace.genreValues, selection: workspace.genreFilter) {
+                workspace.setGenreFilter($0)
             }
-            .pickerStyle(.menu)
-            .fixedSize()
-            Picker("Authors", selection: $workspace.authorFilter) {
-                Text("All").tag(ValueKey?.none)
-                ForEach(workspace.authorValues, id: \.key) { row in
-                    Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count)).tag(ValueKey?.some(row.key))
-                }
+            ValueFilterMenu(title: "Authors", values: workspace.authorValues, selection: workspace.authorFilter) {
+                workspace.authorFilter = $0
             }
-            .pickerStyle(.menu)
-            .fixedSize()
             Picker("Show", selection: $workspace.stateFilter) {
                 ForEach(Workspace.StateFilter.allCases) { Text($0.label).tag($0) }
             }
@@ -89,6 +80,35 @@ struct FilterBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+/// 値で絞り込むメニュー(ジャンル・著者)。中身は**押して開いたときに作る** ―― 値が千を超えても、
+/// 画面を描くたびに項目を組み立てないため。
+struct ValueFilterMenu: View {
+    var title: LocalizedStringKey
+    var values: [(key: ValueKey, count: Int)]
+    var selection: ValueKey?
+    var pick: (ValueKey?) -> Void
+
+    var body: some View {
+        Menu {
+            Button("All") { pick(nil) }
+            Divider()
+            ForEach(values, id: \.key) { row in
+                Button { pick(row.key) } label: {
+                    Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(title).foregroundStyle(.secondary)
+                Text(verbatim: selection?.label ?? "All".ui)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .fixedSize()
     }
 }
 

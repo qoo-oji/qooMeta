@@ -5,7 +5,7 @@ import QooMetaKit
 import QooMetaRules
 
 /// 一覧の 1 冊(提案 + 利用者の修正)。画面はこれだけを見る。
-struct BookRow: Identifiable, Hashable {
+struct BookRow: Identifiable, Hashable, Sendable {
     /// 本の ID(開いた起点からの相対パス)。
     let id: String
     /// 拡張子を除いたファイル名(型で読んだもの。隠せない列)。
@@ -25,6 +25,12 @@ struct BookRow: Identifiable, Hashable {
     /// 検索の当たり先(ファイル名とすべての欄をつないだもの)。これも 1 度だけ作る
     /// ―― 打つたびに 1 万冊ぶんの欄を組み立て直さないため。
     private let searchText: String
+    /// 中身の見分け(1 冊につき 1 度だけ作る)。**画面の差分は 1 万冊ぶんの `==` を呼ぶ**ので、
+    /// 欄や並べ替えの鍵を 1 つずつ比べると、列を動かしただけで main が詰まる(2026-09-21、利用者の報告)。
+    private let contentID: Int
+
+    static func == (a: BookRow, b: BookRow) -> Bool { a.id == b.id && a.contentID == b.contentID }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     init(_ proposal: BookProposal, confirmation: Confirmation) {
         id = proposal.id
@@ -37,6 +43,13 @@ struct BookRow: Identifiable, Hashable {
         sortKeys = Self.sortKeys(of: proposal.metadata)
         searchText = ([proposal.name] + BookMetadata.Field.allCases.flatMap { proposal.metadata.values($0) })
             .joined(separator: "\u{1}")
+        var hasher = Hasher()
+        hasher.combine(proposal.metadata)
+        hasher.combine(confirmation)
+        hasher.combine(proposal.seriesID)
+        hasher.combine(proposal.flags)
+        hasher.combine(proposal.name)
+        contentID = hasher.finalize()
     }
 
     /// 検索の語を含むか。
@@ -213,11 +226,13 @@ final class Workspace {
         formats = rules.formats
         isWorking = true
         await tail?.value
-        let snapshot = await Task.detached { [index] in
+        let confirmations = inputs.mapValues(\.confirmation)
+        books = await Task.detached { [index] in
             try? await index.update(rules: rules, dictionaries: SystemDictionaries.all)
-            return await index.snapshot()
+            return await index.snapshot().proposals.map { BookRow($0, confirmation: confirmations[$0.id] ?? .none) }
         }.value
-        absorb(snapshot)
+        dropStaleFilters()
+        refresh()
         isWorking = false
     }
 
@@ -227,11 +242,15 @@ final class Workspace {
     private func recomputeAll() async {
         isWorking = true
         let all = order.compactMap { inputs[$0] }
-        let snapshot = await Task.detached { [index] in
+        // **一覧の行も、計算し直しと同じ所(main の外)で組み立てる。** 1 万冊ぶんの行を main で作ると、
+        // その間じゅう画面が止まる(2026-09-21、利用者の報告)。
+        let confirmations = inputs.mapValues(\.confirmation)
+        books = await Task.detached { [index] in
             try? await index.apply(all.map { .upsert($0) })
-            return await index.snapshot()
+            return await index.snapshot().proposals.map { BookRow($0, confirmation: confirmations[$0.id] ?? .none) }
         }.value
-        absorb(snapshot)
+        dropStaleFilters()
+        refresh()
         isWorking = false
     }
 
@@ -248,12 +267,6 @@ final class Workspace {
             if let delta { self.absorb(delta) }
             self.isWorking = false
         }
-    }
-
-    private func absorb(_ set: ProposalSet) {
-        books = set.proposals.map { BookRow($0, confirmation: inputs[$0.id]?.confirmation ?? .none) }
-        dropStaleFilters()
-        refresh()
     }
 
     private func absorb(_ delta: ProposalDelta) {
