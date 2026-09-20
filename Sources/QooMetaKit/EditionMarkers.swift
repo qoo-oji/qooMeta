@@ -24,11 +24,18 @@ final class EditionMarkers: Sendable {
     /// 比べるタイトルから除く印(方針 `sameWork`)。`separateBooks` の印は見分けて付けるが、タイトルには残す。
     private let stripsEditions: Bool
     private let stripsSources: Bool
+    /// 「フルカラー総集編」は独立した 1 冊で、版違いでも総集編でもない(利用者の判断)。印の語のすぐ後ろに区切り無しで
+    /// 総集編の語が続く形は、印として外さずタイトルの一部として残す(外すと「X 総集編」になり、総集編として組まれてしまう)。
+    /// 語と有効無効は規則 grouping.compilation.conditions.reject-edition-prefix が決める。
+    private let editionPrefixes: Set<String>
+    private let compilationWords: [String]
 
-    /// 印の一覧は series-rules.json の markers。
-    init(_ rules: SeriesRules.Editions) {
+    /// 印の一覧は series-rules.json の markers。総集編の規則は、上の「すぐ後ろに続く形」の判定にだけ使う。
+    init(_ rules: SeriesRules.Editions, compilation: SeriesRules.Compilation) {
         stripsEditions = rules.stripsEditions
         stripsSources = rules.stripsSources
+        editionPrefixes = Set(compilation.editionPrefixes)
+        compilationWords = compilation.editionPrefixes.isEmpty ? [] : compilation.keywords
         func alternation(_ words: [String]) -> [String] {
             words.isEmpty ? [] : [words.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")]
         }
@@ -53,8 +60,17 @@ final class EditionMarkers: Sendable {
         }
         for m in matches {
             base += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            let matched = ns.substring(with: m.range)
             last = m.range.location + m.range.length
             let e = m.range(withName: "edition"), s = m.range(withName: "source")
+            // 「フルカラー版総集編」のように、印の語のすぐ後ろに(括弧も空白も挟まずに)総集編の語が続く形は、印にしない。
+            // 一致が印の語で終わっていること(閉じ括弧や空白を巻き込んでいないこと)が「区切り無し」の条件。
+            if e.location != NSNotFound, e.location + e.length == m.range.location + m.range.length,
+               editionPrefixes.contains(ns.substring(with: e)),
+               compilationWords.contains(where: ns.substring(from: last).hasPrefix) {
+                base += matched
+                continue
+            }
             if e.location != NSNotFound { editions.append(ns.substring(with: e)) }
             if s.location != NSNotFound { sources.append(ns.substring(with: s)) }
             if (e.location != NSNotFound && !stripsEditions) || (s.location != NSNotFound && !stripsSources) {
@@ -74,17 +90,26 @@ final class Compilation: Sendable {
     /// 「総集編」(「総集篇」とも書く)。series-rules.json の grouping.compilation.words。
     let keyword: NSRegularExpression
     let text: TextRules
+    /// すぐ前に区切り無しで続いたら総集編と見なさない語(規則 grouping.compilation.conditions.reject-edition-prefix)。
+    private let editionPrefixes: [String]
 
     init(_ rules: SeriesRules.Compilation, text: TextRules) {
         let words = rules.keywords.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
         keyword = try! NSRegularExpression(pattern: words.isEmpty ? "(?!)" : words.joined(separator: "|"))
+        editionPrefixes = rules.editionPrefixes
         self.text = text
     }
 
+    /// 総集編の語の位置。「フルカラー総集編」のように、版の語が区切り無しですぐ前に続く形は総集編と見なさない
+    /// (独立した 1 冊。利用者の判断 2026-09-20)。同じ名前にほかの総集編の語があれば、そちらを見る。
     func keywordRange(in title: String) -> Range<String.Index>? {
         let ns = title as NSString
-        guard let m = keyword.firstMatch(in: title, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return Range(m.range, in: title)
+        for m in keyword.matches(in: title, range: NSRange(location: 0, length: ns.length)) {
+            guard let r = Range(m.range, in: title) else { continue }
+            if editionPrefixes.contains(where: title[..<r.lowerBound].hasSuffix) { continue }
+            return r
+        }
+        return nil
     }
 
     /// 総集編の前に書かれた収録範囲・番号(「1~4」「9~11+α」「11」)。

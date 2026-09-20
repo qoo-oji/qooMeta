@@ -135,6 +135,16 @@
             }
           ]
         },
+        "editionPrefixWords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
         "volumePrefixes": {
           "oneOf": [
             {
@@ -383,6 +393,31 @@
             },
             "singleWhenMainExists": {
               "type": "boolean"
+            },
+            "conditions": {
+              "type": "object",
+              "properties": {
+                "reject-edition-prefix": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "words": {
+                      "$ref": "#/$defs/wordsValue"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

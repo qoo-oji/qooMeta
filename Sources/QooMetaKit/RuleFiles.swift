@@ -224,6 +224,7 @@ struct RuleCompiler {
         let compare = root["compare"], markers = root["markers"], grouping = root["grouping"]
         let naming = root["naming"], volume = root["volume"]
         let shared = grouping?["sharedPrefix"], conditions = shared?["conditions"]
+        let compilationConditions = grouping?["compilation"]?["conditions"]
         let english = conditions?["reject-common-english"]
         var englishEnabled = enabled(english)
         if englishEnabled, let name = english?["dictionary"]?.stringValue, !dictionaries.contains(name) {
@@ -281,6 +282,8 @@ struct RuleCompiler {
                 stripsSources: policies["sources"] != "separateBooks"),
             compilation: .init(
                 keywords: words(grouping?["compilation"]?["words"], lists),
+                editionPrefixes: enabled(compilationConditions?["reject-edition-prefix"])
+                    ? words(compilationConditions?["reject-edition-prefix"]?["words"], lists) : [],
                 placement: SeriesRules.Compilation.Placement(rawValue: policies["compilations"] ?? "") ?? .ownSeries,
                 volumeAfterRange: policies["compilationVolume"] == "afterRange"),
             volume: .init(
@@ -380,6 +383,9 @@ struct SeriesRules: Sendable {
     struct Compilation: Sendable {
         enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
         var keywords: [String]
+        /// 総集編の語のすぐ前に区切り無しで続いたら、総集編と見なさない語(「フルカラー総集編」は独立した 1 冊)。
+        /// 規則 grouping.compilation.conditions.reject-edition-prefix。止めていれば空。
+        var editionPrefixes: [String]
         /// 方針 `compilations`。
         var placement: Placement
         /// 方針 `compilationVolume` が `afterRange`(本編の中での巻を、収録範囲の最後の巻の直後にする)。

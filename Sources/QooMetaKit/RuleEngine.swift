@@ -17,7 +17,7 @@ struct RuleEngine: Sendable {
         self.rules = rules
         text = TextRules(rules.series)
         volumes = VolumeExtractor(rules.series.volume, text: text)
-        markers = EditionMarkers(rules.series.editions)
+        markers = EditionMarkers(rules.series.editions, compilation: rules.series.compilation)
         compilation = Compilation(rules.series.compilation, text: text)
         english = EnglishWords(dictionaries["english"])
     }

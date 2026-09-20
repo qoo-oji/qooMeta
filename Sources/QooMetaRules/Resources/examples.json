@@ -1138,7 +1138,7 @@
       "id": "single-compilation-without-main-series-is-not-a-series",
       "files": [
         "[架空工房] 月の庭",
-        "[架空工房] 月の庭 フルカラー総集編"
+        "[架空工房] 月の庭 総集編"
       ],
       "expect": [
         {
@@ -1151,6 +1151,62 @@
       "covers": [
         "compilation",
         "compilations"
+      ]
+    },
+    {
+      "id": "edition-word-before-compilation-is-not-a-compilation",
+      "files": [
+        "[架空工房] 月の庭 1",
+        "[架空工房] 月の庭 2",
+        "[架空工房] 月の庭 フルカラー総集編"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "1"
+        },
+        {
+          "series": "月の庭",
+          "volume": "2"
+        },
+        {
+          "title": "月の庭 フルカラー総集編",
+          "series": "月の庭",
+          "volume": null,
+          "editionMark": false
+        }
+      ],
+      "covers": [
+        "reject-edition-prefix",
+        "compilation"
+      ]
+    },
+    {
+      "id": "edition-mark-before-compilation-stays-in-the-title",
+      "files": [
+        "[架空工房] 月の庭 1",
+        "[架空工房] 月の庭 フルカラー版総集編",
+        "[架空工房] 月の庭【フルカラー版】総集編"
+      ],
+      "expect": [
+        {
+          "series": "月の庭"
+        },
+        {
+          "title": "月の庭 フルカラー版総集編",
+          "series": "月の庭",
+          "volume": null,
+          "editionMark": false
+        },
+        {
+          "series": "月の庭総集編",
+          "editionMark": true
+        }
+      ],
+      "covers": [
+        "reject-edition-prefix",
+        "edition",
+        "compilation"
       ]
     },
     {

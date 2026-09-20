@@ -67,7 +67,8 @@ enum RuleSchema {
     static let lists: [String: ListKind] = [
         "ignoredInComparison": .characters, "variantKanji": .pairs, "boundaryCharacters": .characters,
         "trimTrailing": .characters, "keepFollowing": .characters, "brackets": .pairs, "labelIntroducers": .words,
-        "editionWords": .words, "sourceWords": .words, "compilationWords": .words, "volumePrefixes": .words,
+        "editionWords": .words, "sourceWords": .words, "compilationWords": .words,
+        "editionPrefixWords": .words, "volumePrefixes": .words,
         "volumeCounters": .words, "wholeOnlyCounters": .words, "kanjiCounters": .words, "positionFirst": .words,
         "positionMiddle": .words, "positionLast": .words, "notFirstMarkers": .words, "notFirstPrefixes": .words,
     ]
@@ -99,7 +100,12 @@ enum RuleSchema {
             f("source", rule([f("words", .list(.words)), f("patterns", .patterns)])),
         ]))),
         f("grouping", .object(Node([
-            f("compilation", rule([f("words", .list(.words)), f("singleWhenMainExists", .bool)], enabled: false)),
+            f("compilation", rule([
+                f("words", .list(.words)), f("singleWhenMainExists", .bool),
+                f("conditions", .object(Node([
+                    f("reject-edition-prefix", rule([f("words", .list(.words))])),
+                ]))),
+            ], enabled: false)),
             f("volumeHead", rule()),
             f("sharedPrefix", rule([
                 f("minPrefix", .int(1...20)), f("minWholeTitle", .int(1...20)),
