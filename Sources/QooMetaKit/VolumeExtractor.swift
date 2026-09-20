@@ -285,12 +285,38 @@ enum ProposalFinalizer {
                 log?.apply(volume.reader, to: document.books[i].id)
             }
         }
-        if engine.rules.series.compilation.placement == .inMainSeries, engine.rules.series.compilation.volumeAfterRange {
-            placeCompilationsAfterRange(&document, engine: engine, log: log)
+        if engine.rules.series.compilation.placement == .inMainSeries {
+            switch engine.rules.series.compilation.volumeMode {
+            case .offset: placeCompilationsByOffset(&document, engine: engine, log: log)
+            case .afterRange: placeCompilationsAfterRange(&document, engine: engine, log: log)
+            case .none: break
+            }
         }
         if engine.volumes.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document, engine: engine, log: log) }
         numberPositionWords(&document, engine: engine)
         if engine.volumes.rules.inferFirstVolume { inferFirstVolumes(&document, engine: engine, log: log) }
+    }
+
+    /// 本編に含めた総集編・番外編(方針 compilations = inMainSeries)の巻を、オフセットを足した数にする
+    /// (方針 compilationVolume = offset。オフセット 100 なら「総集編2」は 102、番号の無い「総集編」は 101)。
+    /// 巻数(表示用)は名前のとおりの表記を残し、シリーズの中の位置だけをオフセットで決める(利用者の決定 2026-09-20)。
+    /// オフセットは総集編と番外編で分けない(規則 grouping.compilation.volumeOffset)。
+    static func placeCompilationsByOffset(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
+        let offset = engine.rules.series.compilation.volumeOffset
+        for i in document.books.indices
+        where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
+            let title = engine.text.comparable(document.books[i].compareTitle)
+            let name = engine.text.comparable(document.books[i].series).key
+            guard title.key.starts(with: name) else { continue }
+            let remainder = title.originalRemainder(afterKeyLength: name.count)
+                .trimmingCharacters(in: engine.volumes.leadingSeparators)
+            guard let r = engine.compilation.keywordRange(in: remainder), r.lowerBound == remainder.startIndex else { continue }
+            // 番号の無い総集編は 1 と同じ扱い(オフセット + 1)。番号があればその数を足す。
+            let number = engine.volumes.extract(fromRemainder: String(remainder[r.upperBound...]))?.number ?? 1
+            document.books[i].volumeText = remainder
+            document.books[i].volumeNumber = offset + number
+            log?.apply("compilationVolume", to: document.books[i].id)
+        }
     }
 
     /// 本編に含めた総集編(方針 compilations = inMainSeries)の巻を、収録範囲の最後の巻の直後にする

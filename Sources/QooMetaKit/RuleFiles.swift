@@ -285,7 +285,8 @@ struct RuleCompiler {
                 editionPrefixes: enabled(compilationConditions?["reject-edition-prefix"])
                     ? words(compilationConditions?["reject-edition-prefix"]?["words"], lists) : [],
                 placement: SeriesRules.Compilation.Placement(rawValue: policies["compilations"] ?? "") ?? .ownSeries,
-                volumeAfterRange: policies["compilationVolume"] == "afterRange"),
+                volumeMode: SeriesRules.Compilation.VolumeMode(rawValue: policies["compilationVolume"] ?? "") ?? .offset,
+                volumeOffset: Double(grouping?["compilation"]?["volumeOffset"]?.intValue ?? 100)),
             volume: .init(
                 readers: readers,
                 prefixes: words(number?["prefixes"], lists),
@@ -382,14 +383,21 @@ struct SeriesRules: Sendable {
 
     struct Compilation: Sendable {
         enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
+        enum VolumeMode: String, Sendable { case offset, none, afterRange }
         var keywords: [String]
         /// 総集編の語のすぐ前に区切り無しで続いたら、総集編と見なさない語(「フルカラー総集編」は独立した 1 冊)。
         /// 規則 grouping.compilation.conditions.reject-edition-prefix。止めていれば空。
         var editionPrefixes: [String]
         /// 方針 `compilations`。
         var placement: Placement
-        /// 方針 `compilationVolume` が `afterRange`(本編の中での巻を、収録範囲の最後の巻の直後にする)。
-        var volumeAfterRange: Bool
+        /// 本編に含めたとき(`inMainSeries`)の巻の付け方(方針 `compilationVolume`)。
+        /// - `offset`: オフセットを足した数にする(既定。オフセット 100 の「総集編2」は 102。利用者の決定 2026-09-20)。
+        /// - `none`: 巻を付けない。
+        /// - `afterRange`: 収録範囲の最後の巻の直後にする(「X 総集編 1~4」は 4.5)。
+        var volumeMode: VolumeMode
+        /// `offset` のときに足す数(規則 grouping.compilation.volumeOffset。画面の設定は規則の差分として持つ)。
+        /// 総集編も番外編も同じオフセットを使う(利用者の決定。分けない)。
+        var volumeOffset: Double
     }
 
     /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。

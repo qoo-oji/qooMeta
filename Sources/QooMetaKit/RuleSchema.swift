@@ -78,7 +78,7 @@ enum RuleSchema {
         ("editions", ["sameWork", "separateBooks", "ignore"]),
         ("sources", ["sameWork", "separateBooks", "ignore"]),
         ("compilations", ["ownSeries", "inMainSeries", "notInSeries"]),
-        ("compilationVolume", ["none", "afterRange"]),
+        ("compilationVolume", ["offset", "none", "afterRange"]),
         ("magazines", ["perYear", "whole"]),
         ("unnumberedFirst", ["inferFirst", "leaveEmpty"]),
         ("differentRelation", ["split", "keep"]),
@@ -101,7 +101,7 @@ enum RuleSchema {
         ]))),
         f("grouping", .object(Node([
             f("compilation", rule([
-                f("words", .list(.words)), f("singleWhenMainExists", .bool),
+                f("words", .list(.words)), f("singleWhenMainExists", .bool), f("volumeOffset", .int(0...100_000)),
                 f("conditions", .object(Node([
                     f("reject-edition-prefix", rule([f("words", .list(.words))])),
                 ]))),

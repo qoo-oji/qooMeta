@@ -53,7 +53,7 @@
     ],
     "editionWords": ["フルカラー版", "カラー版", "モノクロ版", "完全版", "新装版", "愛蔵版", "無修正版", "修正版", "改訂版", "旧版", "新版"],
     "sourceWords": ["初回限定版", "限定版", "特装版", "通常版", "電子版", "デジタル版", "スキャン版"],
-    "compilationWords": ["総集編", "総集篇"],
+    "compilationWords": ["総集編", "総集篇", "番外編", "番外篇"],
     "editionPrefixWords": [
       "フルカラー版", "フルカラー", "カラー版", "カラー", "モノクロ版", "モノクロ",
       "完全版", "新装版", "愛蔵版", "無修正版", "修正版", "改訂版", "旧版", "新版"
@@ -77,7 +77,7 @@
     "editions": "sameWork",
     "sources": "sameWork",
     "compilations": "ownSeries",
-    "compilationVolume": "none",
+    "compilationVolume": "offset",
     "magazines": "perYear",
     "unnumberedFirst": "inferFirst",
     "differentRelation": "split",
@@ -92,6 +92,7 @@
     "compilation": {
       "words": "@list:compilationWords",
       "singleWhenMainExists": true,
+      "volumeOffset": 100,
       "conditions": {
         "reject-edition-prefix": { "enabled": true, "words": "@list:editionPrefixWords" }
       }

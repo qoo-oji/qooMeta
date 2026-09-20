@@ -22,6 +22,7 @@ struct WorkspaceView: View {
                 Button { showsDetail.toggle() } label: { Label("詳細", systemImage: "sidebar.right") }
             }
         }
+        .focusedSceneValue(\.workspace, workspace)
         .navigationTitle("qooMeta")
         .navigationSubtitle("\(workspace.visibleBooks.count) / \(workspace.books.count) 冊")
     }

@@ -126,8 +126,31 @@ import QooMetaRules
         #expect(!rules.series.editions.stripsEditions)
         #expect(rules.series.editions.source.isEmpty && rules.series.editions.sourcePatterns.isEmpty)
         #expect(rules.series.compilation.placement == .inMainSeries)
-        #expect(rules.series.compilation.volumeAfterRange)
+        #expect(rules.series.compilation.volumeMode == .afterRange)
         #expect(rules.series.volume.magazinesWhole)
+    }
+
+    /// 総集編をシリーズに含める切り替えと、そのときのオフセットは、どちらも規則で決まる(画面の設定は規則の差分として持つ。
+    /// concept.md の原則 8)。番外編も同じオフセットで扱う。
+    @Test func compilationsJoinTheMainSeriesWithAnOffset() throws {
+        let names = ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編2", "[架空工房] 月の庭 番外編"]
+        let included = try #require(CompiledRules.builtin.applying(policies: ["compilations": "inMainSeries"]).rules)
+        let set = proposeSync(inputs(names), rules: included, dictionaries: [:])
+        #expect(seriesName(set, "002") == "月の庭")
+        #expect(set["002"]?.metadata.volume == "総集編2")
+        #expect(set["002"]?.metadata.volumeSort == 102)      // 既定のオフセット 100 + 2。
+        #expect(set["003"]?.metadata.volumeSort == 101)      // 番号の無い番外編は オフセット + 1。
+        let shifted = try #require(Self.compile(Self.diff("""
+        "grouping": { "compilation": { "volumeOffset": 500 } },
+        "policies": { "compilations": "inMainSeries" }
+        """)).rules)
+        let moved = proposeSync(inputs(names), rules: shifted, dictionaries: [:])
+        #expect(moved["002"]?.metadata.volumeSort == 502)
+        #expect(moved["003"]?.metadata.volumeSort == 501)
+        // 含めない(既定)ときは、これまでどおり別のシリーズ。
+        let apart = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        #expect(seriesName(apart, "002") == "月の庭 総集編")
+        #expect(seriesName(apart, "003") == "月の庭 番外編")
     }
 
     /// 規則はグローバルな状態ではなく値なので、1 つのプロセスで別々の規則を並べて使える。

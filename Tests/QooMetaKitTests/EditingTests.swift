@@ -112,6 +112,33 @@ import QooMetaRules
         #expect(seriesName(after, "000") == "月の庭")
     }
 
+    /// ジャンルで割れたシリーズを、全選択してジャンルを書き換えるとひとつにできる(段階 7 の終わりの条件)。
+    /// 道具の側でジャンルの取り違えを先回りして防がない代わりに、利用者がまとめて直せることを確かめる。
+    @Test func editingTheGenreMergesASplitSeries() {
+        let names = ["(種別A) [架空工房] 月の庭 1", "(種別B) [架空工房] 月の庭 2"]
+        let before = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        #expect(before.series.isEmpty)  // ジャンルが違うと単位が分かれ、1 冊ずつではシリーズにならない。
+        let edits = BulkEdit.setFields(ConfirmedFields([.genre: ["種別A"]]), for: ["000", "001"], in: before)
+        let after = proposeSync(inputs(names).map {
+            BookInput(id: $0.id, name: $0.name, confirmation: edits[$0.id] ?? .none)
+        }, rules: .builtin, dictionaries: [:])
+        #expect(after.series.count == 1)
+        #expect(seriesName(after, "000") == "月の庭")
+        #expect(seriesName(after, "001") == "月の庭")
+        #expect(after["001"]?.metadata.genre == "種別A")
+    }
+
+    /// 方針 differentGenre を keep にすると、ジャンルが違っても 1 つのシリーズになる(段階 7 の終わりの条件)。
+    /// 画面の設定は規則の差分として持つので、効き方はここで確かめる。
+    @Test func keepingDifferentGenresMakesOneSeries() throws {
+        let names = ["(種別A) [架空工房] 月の庭 1", "(種別B) [架空工房] 月の庭 2"]
+        let kept = try #require(CompiledRules.builtin.applying(policies: ["differentGenre": "keep"]).rules)
+        let set = proposeSync(inputs(names), rules: kept, dictionaries: [:])
+        #expect(set.series.count == 1)
+        #expect(seriesName(set, "000") == "月の庭")
+        #expect(seriesName(set, "001") == "月の庭")
+    }
+
     @Test func sortOrders() {
         let dates = ["003": Date(timeIntervalSince1970: 2), "004": Date(timeIntervalSince1970: 1)]
         #expect(BulkEdit.sorted(["003", "004", "005"], by: .date, in: Self.set, dates: dates) == ["004", "003", "005"])

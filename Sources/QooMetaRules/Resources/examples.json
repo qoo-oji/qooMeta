@@ -278,7 +278,7 @@
     {
       "id": "not-inferred-for-not-first-marker",
       "files": [
-        "[架空工房] 星降る夜の喫茶店 番外編",
+        "[架空工房] 星降る夜の喫茶店 外伝",
         "[架空工房] 星降る夜の喫茶店 2"
       ],
       "expect": [
@@ -1877,7 +1877,51 @@
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
         "[架空工房] 月の庭 総集編",
-        "[架空工房] 月の庭1~4総集編"
+        "[架空工房] 月の庭 総集編2",
+        "[架空工房] 月の庭 番外編"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volumeSort": 1
+        },
+        {
+          "series": "月の庭",
+          "volumeSort": 2
+        },
+        {
+          "series": "月の庭",
+          "volume": "総集編",
+          "volumeSort": 101,
+          "inferred": false
+        },
+        {
+          "series": "月の庭",
+          "volume": "総集編2",
+          "volumeSort": 102
+        },
+        {
+          "series": "月の庭",
+          "volume": "番外編",
+          "volumeSort": 101
+        }
+      ],
+      "covers": [
+        "compilations",
+        "compilationVolume",
+        "compilation"
+      ]
+    },
+    {
+      "id": "policy-compilation-volume-none",
+      "policies": {
+        "compilations": "inMainSeries",
+        "compilationVolume": "none"
+      },
+      "files": [
+        "[架空工房] 月の庭 1",
+        "[架空工房] 月の庭 2",
+        "[架空工房] 月の庭 総集編"
       ],
       "expect": [
         {
@@ -1892,15 +1936,42 @@
           "series": "月の庭",
           "volume": null,
           "inferred": false
-        },
-        {
-          "series": "月の庭",
-          "volume": null
         }
       ],
       "covers": [
         "compilations",
-        "compilation"
+        "compilationVolume"
+      ]
+    },
+    {
+      "id": "extras-are-their-own-series-like-compilations",
+      "files": [
+        "[架空工房] 月の庭 1",
+        "[架空工房] 月の庭 2",
+        "[架空工房] 月の庭 番外編",
+        "[架空工房] 月の庭 番外編2"
+      ],
+      "expect": [
+        {
+          "series": "月の庭",
+          "volume": "1"
+        },
+        {
+          "series": "月の庭",
+          "volume": "2"
+        },
+        {
+          "series": "月の庭 番外編",
+          "volumeSort": 1
+        },
+        {
+          "series": "月の庭 番外編",
+          "volumeSort": 2
+        }
+      ],
+      "covers": [
+        "compilation",
+        "compilations"
       ]
     },
     {

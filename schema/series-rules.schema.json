@@ -267,10 +267,11 @@
         },
         "compilationVolume": {
           "enum": [
+            "offset",
             "none",
             "afterRange"
           ],
-          "default": "none"
+          "default": "offset"
         },
         "magazines": {
           "enum": [
@@ -393,6 +394,11 @@
             },
             "singleWhenMainExists": {
               "type": "boolean"
+            },
+            "volumeOffset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
             },
             "conditions": {
               "type": "object",

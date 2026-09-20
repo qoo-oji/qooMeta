@@ -15,7 +15,17 @@ struct BookRow: Identifiable, Hashable {
     var metadata: BookMetadata
     /// 利用者が直した欄。
     var edited: Set<BookMetadata.Field> = []
+    /// 利用者が確定したシリーズと巻(中核へ渡す錨。`.none` なら規則の提案のまま)。
+    var confirmation: Confirmation = .none
     var seriesID: SeriesID?
+
+    /// シリーズか巻を利用者が確定しているか(一覧と詳細の印)。
+    var hasConfirmedSeries: Bool {
+        switch confirmation {
+        case .none, .fields: false
+        case .series, .notInSeries: true
+        }
+    }
 
     /// 一覧のセルに出す文字(並びの欄は「、」でつなぐ)。
     subscript(text field: BookMetadata.Field) -> String {
@@ -72,7 +82,7 @@ final class Workspace {
 
     /// 本の状態での絞り込み(シリーズと巻を確かめて直す作業の入口)。
     enum StateFilter: String, CaseIterable, Identifiable {
-        case all, notInSeries, noVolume, unmatched, edited
+        case all, notInSeries, noVolume, unmatched, edited, confirmed
         var id: Self { self }
         var label: String {
             switch self {
@@ -81,6 +91,7 @@ final class Workspace {
             case .noVolume: "巻が空"
             case .unmatched: "型に合わなかった"
             case .edited: "直した本"
+            case .confirmed: "シリーズを確定した本"
             }
         }
         func contains(_ book: BookRow) -> Bool {
@@ -90,6 +101,7 @@ final class Workspace {
             case .noVolume: book.metadata.volume.isEmpty
             case .unmatched: book.reading.formatIndex == nil
             case .edited: !book.edited.isEmpty
+            case .confirmed: book.hasConfirmedSeries
             }
         }
     }
@@ -108,7 +120,9 @@ final class Workspace {
 
     /// 中核でシリーズと巻を導き直す。段階 5 では全冊を計算し直す(架空のデータは小さい。変わった単位だけを計算し直すのは段階 7)。
     func rederive() {
-        let results = derivation.derive(books.map { SeriesDerivation.Book(id: $0.id, metadata: $0.metadata) })
+        let results = derivation.derive(books.map {
+            SeriesDerivation.Book(id: $0.id, metadata: $0.metadata, confirmation: $0.confirmation)
+        })
         for i in books.indices {
             let r = results[books[i].id]
             books[i].seriesID = r?.seriesID
@@ -126,19 +140,153 @@ final class Workspace {
     /// 選んだ本の欄を、その値で置き換える(並びの欄は値の並び、1 つの値の欄は先頭だけ)。直したら、シリーズを組み直す。
     func set(_ field: BookMetadata.Field, to newValues: [String], for ids: Set<BookRow.ID>) {
         let values = newValues.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        for i in books.indices where ids.contains(books[i].id) {
-            books[i].metadata.set(field, to: values)
-            books[i].edited.insert(field)
+        edit("\(field.label)を書き換える") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                books[i].metadata.set(field, to: values)
+                books[i].edited.insert(field)
+            }
         }
-        rederive()
     }
 
     /// 選んだ本の欄を、型で読んだ値(提案)に戻す。
     func revert(_ field: BookMetadata.Field, for ids: Set<BookRow.ID>) {
-        for i in books.indices where ids.contains(books[i].id) {
-            books[i].metadata.set(field, to: books[i].reading.metadata.values(field))
-            books[i].edited.remove(field)
+        edit("\(field.label)を提案に戻す") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                books[i].metadata.set(field, to: books[i].reading.metadata.values(field))
+                books[i].edited.remove(field)
+            }
         }
+    }
+
+    // MARK: - シリーズの操作
+
+    /// 選んだ本のタイトルから、シリーズ名の候補(共通部分)。
+    func suggestedSeriesName(for ids: Set<BookRow.ID>) -> String? {
+        BulkEdit.suggestedSeriesName(forTitles: books.filter { ids.contains($0.id) }.map(\.metadata.title), rules: .builtin)
+    }
+
+    /// 選んだ本を 1 つのシリーズにする(巻は今の値を保つ)。確定した名前は錨になり、同じ単位のほかの本もそこへ寄る。
+    func setSeries(_ name: String, for ids: Set<BookRow.ID>) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        edit("シリーズを「\(trimmed)」にする") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                books[i].confirmation = .series(name: trimmed, volume: Self.confirmedVolume(books[i]),
+                                                fields: books[i].confirmation.fields)
+            }
+        }
+    }
+
+    /// シリーズから外す(規則が組にしても入れない)。
+    func removeFromSeries(_ ids: Set<BookRow.ID>) {
+        edit("シリーズから外す") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                books[i].confirmation = .notInSeries(fields: books[i].confirmation.fields)
+            }
+        }
+    }
+
+    /// いまの提案(シリーズと巻)をそのまま確定する = 「確かめた」印。シリーズに入っていない本は「シリーズではない」と確定する。
+    func acceptProposedSeries(_ ids: Set<BookRow.ID>) {
+        edit("シリーズと巻を確かめる") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                let fields = books[i].confirmation.fields
+                if books[i].seriesID != nil, !books[i].metadata.series.isEmpty {
+                    books[i].confirmation = .series(name: books[i].metadata.series,
+                                                    volume: books[i].metadata.volume.isEmpty ? nil : books[i].metadata.volume,
+                                                    fields: fields)
+                } else {
+                    books[i].confirmation = .notInSeries(fields: fields)
+                }
+            }
+        }
+    }
+
+    /// 選んだ本に、並んだ順で巻を振る(シリーズ名は今の値。無い本は飛ばす)。
+    func numberSequentially(_ orderedIDs: [BookRow.ID], start: Int = 1, step: Int = 1, width: Int = 0) {
+        edit("巻を振り直す") { books in
+            var number = start
+            for id in orderedIDs {
+                guard let i = books.firstIndex(where: { $0.id == id }) else { continue }
+                let name = Self.currentSeriesName(books[i])
+                guard !name.isEmpty else { continue }
+                let digits = String(abs(number))
+                let text = (number < 0 ? "-" : "") + String(repeating: "0", count: max(0, width - digits.count)) + digits
+                books[i].confirmation = .series(name: name, volume: text, fields: books[i].confirmation.fields)
+                number += step
+            }
+        }
+    }
+
+    /// 巻だけを消す(「巻は無い」と確定する)。
+    func clearVolumes(_ ids: Set<BookRow.ID>) {
+        edit("巻を空にする") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                let name = Self.currentSeriesName(books[i])
+                guard !name.isEmpty else { continue }
+                books[i].confirmation = .series(name: name, volume: "", fields: books[i].confirmation.fields)
+            }
+        }
+    }
+
+    /// シリーズと巻の確定を取り消して、規則の提案に戻す(欄の直しはそのまま)。
+    func revertSeries(_ ids: Set<BookRow.ID>) {
+        edit("シリーズを提案に戻す") { books in
+            for i in books.indices where ids.contains(books[i].id) {
+                books[i].confirmation = books[i].confirmation.fields.values.isEmpty
+                    ? .none : .fields(books[i].confirmation.fields)
+            }
+        }
+    }
+
+    /// 今のシリーズ名(確定した名前、無ければ提案)。
+    static func currentSeriesName(_ book: BookRow) -> String {
+        if case .series(let name, _, _) = book.confirmation { return name }
+        return book.metadata.series
+    }
+
+    /// 今の巻の表記(確定した巻、無ければ提案。推定した巻は確定させない)。
+    static func confirmedVolume(_ book: BookRow) -> String? {
+        if case .series(_, let volume?, _) = book.confirmation { return volume }
+        return book.metadata.volume.isEmpty ? nil : book.metadata.volume
+    }
+
+    // MARK: - 取り消し
+
+    /// 取り消せる操作(名前と、その前の一覧)。操作の単位は 1 回のまとめて編集。
+    private struct Step { let name: String; let books: [BookRow] }
+    private var undoSteps: [Step] = []
+    private var redoSteps: [Step] = []
+    /// 取り消しで戻れる回数の上限(作業ファイルは段階 8。それまでは窓が閉じるまで)。
+    private static let undoLimit = 50
+
+    var undoName: String? { undoSteps.last?.name }
+    var redoName: String? { redoSteps.last?.name }
+
+    /// 一覧を書き換える操作を、取り消せる 1 歩として行う。
+    private func edit(_ name: String, _ change: (inout [BookRow]) -> Void) {
+        let before = books
+        var updated = books
+        change(&updated)
+        guard updated != books else { return }
+        books = updated
+        undoSteps.append(Step(name: name, books: before))
+        if undoSteps.count > Self.undoLimit { undoSteps.removeFirst() }
+        redoSteps.removeAll()
+        rederive()
+    }
+
+    func undo() {
+        guard let step = undoSteps.popLast() else { return }
+        redoSteps.append(Step(name: step.name, books: books))
+        books = step.books
+        rederive()
+    }
+
+    func redo() {
+        guard let step = redoSteps.popLast() else { return }
+        undoSteps.append(Step(name: step.name, books: books))
+        books = step.books
         rederive()
     }
 

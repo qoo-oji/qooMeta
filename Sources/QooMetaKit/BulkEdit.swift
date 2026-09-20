@@ -39,10 +39,13 @@ public enum BulkEdit {
     /// 選んだ本のタイトルから、シリーズ名の候補を返す(共通部分を語の切れ目まで縮め、規則の名前の整え方に通したもの。
     /// 無ければ nil)。版・入手経路の印は除いて比べる。1 冊なら、「タイトル + 巻」の頭か、タイトルそのもの。
     public static func suggestedSeriesName(for ids: [String], in set: ProposalSet, rules: CompiledRules) -> String? {
+        suggestedSeriesName(forTitles: ids.compactMap { set[$0]?.metadata.title }, rules: rules)
+    }
+
+    /// 同じものを、タイトルの並びから直に求める(提案の一覧を持たない利用側 — アプリの作業ファイル — 向け)。
+    public static func suggestedSeriesName(forTitles titles: [String], rules: CompiledRules) -> String? {
         let engine = RuleEngine(rules: rules, dictionaries: [String: WordSet]())
-        let titles: [ComparableText] = ids.compactMap { set[$0] }.map { book in
-            engine.text.comparable(engine.compareTitle(book.metadata.title).text)
-        }
+        let titles: [ComparableText] = titles.map { engine.text.comparable(engine.compareTitle($0).text) }
         guard let first = titles.first else { return nil }
         var length = first.key.count
         if titles.count == 1 {

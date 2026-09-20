@@ -28,11 +28,7 @@ struct DetailView: View {
                         FieldEditor(workspace: workspace, field: field, books: books)
                     }
                 }
-                Section("シリーズと巻数(規則で導いたもの)") {
-                    LabeledContent("シリーズ", value: uniform(books, .series) ?? "<複数値>")
-                    LabeledContent("巻数(表示)", value: uniform(books, .volume) ?? "<複数値>")
-                    LabeledContent("巻数(ソート)", value: uniformSort(books) ?? "<複数値>")
-                }
+                SeriesSection(workspace: workspace, books: books)
             }
             .formStyle(.grouped)
             // 選択が変わったら、入力中の値を捨てる。
@@ -46,6 +42,73 @@ struct DetailView: View {
     }
 
     func uniform(_ books: [BookRow], _ field: BookMetadata.Field) -> String? {
+        let values = Set(books.map { $0.metadata.values(field) })
+        return values.count == 1 ? values.first!.joined(separator: "、") : nil
+    }
+}
+
+/// シリーズと巻。規則が導いた値を見せ、1 つにする・外す・巻を確かめる・連番を振る、を選んだ本にまとめてかける。
+/// **直した値は確定した内容として中核へ戻す**ので、同じ単位のほかの本の提案も変わる(錨)。
+struct SeriesSection: View {
+    @Bindable var workspace: Workspace
+    let books: [BookRow]
+    @State private var name = ""
+    @State private var start = 1
+    @State private var width = 2
+
+    var ids: Set<BookRow.ID> { Set(books.map(\.id)) }
+    var confirmedCount: Int { books.filter(\.hasConfirmedSeries).count }
+
+    var body: some View {
+        Section("シリーズと巻数") {
+            LabeledContent("シリーズ") {
+                HStack(spacing: 6) {
+                    Text(uniform(.series) ?? "<複数値>")
+                    if confirmedCount > 0 {
+                        Text(confirmedCount == books.count ? "確定" : "一部確定").font(.caption2).foregroundStyle(.tint)
+                    }
+                }
+            }
+            LabeledContent("巻数(表示)", value: uniform(.volume) ?? "<複数値>")
+            LabeledContent("巻数(ソート)", value: uniformSort() ?? "<複数値>")
+            HStack {
+                TextField("シリーズ名", text: $name, prompt: Text(workspace.suggestedSeriesName(for: ids) ?? "シリーズ名"))
+                    .onSubmit(applyName)
+                Button("1 つにする") { applyName() }
+                    .help("選んだ本を同じシリーズに確定する(空なら候補の名前)")
+            }
+            HStack {
+                Button("確かめる") { workspace.acceptProposedSeries(ids) }
+                    .help("いまの提案(シリーズと巻)をそのまま確定する")
+                Button("外す") { workspace.removeFromSeries(ids) }
+                    .help("どのシリーズにも入れない")
+                Button("巻を空に") { workspace.clearVolumes(ids) }
+                Button("提案に戻す") { workspace.revertSeries(ids) }
+                    .disabled(confirmedCount == 0)
+            }
+            HStack {
+                Stepper("連番の開始 \(start)", value: $start, in: 0...9999)
+                Stepper("桁 \(width)", value: $width, in: 0...4)
+                Button("連番を振る") {
+                    workspace.numberSequentially(books.map(\.id), start: start, width: width)
+                }
+                .help("一覧に出ている並びの順に、選んだ本へ巻を振る")
+            }
+        }
+    }
+
+    func applyName() {
+        let text = name.isEmpty ? (workspace.suggestedSeriesName(for: ids) ?? "") : name
+        workspace.setSeries(text, for: ids)
+        name = ""
+    }
+
+    func uniformSort() -> String? {
+        let values = Set(books.map(\.volumeSortText))
+        return values.count == 1 ? values.first! : nil
+    }
+
+    func uniform(_ field: BookMetadata.Field) -> String? {
         let values = Set(books.map { $0.metadata.values(field) })
         return values.count == 1 ? values.first!.joined(separator: "、") : nil
     }
