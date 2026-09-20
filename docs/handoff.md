@@ -48,7 +48,7 @@
 | `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、**書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`)** |
 | `Sources/QooMetaScan/` | フォルダの走査(本体はファイルに触らないので、ここと CLI・アプリだけがファイルを見る) |
 | `Sources/qoometa/` | CLI。`InputDocument` が提案ファイルと作業ファイルのどちらも読む |
-| `App/qooMeta/` | 画面。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表)、**`RulesEditorView`(規則の窓)・`RuleLabels`(その言葉)** |
+| `App/qooMeta/` | 画面(言葉は `Localizable.xcstrings`。`Localization.swift`・`RuleLabels.swift` が鍵を持つ)。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表)、**`RulesEditorView`(規則の窓)・`RuleLabels`(その言葉)** |
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
@@ -91,6 +91,32 @@
   プリセットの編集画面の 3 か所(左下・プリセット・型のボタン)で直せ、試し読みにも効く。手元の蔵書 A の集計と指紋は同じ
   (末尾が西暦の丸括弧の名前が無い)。
 - **まだ**: 変える前後で結果がどう変わるかの見せ方(いまは一覧の窓がすぐ変わるだけ)。
+
+## 画面の言葉を英語と日本語にした(2026-09-21、利用者の指示)
+
+**画面の言葉はすべて鍵(英語)にし、訳は `App/qooMeta/Localizable.xcstrings`(String Catalog)が持つ。** 鍵は英語の文そのもの
+(`Text("Open Folder…")`)で、元の言語は英語(`project.yml` の `developmentLanguage: en`、`knownRegions: [en, ja]`)。411 の鍵。
+
+- **言語は環境設定(⌘,)で選ぶ**: システムに従う / 英語 / 日本語(`AppLanguage`。既定は「システムに従う」)。
+  設定は `settings.json` に残る。**規則の窓は ⇧⌘, へ移した**(⌘, は macOS の作法どおり環境設定に譲った)。
+- 効かせ方は `App/qooMeta/Localization.swift`: `Bundle.main` のクラスを `LanguageBundle` に差し替えて、言葉の引き先を
+  選んだ `.lproj` にする。画面の中の `Text` だけでなく、**窓の題のように画面の外で決まる言葉**にも効く。
+  合わせて画面の根に `.environment(\.locale, …)` を渡し、言語を変えたときに描き直させる(数の書き方もそろう)。
+- `Text` に渡せない所(取り消しの名前、誤りの文、`NSOpenPanel` の言葉)は `String.ui` / `.ui(値…)`。
+  変数に入った鍵(`RuleLabels`)は `Text(key:)`。**利用者が付けた名前は訳さない**(`RuleLabels.title(ofRule:)`・
+  `PresetCatalog.Preset.displayName`。名前がたまたま鍵と同じでも、その言葉のまま出す)。
+- 数を挟む言葉は、英語の単数・複数を String Catalog の `variations.plural` で作り分ける(日本語は 1 つ)。
+- **同梱のプリセットの `label`・`note` は JSON から外した**(JSON に日本語を書くと、英語で使う利用者にそのまま出るため)。
+  見出しと説明は `RuleLabels.presets` が持ち、画面が訳して出す。利用者が付けた見出しは、その言葉のまま。
+- **CLI(`qoometa`)と docs は日本語のまま**(利用者は 1 人で、出力は集計だけ。2026-09-21 時点で訳す理由が無い)。
+  QooMetaKit・QooMetaExport の `label` も CLI 用の日本語のままで、画面の見出しはアプリ側の `labelKey` が持つ。
+- **窓の中は処理の段階で分けてある**(2026-09-21、利用者の指摘「どれがファイル名の設定で、どれがシリーズの設定か
+  見分けが付かない」): 並びを「1. ファイル名を読む(filename-formats.json)」「2. シリーズと巻を導く(series-rules.json)」
+  「両方の段階(差分の JSON)」の 3 つに分け、**いまどの段階かを画面の上に帯でいつも出す**(`StageBanner`。
+  何から何を作る段階か + もとの JSON の名前)。1 つの窓のままにしたのは、続き物の 1 本の流れで、差分も 1 つ
+  (rules-bundle)だから。一覧の窓の「型の並び」は中身ではなく**割り当て**なので「プリセットの割り当て」に改名した。
+- 確かめ方: 組み立てた `.app` の `en.lproj` / `ja.lproj` から言葉を引き、単数・複数と、鍵の無いときの落ち方まで見た
+  (`swift test` 124 件、例 92 件、指紋 `ae41e4e8aede473b418c22c0` は変わらない)。
 
 ## 同人誌のプリセットを 2 つに分けた(2026-09-20、利用者の指示)
 

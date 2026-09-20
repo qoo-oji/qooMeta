@@ -23,19 +23,76 @@ struct RulesEditorView: View {
         _editing = State(initialValue: RulesEditing(settings: settings))
     }
 
-    enum Pane: String, CaseIterable, Identifiable {
-        case formats, policies, markers, readers, steps, lists, json
+    /// 処理の段階。**窓の中には、続き物の 2 つの段階が入っている**(ファイル名を欄に読む段階と、
+    /// タイトルからシリーズと巻を導く段階)。どちらの設定を直しているのか見分けが付かない、という指摘を受けて、
+    /// 並びをこの段階で分け、上にいつも出すことにした(2026-09-21、利用者の指摘)。
+    enum Stage: String, CaseIterable, Identifiable {
+        /// ファイル名 → 欄(filename-formats.json)。
+        case reading
+        /// タイトル → シリーズ名・巻数(series-rules.json)。
+        case deriving
+        /// どちらにもまたがるもの(差分そのもの)。
+        case both
+
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .formats: "型の並び(プリセット)"
-            case .policies: "方針"
-            case .markers: "語の規則"
-            case .readers: "巻の読み手"
-            case .steps: "組み方と名前"
-            case .lists: "語の一覧"
-            case .json: "差分(JSON)"
+            case .reading: "1. Reading the file name"
+            case .deriving: "2. Deriving the series and volume"
+            case .both: "Both stages"
+            }
+        }
+
+        /// 何から何を作る段階か。
+        var flow: String {
+            switch self {
+            case .reading: "File name → fields (title, authors, genre, …)"
+            case .deriving: "Title → series name and volume"
+            case .both: "What you changed in this window, as one file"
+            }
+        }
+
+        /// もとになる規則のファイル(JSON を直に読み書きする利用者のために出す)。
+        var fileName: String {
+            switch self {
+            case .reading: "filename-formats.json"
+            case .deriving: "series-rules.json"
+            case .both: "rules-bundle"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .reading: "doc.text.magnifyingglass"
+            case .deriving: "books.vertical"
+            case .both: "curlybraces"
+            }
+        }
+    }
+
+    enum Pane: String, CaseIterable, Identifiable {
+        case formats, policies, markers, readers, steps, lists, json
+        var id: String { rawValue }
+
+        /// どの段階の設定か。
+        var stage: Stage {
+            switch self {
+            case .formats: .reading
+            case .policies, .markers, .readers, .steps, .lists: .deriving
+            case .json: .both
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .formats: "File name parsing"
+            case .policies: "Policies"
+            case .markers: "Word rules"
+            case .readers: "Volume readers"
+            case .steps: "Grouping and naming"
+            case .lists: "Word lists"
+            case .json: "Diff (JSON)"
             }
         }
 
@@ -58,14 +115,24 @@ struct RulesEditorView: View {
     var body: some View {
         let catalog = settings.rules.catalog
         NavigationSplitView {
-            List(Pane.allCases, selection: Binding(get: { pane }, set: { pane = $0 ?? pane })) { pane in
-                Label(pane.title, systemImage: pane.symbol)
-                    .badge(pane.isOrdered ? Text("順番あり") : nil)
-                    .tag(pane)
+            List(selection: Binding(get: { pane }, set: { pane = $0 ?? pane })) {
+                ForEach(Stage.allCases) { stage in
+                    Section {
+                        ForEach(Pane.allCases.filter { $0.stage == stage }) { pane in
+                            Label(LocalizedStringKey(pane.title), systemImage: pane.symbol)
+                                .badge(pane.isOrdered ? Text("Ordered") : nil)
+                                .tag(pane)
+                        }
+                    } header: {
+                        Text(key: stage.title)
+                    }
+                }
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
         } detail: {
             VStack(spacing: 0) {
+                StageBanner(stage: pane.stage)
+                Divider()
                 Group {
                     switch pane {
                     case .formats: FormatsPane(editing: editing, catalog: settings.rules.presetCatalog)
@@ -82,13 +149,33 @@ struct RulesEditorView: View {
                 StatusBar(editing: editing, confirmsReset: $confirmsReset)
             }
         }
-        .navigationTitle("規則")
-        .navigationSubtitle(pane.title)
-        .confirmationDialog("すべての規則を既定に戻しますか?", isPresented: $confirmsReset) {
-            Button("既定に戻す", role: .destructive) { editing.resetAll() }
+        .navigationTitle("Rules")
+        .navigationSubtitle(pane.stage.title.ui)
+        .confirmationDialog("Reset every rule to the default?", isPresented: $confirmsReset) {
+            Button("Reset to the default", role: .destructive) { editing.resetAll() }
         } message: {
-            Text("方針・語の規則・語の一覧に加えた変更が、すべて消えます。")
+            Text("Every change you made in this window is lost: the file name formats, the policies, the word rules and the word lists.")
         }
+    }
+}
+
+/// いまどの段階の設定を直しているかを、画面の上にいつも出す。
+private struct StageBanner: View {
+    var stage: RulesEditorView.Stage
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: stage.symbol).foregroundStyle(.tint).font(.title3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(key: stage.title).font(.headline)
+                Text(key: stage.flow).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(verbatim: stage.fileName).font(.caption.monospaced()).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.4))
     }
 }
 
@@ -120,10 +207,10 @@ private struct StatusBar: View {
         VStack(alignment: .leading, spacing: 6) {
             if !editing.errors.isEmpty {
                 HStack(alignment: .top) {
-                    Label("変更できませんでした", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                    Label("The change could not be made", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                     Text(editing.errors.joined(separator: "\n")).font(.caption).textSelection(.enabled)
                     Spacer()
-                    Button("閉じる") { editing.errors = [] }.controlSize(.small)
+                    Button("Close") { editing.errors = [] }.controlSize(.small)
                 }
             }
             if !editing.settings.ruleIssues.isEmpty {
@@ -131,10 +218,10 @@ private struct StatusBar: View {
                     .font(.caption).foregroundStyle(.orange)
             }
             HStack {
-                Text(changed == 0 ? "既定のままです" : "既定から \(changed) か所を変えています")
+                Text(changed == 0 ? "Unchanged from the defaults".ui : "Changed in %lld places".ui(changed))
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
-                Button("すべて既定に戻す…") { confirmsReset = true }.disabled(changed == 0 && editing.settings.rulesDiff.isEmpty)
+                Button("Reset Everything…") { confirmsReset = true }.disabled(changed == 0 && editing.settings.rulesDiff.isEmpty)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -146,7 +233,7 @@ struct ModifiedDot: View {
     var isModified: Bool
     var body: some View {
         Circle().fill(isModified ? Color.accentColor : .clear).frame(width: 7, height: 7)
-            .help(isModified ? "既定から変えています" : "")
+            .help(isModified ? "Changed from the default" : "")
     }
 }
 
@@ -157,17 +244,17 @@ private struct PoliciesPane: View {
     var catalog: RuleCatalog
 
     private static let groups: [(title: String, ids: [String])] = [
-        ("同じ作品の版・入手経路", ["editions", "sources"]),
-        ("総集編・番外編", ["compilations", "compilationVolume"]),
-        ("シリーズの分け方", ["differentRelation", "differentGenre", "subtitled"]),
-        ("巻", ["unnumberedFirst", "magazines"]),
+        ("Editions and sources of the same work", ["editions", "sources"]),
+        ("Compilations and side stories", ["compilations", "compilationVolume"]),
+        ("How series are split", ["differentRelation", "differentGenre", "subtitled"]),
+        ("Volumes", ["unnumberedFirst", "magazines"]),
     ]
 
     var body: some View {
         let known = Set(Self.groups.flatMap(\.ids))
         Form {
             Section {
-                Text("見分けた結果を**どう扱うか**の好みです。正解が 1 つあるわけではないので、蔵書に合わせて選びます。")
+                Text("These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             ForEach(Self.groups, id: \.title) { group in
@@ -181,7 +268,7 @@ private struct PoliciesPane: View {
             }
             let others = catalog.policies.filter { !known.contains($0.id) }
             if !others.isEmpty {
-                Section("そのほか") { ForEach(others) { PolicyRow(editing: editing, policy: $0) } }
+                Section("Other") { ForEach(others) { PolicyRow(editing: editing, policy: $0) } }
             }
         }
         .formStyle(.grouped)
@@ -193,19 +280,22 @@ private struct PolicyRow: View {
     var policy: RuleCatalog.Policy
 
     var body: some View {
-        let label = RuleLabels.policies[policy.id] ?? RuleLabels.Text(title: policy.id)
+        let label = RuleLabels.policies[policy.id] ?? RuleLabels.Item(title: policy.id)
         HStack {
             ModifiedDot(isModified: policy.isModified)
             Picker(selection: Binding(get: { policy.current }, set: { choice in
                 editing.change { choice == policy.defaultChoice ? $0.resetPolicy(policy.id) : $0.setPolicy(choice, for: policy.id) }
             })) {
                 ForEach(policy.choices, id: \.self) { choice in
-                    Text((RuleLabels.choices[policy.id]?[choice] ?? choice) + (choice == policy.defaultChoice ? "(既定)" : "")).tag(choice)
+                    Text(verbatim: {
+                        let text = (RuleLabels.choices[policy.id]?[choice] ?? choice).ui
+                        return choice == policy.defaultChoice ? "%@ (default)".ui(text) : text
+                    }()).tag(choice)
                 }
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label.title)
-                    if !label.help.isEmpty { Text(label.help).font(.caption).foregroundStyle(.secondary) }
+                    Text(key: label.title)
+                    if !label.help.isEmpty { Text(key: label.help).font(.caption).foregroundStyle(.secondary) }
                 }
             }
         }
@@ -222,7 +312,7 @@ private struct ParameterRow: View {
     var catalog: RuleCatalog?
 
     var body: some View {
-        let title = RuleLabels.parameter(parameter.name)
+        let title = LocalizedStringKey(RuleLabels.parameter(parameter.name))
         switch parameter.kind {
         case .bool:
             HStack {
@@ -239,7 +329,7 @@ private struct ParameterRow: View {
             HStack {
                 ModifiedDot(isModified: parameter.isModified)
                 Picker(title, selection: Binding(get: { parameter.current.stringValue ?? "" }, set: { set(.string($0)) })) {
-                    ForEach(choices, id: \.self) { Text(parameter.name == "treat" ? RuleLabels.treatment($0).title : $0).tag($0) }
+                    ForEach(choices, id: \.self) { Text(key: parameter.name == "treat" ? RuleLabels.treatment($0).title : $0).tag($0) }
                 }
                 // 同梱の規則の扱いは変えない(変えると、規則の名前と中身が食い違う)。足した規則だけ選べる。
                 .disabled(parameter.name == "treat" && !entry.isUserAdded)
@@ -252,12 +342,12 @@ private struct ParameterRow: View {
                 }
                 if let reference = parameter.current.stringValue, reference.hasPrefix("@list:"), let catalog,
                    let list = catalog.lists.first(where: { $0.id == String(reference.dropFirst("@list:".count)) }) {
-                    Text("一覧「\(RuleLabels.list(list.id).title)」を使っています(「語の一覧」でも同じものを直せます)。")
+                    Text("Uses the list “%@”, which you can also edit under “Word lists”.".ui(RuleLabels.list(list.id).title.ui))
                         .font(.caption).foregroundStyle(.secondary)
                     RuleListEditor(editing: editing, list: list)
                 } else {
                     InlineArrayEditor(items: parameter.current.arrayValue?.compactMap(\.stringValue) ?? [],
-                                      placeholder: parameter.kind == .patterns ? "正規表現(ICU)" : "語") { set(.array($0.map(JSONValue.string))) }
+                                      placeholder: parameter.kind == .patterns ? "Regular expression (ICU)".ui : "Word".ui) { set(.array($0.map(JSONValue.string))) }
                 }
             }
         }
@@ -277,7 +367,7 @@ private struct ParameterRow: View {
 
 /// 整数の欄(入力して確定、または上下のボタン)。
 private struct IntField: View {
-    var title: String
+    var title: LocalizedStringKey
     var value: Int
     var range: ClosedRange<Int>
     var commit: (Int) -> Void
@@ -290,7 +380,7 @@ private struct IntField: View {
                     .onSubmit { apply() }
                 Stepper("", value: Binding(get: { value }, set: { commit(min(max($0, range.lowerBound), range.upperBound)) }), in: range)
                     .labelsHidden()
-                Text("\(range.lowerBound)〜\(range.upperBound)").font(.caption).foregroundStyle(.tertiary)
+                Text("%1$lld to %2$lld".ui(range.lowerBound, range.upperBound)).font(.caption).foregroundStyle(.tertiary)
             }
         }
         .onAppear { text = String(value) }
@@ -315,13 +405,13 @@ private struct MarkersPane: View {
         let rules = catalog.entries.filter { $0.stage == "markers" }
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "タイトルの中の語を、**上の規則から順に**探します。上の規則が取った所には、下の規則は反応しません。例外は「そのまま読む」の規則を、守りたい規則より**上**に置いて書きます。")
+                OrderExplanation(text: "Words in a title are looked for **from the top rule down**. A word an upper rule has taken is invisible to the rules below. An exception is written as a “read as it is” rule placed **above** the rule you want to hold back.")
                 OrderedRuleList(rules: rules, selection: $selection, subtitle: { RuleLabels.treatment($0.parameter("treat")?.current.stringValue ?? "").title },
                                 toggle: { id, on in editing.change { $0.setEnabled(on, rule: id) } },
                                 move: { ids in editing.change { $0.setMarkerOrder(ids) } })
                 Divider()
                 HStack {
-                    Button { showsAdd = true } label: { Label("規則を足す", systemImage: "plus") }
+                    Button { showsAdd = true } label: { Label("Add a rule", systemImage: "plus") }
                         .popover(isPresented: $showsAdd, arrowEdge: .bottom) {
                             AddMarkerView(existing: Set(rules.map(\.id))) { name, treat in
                                 showsAdd = false
@@ -334,7 +424,7 @@ private struct MarkersPane: View {
                             }
                         }
                     Spacer()
-                    Button("順番を既定に戻す") { editing.change { $0.setMarkerOrder(nil) } }
+                    Button("Reset the order") { editing.change { $0.setMarkerOrder(nil) } }
                         .disabled(!editing.settings.rules.changedPaths.contains("markers.$order"))
                 }
                 .padding(8)
@@ -344,8 +434,8 @@ private struct MarkersPane: View {
                 if let rule = rules.first(where: { $0.id == selection }) {
                     MarkerDetail(editing: editing, catalog: catalog, rule: rule) { selection = nil }
                 } else {
-                    ContentUnavailableView("規則を選んでください", systemImage: "list.number",
-                                           description: Text("語と正規表現を見て、足したり外したりできます。"))
+                    ContentUnavailableView("Select a rule", systemImage: "list.number",
+                                           description: Text("You can look at the words and the regular expressions, and add or remove them."))
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
@@ -375,22 +465,22 @@ private struct OrderedRuleList: View {
         List(selection: $selection) {
             ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
                 HStack(spacing: 8) {
-                    Text("\(index + 1)").font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 18, alignment: .trailing)
+                    Text(verbatim: "\(index + 1)").font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 18, alignment: .trailing)
                     Toggle("", isOn: Binding(get: { rule.isEnabled }, set: { toggle(rule.id, $0) })).labelsHidden()
-                        .toggleStyle(.checkbox).help("この規則を働かせる")
+                        .toggleStyle(.checkbox).help("Let this rule act")
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(RuleLabels.rule(rule.id).title).foregroundStyle(rule.isEnabled ? .primary : .secondary)
+                        Text(verbatim: RuleLabels.title(ofRule: rule.id)).foregroundStyle(rule.isEnabled ? .primary : .secondary)
                         let sub = subtitle(rule)
-                        if !sub.isEmpty { Text(sub).font(.caption).foregroundStyle(.secondary) }
+                        if !sub.isEmpty { Text(key: sub).font(.caption).foregroundStyle(.secondary) }
                     }
                     Spacer()
-                    if rule.isUserAdded { Text("足した規則").font(.caption2).padding(.horizontal, 5).background(.tint.opacity(0.18), in: .capsule) }
+                    if rule.isUserAdded { Text("Added rule").font(.caption2).padding(.horizontal, 5).background(.tint.opacity(0.18), in: .capsule) }
                     ModifiedDot(isModified: rule.isModified && !rule.isUserAdded)
                     // ドラッグのほかに、ボタンでも動かせる(キーボードと読み上げのため)。
                     Button { shift(index, by: -1) } label: { Image(systemName: "chevron.up") }
-                        .buttonStyle(.borderless).disabled(index == 0).help("優先順位を上げる")
+                        .buttonStyle(.borderless).disabled(index == 0).help("Raise its priority")
                     Button { shift(index, by: 1) } label: { Image(systemName: "chevron.down") }
-                        .buttonStyle(.borderless).disabled(index == rules.count - 1).help("優先順位を下げる")
+                        .buttonStyle(.borderless).disabled(index == rules.count - 1).help("Lower its priority")
                 }
                 .tag(rule.id)
             }
@@ -418,19 +508,19 @@ private struct AddMarkerView: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let problem: String? = trimmed.isEmpty ? nil
-            : existing.contains(trimmed) ? "同じ名前の規則があります"
-            : trimmed.hasPrefix("$") ? "「$」で始まる名前は使えません"
-            : trimmed.count > 100 ? "名前が長すぎます" : nil
+            : existing.contains(trimmed) ? "A rule of that name already exists".ui
+            : trimmed.hasPrefix("$") ? "A name cannot start with “$”".ui
+            : trimmed.count > 100 ? "That name is too long".ui : nil
         Form {
-            TextField("規則の名前", text: $name, prompt: Text("例: 画集は版にしない"))
-            Picker("扱い", selection: $treat) {
-                ForEach(RuleChanges.markerTreatments, id: \.self) { Text(RuleLabels.treatment($0).title).tag($0) }
+            TextField("Name of the rule", text: $name, prompt: Text("For example: art books are not editions"))
+            Picker("Treatment", selection: $treat) {
+                ForEach(RuleChanges.markerTreatments, id: \.self) { Text(key: RuleLabels.treatment($0).title).tag($0) }
             }
-            Text(RuleLabels.treatment(treat).help).font(.caption).foregroundStyle(.secondary)
+            Text(key: RuleLabels.treatment(treat).help).font(.caption).foregroundStyle(.secondary)
             if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
-                Button("足す") { add(trimmed, treat) }.keyboardShortcut(.defaultAction).disabled(trimmed.isEmpty || problem != nil)
+                Button("Add") { add(trimmed, treat) }.keyboardShortcut(.defaultAction).disabled(trimmed.isEmpty || problem != nil)
             }
         }
         .padding(14).frame(width: 340)
@@ -449,22 +539,22 @@ private struct MarkerDetail: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(label.title).font(.title3.bold())
-                        if !label.help.isEmpty { Text(label.help).font(.callout).foregroundStyle(.secondary) }
+                        Text(verbatim: RuleLabels.title(ofRule: rule.id)).font(.title3.bold())
+                        if !label.help.isEmpty { Text(key: label.help).font(.callout).foregroundStyle(.secondary) }
                     }
                     Spacer()
                     if rule.isUserAdded {
-                        Button("この規則を消す", role: .destructive) {
+                        Button("Delete this rule", role: .destructive) {
                             editing.change { $0.removeMarker(id: rule.id) }
                             if editing.errors.isEmpty { deleted() }
                         }
                     } else {
-                        Button("既定に戻す") { editing.change { $0.reset(rule: rule.id) } }.disabled(!rule.isModified)
+                        Button("Reset to the default") { editing.change { $0.reset(rule: rule.id) } }.disabled(!rule.isModified)
                     }
                 }
                 if let treat = rule.parameter("treat") {
                     ParameterRow(editing: editing, entry: rule, parameter: treat)
-                    Text(RuleLabels.treatment(treat.current.stringValue ?? "").help).font(.caption).foregroundStyle(.secondary)
+                    Text(key: RuleLabels.treatment(treat.current.stringValue ?? "").help).font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
                 ForEach(rule.parameters.filter { $0.name != "treat" }, id: \.name) {
@@ -487,14 +577,14 @@ private struct ReadersPane: View {
         let readers = catalog.entries.filter { $0.stage == "volume.readers" }
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "シリーズ名より後ろの部分を、**上の読み手から順に**試し、最初に読めたものを巻にします。")
+                OrderExplanation(text: "The part after the series name is tried **from the top reader down**, and the first reader that can read it settles the volume.")
                 OrderedRuleList(rules: readers, selection: $selection, subtitle: { _ in "" },
                                 toggle: { id, on in editing.change { $0.setEnabled(on, rule: id) } },
                                 move: { ids in editing.change { $0.setReaderOrder(ids) } })
                 Divider()
                 HStack {
                     Spacer()
-                    Button("順番を既定に戻す") { editing.change { $0.resetReaderOrder() } }
+                    Button("Reset the order") { editing.change { $0.resetReaderOrder() } }
                         .disabled(!editing.settings.rules.changedPaths.contains("volume.readers.$order"))
                 }
                 .padding(8)
@@ -504,7 +594,7 @@ private struct ReadersPane: View {
                 if let reader = readers.first(where: { $0.id == selection }) {
                     RuleDetail(editing: editing, catalog: catalog, rule: reader)
                 } else {
-                    ContentUnavailableView("読み手を選んでください", systemImage: "textformat.123")
+                    ContentUnavailableView("Select a reader", systemImage: "textformat.123")
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
@@ -525,14 +615,14 @@ private struct RuleDetail: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(label.title).font(.title3.bold())
-                        if !label.help.isEmpty { Text(label.help).font(.callout).foregroundStyle(.secondary) }
+                        Text(verbatim: RuleLabels.title(ofRule: rule.id)).font(.title3.bold())
+                        if !label.help.isEmpty { Text(key: label.help).font(.callout).foregroundStyle(.secondary) }
                     }
                     Spacer()
-                    Button("既定に戻す") { editing.change { $0.reset(rule: rule.id) } }.disabled(!rule.isModified)
+                    Button("Reset to the default") { editing.change { $0.reset(rule: rule.id) } }.disabled(!rule.isModified)
                 }
                 if rule.parameters.isEmpty {
-                    Text("この規則に、変えられる値はありません(働かせるかどうかだけ)。").foregroundStyle(.secondary)
+                    Text("This rule has no values to change; you can only let it act or hold it back.").foregroundStyle(.secondary)
                 }
                 ForEach(rule.parameters, id: \.name) { ParameterRow(editing: editing, entry: rule, parameter: $0, catalog: catalog) }
             }
@@ -553,12 +643,12 @@ private struct StepsPane: View {
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                OrderExplanation(text: "ここの規則は、前の規則の結果を次の規則が受け取る**工程**です。書いてある順に働き、並べ替えはできません。")
+                OrderExplanation(text: "These rules are **stages**: each one takes what the one before it produced. They act in the order written and cannot be reordered.")
                 List(selection: $selection) {
                     ForEach(Self.stages, id: \.self) { stage in
                         let rules = catalog.entries.filter { $0.stage == stage }
                         if !rules.isEmpty {
-                            Section(RuleLabels.stages[stage] ?? stage) {
+                            Section(LocalizedStringKey(RuleLabels.stages[stage] ?? stage)) {
                                 ForEach(rules) { rule in
                                     HStack(spacing: 8) {
                                         if rule.canDisable {
@@ -567,9 +657,9 @@ private struct StepsPane: View {
                                                 .labelsHidden().toggleStyle(.checkbox)
                                         } else {
                                             Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary).frame(width: 16)
-                                                .help("働くかどうかは方針で決まります")
+                                                .help("Whether it acts is settled by a policy")
                                         }
-                                        Text(RuleLabels.rule(rule.id).title).foregroundStyle(rule.isEnabled ? .primary : .secondary)
+                                        Text(verbatim: RuleLabels.title(ofRule: rule.id)).foregroundStyle(rule.isEnabled ? .primary : .secondary)
                                         Spacer()
                                         ModifiedDot(isModified: rule.isModified)
                                     }
@@ -585,7 +675,7 @@ private struct StepsPane: View {
                 if let rule = catalog.entries.first(where: { $0.id == selection && Self.stages.contains($0.stage) }) {
                     RuleDetail(editing: editing, catalog: catalog, rule: rule)
                 } else {
-                    ContentUnavailableView("規則を選んでください", systemImage: "arrow.triangle.branch")
+                    ContentUnavailableView("Select a rule", systemImage: "arrow.triangle.branch")
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
@@ -607,11 +697,11 @@ private struct ListsPane: View {
             List(lists, selection: $selection) { list in
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(RuleLabels.list(list.id).title)
+                        Text(key: RuleLabels.list(list.id).title)
                         Text(list.id).font(.caption2.monospaced()).foregroundStyle(.tertiary)
                     }
                     Spacer()
-                    Text("\(list.items.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                    Text(verbatim: "\(list.items.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     ModifiedDot(isModified: !list.added.isEmpty || !list.removed.isEmpty)
                 }
                 .tag(list.id)
@@ -621,15 +711,15 @@ private struct ListsPane: View {
                 if let list = lists.first(where: { $0.id == selection }) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(RuleLabels.list(list.id).title).font(.title3.bold())
+                            Text(key: RuleLabels.list(list.id).title).font(.title3.bold())
                             let help = RuleLabels.list(list.id).help
-                            if !help.isEmpty { Text(help).font(.callout).foregroundStyle(.secondary) }
+                            if !help.isEmpty { Text(key: help).font(.callout).foregroundStyle(.secondary) }
                             RuleListEditor(editing: editing, list: list)
                         }
                         .padding(16)
                     }
                 } else {
-                    ContentUnavailableView("一覧を選んでください", systemImage: "text.word.spacing")
+                    ContentUnavailableView("Select a list", systemImage: "text.word.spacing")
                 }
             }
             .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
@@ -650,7 +740,7 @@ private struct RuleListEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if list.items.isEmpty {
-                Text("まだ何も入っていません。").foregroundStyle(.secondary)
+                Text("Nothing in here yet.").foregroundStyle(.secondary)
             }
             FlowLayout(spacing: 6) {
                 ForEach(list.items, id: \.self) { item in
@@ -658,19 +748,19 @@ private struct RuleListEditor: View {
                 }
             }
             HStack {
-                TextField(isPairs ? "左の字" : list.kind == "characters" ? "1 文字" : "語", text: $newItem)
+                TextField(isPairs ? "Left character".ui : list.kind == "characters" ? "One character".ui : "Word".ui, text: $newItem)
                     .frame(maxWidth: isPairs ? 90 : 240).onSubmit(add)
                 if isPairs {
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                    TextField("右の字", text: $newValue).frame(maxWidth: 90).onSubmit(add)
+                    TextField("Right character".ui, text: $newValue).frame(maxWidth: 90).onSubmit(add)
                 }
-                Button("足す", action: add).disabled(newItem.isEmpty || (isPairs && newValue.isEmpty))
+                Button("Add", action: add).disabled(newItem.isEmpty || (isPairs && newValue.isEmpty))
                 Spacer()
-                Button("この一覧を既定に戻す") { editing.change { $0.resetList(list.id) } }
+                Button("Reset this list") { editing.change { $0.resetList(list.id) } }
                     .disabled(list.added.isEmpty && list.removed.isEmpty)
             }
             if !list.removed.isEmpty {
-                Text("外した既定の語(押すと戻ります)").font(.caption).foregroundStyle(.secondary)
+                Text("Bundled words you removed. Click one to put it back").font(.caption).foregroundStyle(.secondary)
                 FlowLayout(spacing: 6) {
                     ForEach(list.removed, id: \.self) { item in
                         Button { restore(item) } label: { Text(RuleLabels.visible(item)).strikethrough() }
@@ -716,7 +806,7 @@ struct InlineArrayEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if items.isEmpty { Text("まだ何も入っていません。").foregroundStyle(.secondary) }
+            if items.isEmpty { Text("Nothing in here yet.").foregroundStyle(.secondary) }
             FlowLayout(spacing: 6) {
                 ForEach(items, id: \.self) { item in
                     Chip(text: item, isAdded: false) { commit(items.filter { $0 != item }) }
@@ -724,7 +814,7 @@ struct InlineArrayEditor: View {
             }
             HStack {
                 TextField(placeholder, text: $newItem).frame(maxWidth: 280).onSubmit(add)
-                Button("足す", action: add).disabled(newItem.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Add", action: add).disabled(newItem.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
     }
@@ -737,6 +827,30 @@ struct InlineArrayEditor: View {
     }
 }
 
+/// 決まっている値を、1 つずつの札で見せる(読むだけ)。**区切り文字でつないだ 1 本の文字列にしない**
+/// ―― どこまでが 1 つの値か分からなくなる(2026-09-21、利用者の指摘)。
+struct ValueChips: View {
+    var items: [String]
+    /// 1 つも無いときに出す言葉。
+    var empty: LocalizedStringKey = "None"
+
+    var body: some View {
+        if items.isEmpty {
+            Text(empty).foregroundStyle(.secondary)
+        } else {
+            FlowLayout(spacing: 4) {
+                // 同じ値が 2 つあってもよいので、値ではなく位置で見分ける。
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Text(verbatim: item)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(.quaternary, in: .capsule)
+                }
+            }
+        }
+    }
+}
+
 struct Chip: View {
     var text: String
     var isAdded: Bool
@@ -746,11 +860,11 @@ struct Chip: View {
         HStack(spacing: 4) {
             Text(text).textSelection(.enabled)
             Button(action: remove) { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.borderless).foregroundStyle(.secondary).help("外す")
+                .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove")
         }
         .padding(.leading, 9).padding(.trailing, 5).padding(.vertical, 3)
         .background(isAdded ? AnyShapeStyle(.tint.opacity(0.22)) : AnyShapeStyle(.quaternary), in: .capsule)
-        .help(isAdded ? "足した語" : "")
+        .help(isAdded ? "Added word" : "")
     }
 }
 
@@ -764,19 +878,19 @@ private struct DiffPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("画面で変えた内容は、同梱の既定値に重ねる**差分**として持っています。ここで直に書き換えることも、ファイルに書き出して持ち運ぶこともできます。足した語に蔵書の名前が入っていれば、書き出したファイルにも入ります。")
+            Text("What you change on screen is kept as a **diff** laid over the bundled defaults. You can edit it here directly, or write it to a file and carry it elsewhere. If a word you added holds the name of one of your books, the written file holds it too.")
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $text).font(.body.monospaced()).border(.separator)
             HStack {
-                Button("適用") {
+                Button("Apply") {
                     editing.errors = editing.settings.setRulesDiff(text)
-                    message = editing.errors.isEmpty ? "適用しました" : ""
+                    message = editing.errors.isEmpty ? "Applied" : ""
                 }
-                Button("いまの設定に戻す") { reload() }
+                Button("Back to the current settings") { reload() }
                 Text(message).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("読み込む…") { importFile() }
-                Button("書き出す…") { exportFile() }.disabled(editing.settings.rulesDiff.isEmpty)
+                Button("Load…") { importFile() }
+                Button("Write…") { exportFile() }.disabled(editing.settings.rulesDiff.isEmpty)
             }
         }
         .padding(14)
@@ -794,13 +908,13 @@ private struct DiffPane: View {
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
         text = String(decoding: data, as: UTF8.self)
-        message = "読み込みました。「適用」で効かせます"
+        message = "Loaded. Press “Apply” to put it to work"
     }
 
     private func exportFile() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "qooMeta の規則の変更.json"
+        panel.nameFieldStringValue = "qooMeta rule changes.json".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? Data(editing.settings.rulesDiff.utf8).write(to: url, options: .atomic)
     }

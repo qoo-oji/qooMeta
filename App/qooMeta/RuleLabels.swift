@@ -1,119 +1,126 @@
 import Foundation
 
-/// 規則の窓に出す言葉。規則の一覧(`RuleCatalog`)は ID と値だけを持ち、表示の言葉は画面の側が持つ。
+/// 規則の窓に出す言葉の**鍵**(英語)。規則の一覧(`RuleCatalog`)は ID と値だけを持ち、見出しは画面の側が持つ。
+/// 訳は `Localizable.xcstrings`(`Text(key:)` と `String.ui` が引く)。
 /// ここに無い ID(新しい版で足された規則、利用者が足した規則)は、ID をそのまま出す。
 enum RuleLabels {
-    struct Text {
+    struct Item {
         var title: String
         var help: String = ""
     }
 
     // MARK: - 方針
 
-    static let policies: [String: Text] = [
-        "editions": Text(title: "版違い(フルカラー版・完全版 …)", help: "版の印が付いた本の扱い"),
-        "sources": Text(title: "入手経路違い(DL版・特装版 …)", help: "入手経路の印が付いた本の扱い"),
-        "compilations": Text(title: "総集編・番外編の置き場所", help: "総集編の語のある本を、どのシリーズに入れるか"),
-        "compilationVolume": Text(title: "本編に含めた総集編の巻数", help: "置き場所が「本編に含める」のときだけ効く"),
-        "magazines": Text(title: "雑誌", help: "年と号のある名前のまとめ方"),
-        "unnumberedFirst": Text(title: "番号の無い 1 冊", help: "シリーズの中で番号の無い本を 1 巻とみなすか"),
-        "differentRelation": Text(title: "原作が違う本", help: "同じ組になった本の原作(@source)が違うとき"),
-        "differentGenre": Text(title: "ジャンルが違う本", help: "ジャンル(@genre)が違う本を同じシリーズにしてよいか"),
-        "subtitled": Text(title: "副題の付いた本", help: "「X 〇〇編」を、巻でまとめた「X」の組に入れるか"),
+    static let policies: [String: Item] = [
+        "editions": Item(title: "Editions (full colour, complete edition, …)", help: "What to do with a book that carries an edition mark"),
+        "sources": Item(title: "Sources (download, deluxe edition, …)", help: "What to do with a book that carries a source mark"),
+        "compilations": Item(title: "Where compilations and side stories go", help: "Which series a book whose title holds a compilation word joins"),
+        "compilationVolume": Item(title: "Volume number of a compilation in the main series", help: "Acts only when compilations join the main series"),
+        "magazines": Item(title: "Magazines", help: "How names that carry a year and an issue are grouped"),
+        "unnumberedFirst": Item(title: "A single book with no number", help: "Whether it counts as volume 1 of its series"),
+        "differentRelation": Item(title: "Books with different source works", help: "When books that would be grouped carry different @source values"),
+        "differentGenre": Item(title: "Books with different genres", help: "Whether books with different @genre values may share a series"),
+        "subtitled": Item(title: "Books with a subtitle", help: "Whether “X, Part One” joins the “X” group built from volumes"),
     ]
 
     static let choices: [String: [String: String]] = [
-        "editions": ["sameWork": "同じ作品の別の版(重複として扱う)", "separateBooks": "別の本として数える", "ignore": "印を見分けない"],
-        "sources": ["sameWork": "同じ作品(重複として扱う)", "separateBooks": "別の本として数える", "ignore": "印を見分けない"],
-        "compilations": ["ownSeries": "「X 総集編」という別のシリーズにする", "inMainSeries": "本編のシリーズに含める", "notInSeries": "どのシリーズにも入れない"],
-        "compilationVolume": ["offset": "オフセットを足した数にする(総集編2 → 102)", "none": "巻数を付けない", "afterRange": "収録範囲の最後の巻の直後にする(1~4 → 4.5)"],
-        "magazines": ["perYear": "1 年ぶんごとのシリーズにする", "whole": "雑誌全体で 1 つのシリーズにする"],
-        "unnumberedFirst": ["inferFirst": "1 巻とみなす", "leaveEmpty": "巻数を空のままにする"],
-        "differentRelation": ["split": "別のシリーズに分ける", "keep": "分けない"],
-        "differentGenre": ["split": "別のシリーズにする", "keep": "同じシリーズにしてよい"],
-        "subtitled": ["attach": "組に入れる", "separate": "入れない"],
+        "editions": ["sameWork": "The same work in another edition (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
+        "sources": ["sameWork": "The same work (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
+        "compilations": ["ownSeries": "In a series of their own, “X Compilation”", "inMainSeries": "In the main series", "notInSeries": "In no series at all"],
+        "compilationVolume": ["offset": "Add the offset (Compilation 2 becomes 102)", "none": "Give them no volume number", "afterRange": "Right after the last volume they collect (1–4 becomes 4.5)"],
+        "magazines": ["perYear": "One series per year", "whole": "One series for the whole magazine"],
+        "unnumberedFirst": ["inferFirst": "Read it as volume 1", "leaveEmpty": "Leave the volume empty"],
+        "differentRelation": ["split": "Put them in separate series", "keep": "Keep them together"],
+        "differentGenre": ["split": "Put them in separate series", "keep": "Let them share a series"],
+        "subtitled": ["attach": "Join the group", "separate": "Stay out of it"],
     ]
 
     // MARK: - 規則
 
-    static let treatments: [String: Text] = [
-        "keep": Text(title: "そのまま読む", help: "何もしない。下の規則と巻の読み手から、この語を守る(例外はこれを上に置いて書く)"),
-        "edition": Text(title: "版の印", help: "比べるときはタイトルから外す。外して同じ題名になる本は、同じ作品の版違い"),
-        "source": Text(title: "入手経路の印", help: "比べるときはタイトルから外す。中身は同じで、手に入れた経路だけが違う"),
-        "compilation": Text(title: "総集編の語", help: "置き場所は方針「総集編・番外編の置き場所」で決まる"),
-        "standalone": Text(title: "シリーズに入れない", help: "この語のある本は、どのシリーズにも入れない"),
+    static let treatments: [String: Item] = [
+        "keep": Item(title: "Read as it is", help: "Does nothing. It shields the word from the rules below and from the volume readers — this is how an exception is written"),
+        "edition": Item(title: "Edition mark", help: "Dropped from the title before books are compared. Books with the same title once it is dropped are the same work in another edition"),
+        "source": Item(title: "Source mark", help: "Dropped from the title before books are compared. The contents are the same; only the way the book was obtained differs"),
+        "compilation": Item(title: "Compilation word", help: "Where such a book goes is set by the policy “Where compilations and side stories go”"),
+        "standalone": Item(title: "Keep out of every series", help: "A book whose title holds this word joins no series"),
     ]
 
-    static let rules: [String: Text] = [
-        "plain": Text(title: "そのまま読む語", help: "「フルカラー総集編」のように、版の印でも総集編でもない語"),
-        "edition": Text(title: "版の印", help: "フルカラー版・完全版・〇〇語版 …"),
-        "source": Text(title: "入手経路の印", help: "DL版・電子版・特装版 …"),
-        "compilationMark": Text(title: "総集編の語", help: "総集編・番外編 …"),
-        "standalone": Text(title: "シリーズに入れない語", help: "この語のある本は、どのシリーズにも入れない(同梱の一覧は空)"),
-        "compilation": Text(title: "総集編のシリーズ", help: "総集編を「X 総集編」のシリーズにまとめる"),
-        "volumeHead": Text(title: "1 段目: タイトル + 巻", help: "「X 3」の形の本を、巻を除いた頭でまとめる"),
-        "sharedPrefix": Text(title: "2 段目: 先頭の共通部分", help: "残りの本を、タイトルの先頭の共通部分でまとめる"),
-        "reject-hiragana-ending": Text(title: "ひらがなで終わる共通部分は組にしない", help: "語の途中で切れた共通部分が、助詞などで終わるとき"),
-        "reject-single-script": Text(title: "1 種類の文字だけの共通部分は組にしない", help: "語の途中で切れた共通部分が、カタカナだけ・漢字だけのとき"),
-        "reject-common-english": Text(title: "一般的な英単語だけの題名は組にしない", help: "2 冊とも辞書にある英単語だけでできているとき"),
-        "splitByRelation": Text(title: "原作の違いで組を分ける", help: "働くかどうかは方針「原作が違う本」で決まる"),
-        "rejectSameWork": Text(title: "版違いだけの組はシリーズにしない", help: "働くかどうかは方針「版違い」「入手経路違い」で決まる"),
-        "includeClosingBrackets": Text(title: "開いた括弧を閉じるまで含める", help: "シリーズ名が「【X」で切れないように"),
-        "includeFollowing": Text(title: "すぐ後ろの「!」「?」を含める", help: "「月の庭!」の「!」をシリーズ名に入れる"),
-        "trimTrailing": Text(title: "末尾の区切りの記号を落とす", help: "シリーズ名の末尾の「-」「~」など"),
-        "dropLastWord": Text(title: "末尾の「side」「part」などを落とす", help: "「X side A」「X side B」のシリーズ名は「X」"),
-        "ordinal": Text(title: "丸数字など(①②③)", help: ""),
-        "number": Text(title: "数字(3・第3巻・Vol.3・36-37)", help: ""),
-        "kanji": Text(title: "漢数字(三・第三巻)", help: ""),
-        "greek": Text(title: "ギリシャ文字(α β γ)", help: ""),
-        "roman": Text(title: "ローマ数字(II・III)", help: ""),
-        "position": Text(title: "上・中・下、前編・後編", help: ""),
-        "sharedLeadingKanji": Text(title: "先頭の漢数字を巻として読む", help: "同じシリーズの本の先頭に漢数字が並ぶとき"),
-        "firstVolume": Text(title: "番号の無い 1 冊を 1 巻とみなす", help: "働くかどうかは方針「番号の無い 1 冊」で決まる"),
+    static let rules: [String: Item] = [
+        "plain": Item(title: "Words read as they are", help: "Words such as “Full Colour Compilation” that are neither an edition mark nor a compilation"),
+        "edition": Item(title: "Edition marks", help: "Full colour edition, complete edition, English edition, …"),
+        "source": Item(title: "Source marks", help: "Download edition, digital edition, deluxe edition, …"),
+        "compilationMark": Item(title: "Compilation words", help: "Compilation, side story, …"),
+        "standalone": Item(title: "Words that keep a book out of every series", help: "A book whose title holds one of these joins no series. The bundled list is empty"),
+        "compilation": Item(title: "Compilation series", help: "Collects compilations into a series named “X Compilation”"),
+        "volumeHead": Item(title: "Stage 1: title plus volume", help: "Groups books shaped like “X 3” by the head that is left once the volume is removed"),
+        "sharedPrefix": Item(title: "Stage 2: shared leading text", help: "Groups the remaining books by the text their titles share at the front"),
+        "reject-hiragana-ending": Item(title: "Reject shared text that ends in hiragana", help: "When the shared text is cut mid-word and ends in a particle"),
+        "reject-single-script": Item(title: "Reject shared text written in one script", help: "When the shared text is cut mid-word and is all katakana or all kanji"),
+        "reject-common-english": Item(title: "Reject titles made only of common English words", help: "When both titles are made only of words found in the dictionary"),
+        "splitByRelation": Item(title: "Split a group by source work", help: "Whether it acts is set by the policy “Books with different source works”"),
+        "rejectSameWork": Item(title: "Reject groups that differ only by edition", help: "Whether it acts is set by the policies “Editions” and “Sources”"),
+        "includeClosingBrackets": Item(title: "Reach past an open bracket to its close", help: "So that a series name is not cut off in the middle of “【X】”"),
+        "includeFollowing": Item(title: "Keep a following “!” or “?”", help: "Keeps the “!” of “Garden of the Moon!” in the series name"),
+        "trimTrailing": Item(title: "Drop trailing separators", help: "The “-” or “~” left at the end of a series name"),
+        "dropLastWord": Item(title: "Drop a trailing “side” or “part”", help: "The series name of “X side A” and “X side B” is “X”"),
+        "ordinal": Item(title: "Enclosed numbers (①②③)"),
+        "number": Item(title: "Digits (3, Volume 3, Vol.3, 36-37)"),
+        "kanji": Item(title: "Kanji numerals (三, 第三巻)"),
+        "greek": Item(title: "Greek letters (α β γ)"),
+        "roman": Item(title: "Roman numerals (II, III)"),
+        "position": Item(title: "Words for a position (upper / middle / lower, first / second part)"),
+        "sharedLeadingKanji": Item(title: "Read a leading kanji numeral as the volume", help: "When the books of one series start with kanji numerals"),
+        "firstVolume": Item(title: "Read a single unnumbered book as volume 1", help: "Whether it acts is set by the policy “A single book with no number”"),
     ]
 
     static let stages: [String: String] = [
-        "grouping": "組の作り方(この順に働く)",
-        "grouping.sharedPrefix.conditions": "2 段目の、組にしない条件",
-        "naming": "シリーズ名の整え方(この順に働く)",
-        "volume.inference": "巻の推定",
+        "grouping": "Building groups (in this order)",
+        "grouping.sharedPrefix.conditions": "Stage 2: when not to build a group",
+        "naming": "Tidying the series name (in this order)",
+        "volume.inference": "Guessing the volume",
     ]
 
     static let parameters: [String: String] = [
-        "treat": "扱い", "words": "語", "patterns": "正規表現", "singleWhenMainExists": "本編のシリーズがあれば、総集編が 1 冊でもシリーズにする",
-        "volumeOffset": "総集編・番外編のオフセット", "minPrefix": "語の途中で切れる共通部分の、最小の文字数",
-        "minWholeTitle": "片方の題名の全体が一致するときの、最小の文字数", "dictionary": "辞書",
-        "unlessVolume": "後ろに巻があれば組にする", "pairs": "括弧の対", "characters": "文字",
-        "prefixes": "巻の番号の前に付く語", "counters": "巻の番号の後ろに付く単位", "wholeOnlyCounters": "残りが巻だけかを見るときの単位",
-        "mergedSpan": "合併号とみなす、前後の号の差の上限", "first": "最初を表す語", "middle": "中ほどを表す語", "last": "最後を表す語",
-        "minBooks": "何冊そろえば読むか", "excludeMarkers": "この語が後ろにある本は 1 巻とみなさない",
-        "excludePrefixes": "この語がすぐ後ろに付く本は 1 巻とみなさない",
+        "treat": "Treatment", "words": "Words", "patterns": "Regular expressions",
+        "singleWhenMainExists": "Make a series of a single compilation when the main series exists",
+        "volumeOffset": "Offset for compilations and side stories",
+        "minPrefix": "Fewest characters when the shared text is cut mid-word",
+        "minWholeTitle": "Fewest characters when one whole title matches",
+        "dictionary": "Dictionary",
+        "unlessVolume": "Group them anyway when a volume follows",
+        "pairs": "Bracket pairs", "characters": "Characters",
+        "prefixes": "Words before the volume number", "counters": "Units after the volume number",
+        "wholeOnlyCounters": "Units used only when asking whether the rest is a volume",
+        "mergedSpan": "Largest gap between merged issue numbers",
+        "first": "Words for the first part", "middle": "Words for a middle part", "last": "Words for the last part",
+        "minBooks": "How many books it takes", "excludeMarkers": "A book with this word after the series name is not volume 1",
+        "excludePrefixes": "A book with this word right after the series name is not volume 1",
     ]
 
     // MARK: - 一覧
 
-    static let lists: [String: Text] = [
-        "plainWords": Text(title: "そのまま読む語", help: "版の印にも総集編にも巻にもしない語"),
-        "standaloneWords": Text(title: "シリーズに入れない語", help: "この語のある本は、どのシリーズにも入れない。1 冊だけ外すなら、その本の題名を書く"),
-        "editionWords": Text(title: "版の印", help: ""),
-        "sourceWords": Text(title: "入手経路の印", help: ""),
-        "compilationWords": Text(title: "総集編の語", help: ""),
-        "volumePrefixes": Text(title: "巻の番号の前に付く語", help: "vol・第・その …。英字の語は後ろの「.」も受け付ける"),
-        "volumeCounters": Text(title: "巻の番号の後ろに付く単位", help: "巻・話・号 …"),
-        "wholeOnlyCounters": Text(title: "残りが巻だけかを見るときの単位", help: ""),
-        "kanjiCounters": Text(title: "漢数字の後ろに付く単位", help: ""),
-        "positionFirst": Text(title: "最初を表す語(上・前編)", help: ""),
-        "positionMiddle": Text(title: "中ほどを表す語(中・中編)", help: ""),
-        "positionLast": Text(title: "最後を表す語(下・後編)", help: ""),
-        "notFirstMarkers": Text(title: "1 巻とみなさない本の語", help: "シリーズ名より後ろにこの語がある本"),
-        "notFirstPrefixes": Text(title: "1 巻とみなさない本の、すぐ後ろの語", help: "「X ex」「X SP」"),
-        "labelIntroducers": Text(title: "シリーズ名の末尾から落とす語", help: "side・part・episode …"),
-        "ignoredInComparison": Text(title: "比べるときに無視する文字", help: "空白と、題名の飾りによく使う記号"),
-        "boundaryCharacters": Text(title: "語の切れ目とみなす文字", help: "空白と数字は、いつも切れ目"),
-        "trimTrailing": Text(title: "シリーズ名の末尾から落とす文字", help: ""),
-        "keepFollowing": Text(title: "シリーズ名のすぐ後ろにあれば含める文字", help: ""),
-        "variantKanji": Text(title: "同じ字とみなす異体字", help: "左の字を、右の字と同じとみなして比べる"),
-        "brackets": Text(title: "括弧の対", help: "閉じ括弧 → 開き括弧"),
+    static let lists: [String: Item] = [
+        "plainWords": Item(title: "Words read as they are", help: "Words that become neither an edition mark, nor a compilation, nor a volume"),
+        "standaloneWords": Item(title: "Words that keep a book out of every series", help: "A book whose title holds one of these joins no series. To leave out a single book, write its title"),
+        "editionWords": Item(title: "Edition marks"),
+        "sourceWords": Item(title: "Source marks"),
+        "compilationWords": Item(title: "Compilation words"),
+        "volumePrefixes": Item(title: "Words before the volume number", help: "vol, 第, その … An English word may be followed by a full stop"),
+        "volumeCounters": Item(title: "Units after the volume number", help: "巻, 話, 号 …"),
+        "wholeOnlyCounters": Item(title: "Units used only when asking whether the rest is a volume"),
+        "kanjiCounters": Item(title: "Units after a kanji numeral"),
+        "positionFirst": Item(title: "Words for the first part (上, 前編)"),
+        "positionMiddle": Item(title: "Words for a middle part (中, 中編)"),
+        "positionLast": Item(title: "Words for the last part (下, 後編)"),
+        "notFirstMarkers": Item(title: "Words that rule out volume 1", help: "A book with this word after the series name"),
+        "notFirstPrefixes": Item(title: "Words right after the series name that rule out volume 1", help: "“X ex”, “X SP”"),
+        "labelIntroducers": Item(title: "Words dropped from the end of a series name", help: "side, part, episode …"),
+        "ignoredInComparison": Item(title: "Characters ignored when books are compared", help: "Spaces, and the marks often used to decorate a title"),
+        "boundaryCharacters": Item(title: "Characters counted as a word boundary", help: "Spaces and digits are always a boundary"),
+        "trimTrailing": Item(title: "Characters dropped from the end of a series name"),
+        "keepFollowing": Item(title: "Characters kept when they follow a series name"),
+        "variantKanji": Item(title: "Kanji treated as the same character", help: "The character on the left is compared as the one on the right"),
+        "brackets": Item(title: "Bracket pairs", help: "Closing bracket → opening bracket"),
     ]
 
     /// 一覧を画面に並べる順(よく直すものを上に)。
@@ -124,18 +131,39 @@ enum RuleLabels {
         "ignoredInComparison", "boundaryCharacters", "trimTrailing", "keepFollowing", "variantKanji", "brackets",
     ]
 
-    static func rule(_ id: String) -> Text { rules[id] ?? Text(title: id) }
-    static func list(_ id: String) -> Text { lists[id] ?? Text(title: id) }
+    static func rule(_ id: String) -> Item { rules[id] ?? Item(title: id) }
+
+    /// 規則の見出し。同梱の規則は訳し、**利用者が足した規則はその人が付けた名前のまま**
+    /// (名前が鍵とたまたま同じでも訳さない)。
+    static func title(ofRule id: String) -> String { rules[id].map { $0.title.ui } ?? id }
+    static func list(_ id: String) -> Item { lists[id] ?? Item(title: id) }
     static func parameter(_ name: String) -> String { parameters[name] ?? name }
-    static func treatment(_ id: String) -> Text { treatments[id] ?? Text(title: id) }
+    static func treatment(_ id: String) -> Item { treatments[id] ?? Item(title: id) }
 
     /// 目に見えない文字(空白・タブ)を、見える形にする。
     static func visible(_ item: String) -> String {
         switch item {
-        case " ": "␠(半角の空白)"
-        case "　": "□(全角の空白)"
-        case "\t": "⇥(タブ)"
+        case " ": "␠ (space)".ui
+        case "　": "□ (ideographic space)".ui
+        case "\t": "⇥ (tab)".ui
         default: item
         }
     }
+}
+
+extension RuleLabels {
+    /// 同梱のプリセットの見出しと説明の鍵。**同梱の JSON には書かない**(JSON に日本語を書くと、英語で使う
+    /// 利用者にそのまま出てしまう)。利用者が付けた見出しは、その人の言葉のまま出す。
+    static let presets: [String: Item] = [
+        "mixed": Item(title: "General",
+                      help: "Reads doujinshi and commercial naming side by side. A trailing parenthesis of digits is the volume; anything else is the source work."),
+        "doujinshi": Item(title: "Doujinshi (genre first)",
+                          help: "The trailing parenthesis is the source work. A parenthesis inside the brackets holds the second author onwards."),
+        "doujinshi-event": Item(title: "Doujinshi (event first)",
+                                help: "Reads the leading parenthesis as the name of the event. The genre, which no name carries, is filled in by default."),
+        "commercial": Item(title: "Commercial",
+                           help: "The trailing parenthesis is the volume, when it is digits only. It also reads the shape “Series (volume) - author”."),
+    ]
+
+    static func preset(_ name: String) -> Item { presets[name] ?? Item(title: name) }
 }

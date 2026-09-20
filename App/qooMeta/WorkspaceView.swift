@@ -20,33 +20,33 @@ struct WorkspaceView: View {
             DetailView(workspace: workspace, settings: settings)
                 .inspectorColumnWidth(min: 300, ideal: 380, max: 560)
         }
-        .searchable(text: $workspace.searchText, placement: .toolbar, prompt: "欄とファイル名を検索")
+        .searchable(text: $workspace.searchText, placement: .toolbar, prompt: "Search fields and file names")
         .toolbar {
             if workspace.isWorking {
                 ToolbarItem { ProgressView().controlSize(.small) }
             }
             ToolbarItem {
-                Button { showsPresets = true } label: { Label("型の並び", systemImage: "folder.badge.gearshape") }
-                    .help("フォルダごとに、どの型の並びで名前を読むかを決める")
+                Button { showsPresets = true } label: { Label("Assign Presets", systemImage: "folder.badge.gearshape") }
+                    .help("Choose which preset reads the file names in each folder. What a preset does is set under Rules → File name parsing")
             }
             ToolbarItem {
-                Button { openWindow(id: RulesEditorView.windowID) } label: { Label("規則", systemImage: "list.bullet.indent") }
-                    .help("シリーズと巻を導く規則(方針・語の規則・語の一覧)を見て、直す")
+                Button { openWindow(id: RulesEditorView.windowID) } label: { Label("Rules", systemImage: "list.bullet.indent") }
+                    .help("Look at and correct the rules that derive the series and volume: policies, word rules and word lists")
             }
             ToolbarItem {
-                Button { showsExport = true } label: { Label("書き出す", systemImage: "square.and.arrow.up") }
-                    .help("書き出し先を選び、落ちる欄を見てから書き出す")
+                Button { showsExport = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                    .help("Choose where to export and see which fields are dropped before writing")
             }
             ToolbarItem {
-                Button { showsDetail.toggle() } label: { Label("詳細", systemImage: "sidebar.right") }
+                Button { showsDetail.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
             }
         }
         // 規則の窓で変えた内容は、開いている一覧にすぐ効かせる(すべての本を読み直す)。
         .onChange(of: settings.rules.contentHash) { Task { await workspace.setRules(settings.rules) } }
         .sheet(isPresented: $showsPresets) { PresetAssignmentView(workspace: workspace) }
         .sheet(isPresented: $showsExport) { ExportView(workspace: workspace, settings: settings) }
-        .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta(未保存の変更)" : "qooMeta")
-        .navigationSubtitle("\(workspace.visibleBooks.count) / \(workspace.books.count) 冊")
+        .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta (unsaved changes)" : "qooMeta")
+        .navigationSubtitle("%1$lld / %2$lld books".ui(workspace.visibleBooks.count, workspace.books.count))
     }
 }
 
@@ -60,25 +60,25 @@ struct PresetAssignmentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("型の並び(プリセット)").font(.headline)
-            Text("フォルダごとに、ファイル名をどの型の並びで読むかを決めます。割り当てを変えると、そのフォルダの本を読み直します。")
+            Text("Assigning a preset to each folder").font(.headline)
+            Text("Choose which format list reads the file names in each folder. Changing an assignment reads the books of that folder again.")
                 .font(.caption).foregroundStyle(.secondary)
             Form {
-                Picker("既定", selection: Binding(get: { workspace.presets.defaultPreset },
+                Picker("Default", selection: Binding(get: { workspace.presets.defaultPreset },
                                                  set: { workspace.setPreset($0, forFolder: nil) })) {
-                    Text("同梱の既定(\(workspace.formats.title(of: workspace.formats.defaultName)))").tag(String?.none)
-                    ForEach(workspace.formats.names, id: \.self) { Text(workspace.formats.title(of: $0)).tag(String?.some($0)) }
+                    Text("Bundled default (%@)".ui(workspace.formats.displayName(of: workspace.formats.defaultName))).tag(String?.none)
+                    ForEach(workspace.formats.names, id: \.self) { Text(verbatim: workspace.formats.displayName(of: $0)).tag(String?.some($0)) }
                 }
                 if workspace.topLevelFolders.isEmpty {
-                    Text("直下のフォルダはありません(すべて既定で読みます)").foregroundStyle(.secondary)
+                    Text("There are no folders directly below; everything is read with the default").foregroundStyle(.secondary)
                 } else {
-                    Section("直下のフォルダ") {
+                    Section("Folders directly below") {
                         ForEach(workspace.topLevelFolders, id: \.folder) { row in
-                            Picker("\(row.folder)(\(row.count) 冊)",
+                            Picker("%1$@ (%2$lld books)".ui(row.folder, row.count),
                                    selection: Binding(get: { workspace.presets.folders[row.folder] },
                                                       set: { workspace.setPreset($0, forFolder: row.folder) })) {
-                                Text("既定に従う").tag(String?.none)
-                                ForEach(workspace.formats.names, id: \.self) { Text(workspace.formats.title(of: $0)).tag(String?.some($0)) }
+                                Text("Follow the default").tag(String?.none)
+                                ForEach(workspace.formats.names, id: \.self) { Text(verbatim: workspace.formats.displayName(of: $0)).tag(String?.some($0)) }
                             }
                         }
                     }
@@ -87,7 +87,7 @@ struct PresetAssignmentView: View {
             .formStyle(.grouped)
             HStack {
                 Spacer()
-                Button("閉じる") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(16)
@@ -103,23 +103,23 @@ struct FilterBar: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Picker("ジャンル", selection: Binding(get: { workspace.genreFilter }, set: { workspace.setGenreFilter($0) })) {
-                Text("すべて").tag(ValueKey?.none)
+            Picker("Genre", selection: Binding(get: { workspace.genreFilter }, set: { workspace.setGenreFilter($0) })) {
+                Text("All").tag(ValueKey?.none)
                 ForEach(workspace.genreValues, id: \.key) { row in
-                    Text("\(row.key.label)(\(row.count))").tag(ValueKey?.some(row.key))
+                    Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count)).tag(ValueKey?.some(row.key))
                 }
             }
             .pickerStyle(.menu)
             .fixedSize()
-            Picker("著者", selection: $workspace.authorFilter) {
-                Text("すべて").tag(ValueKey?.none)
+            Picker("Authors", selection: $workspace.authorFilter) {
+                Text("All").tag(ValueKey?.none)
                 ForEach(workspace.authorValues, id: \.key) { row in
-                    Text("\(row.key.label)(\(row.count))").tag(ValueKey?.some(row.key))
+                    Text(verbatim: "%1$@ (%2$lld)".ui(row.key.label, row.count)).tag(ValueKey?.some(row.key))
                 }
             }
             .pickerStyle(.menu)
             .fixedSize()
-            Picker("表示", selection: $workspace.stateFilter) {
+            Picker("Show", selection: $workspace.stateFilter) {
                 ForEach(Workspace.StateFilter.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.menu)
@@ -146,17 +146,17 @@ struct BookTableView: View {
         // 列は Group でまとめない(Group に入れた列は見出しを押しても並べ替わらない)。欄の列は TableColumnForEach で作る。
         Table(workspace.visibleBooks.sorted(using: sortOrder), selection: $workspace.selection, sortOrder: $sortOrder,
               columnCustomization: $customization) {
-            TableColumn("ファイル名", value: \BookRow.fileName)
+            TableColumn("File name", value: \BookRow.fileName)
                 .width(min: 160, ideal: 360)
                 .customizationID("fileName")
                 .disabledCustomizationBehavior(.visibility)
-            TableColumn("巻数(ソート)", value: \BookRow[sortKey: .volume]) { book in
+            TableColumn("Volume (for sorting)", value: \BookRow[sortKey: .volume]) { book in
                 Text(book.volumeSortText)
             }
             .width(min: 60, ideal: 90)
             .customizationID("volumeSort")
             TableColumnForEach(Self.columns, id: \.self) { field in
-                TableColumn(field.label, sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
+                TableColumn(LocalizedStringKey(field.labelKey), sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
                     Text(book[text: field])
                 }
                 .width(min: field == .volume ? 40 : 80, ideal: field == .volume ? 60 : field == .title ? 200 : 140)
@@ -167,16 +167,17 @@ struct BookTableView: View {
 }
 
 extension BookMetadata.Field {
-    var label: String {
+    /// 画面に出す言葉の鍵(英語)。訳は Localizable.xcstrings。
+    var labelKey: String {
         switch self {
-        case .title: "タイトル"
-        case .authors: "著者"
-        case .genre: "ジャンル"
-        case .event: "イベント"
-        case .source: "原作"
-        case .info: "情報"
-        case .series: "シリーズ"
-        case .volume: "巻数(表示)"
+        case .title: "Title"
+        case .authors: "Authors"
+        case .genre: "Genre"
+        case .event: "Event"
+        case .source: "Source work"
+        case .info: "Info"
+        case .series: "Series"
+        case .volume: "Volume (as written)"
         }
     }
 }

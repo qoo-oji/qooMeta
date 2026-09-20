@@ -5,18 +5,26 @@ import UniformTypeIdentifiers
 
 @main
 struct QooMetaApp: App {
+    /// 言葉を 1 つでも読む前に、選んだ言語を効かせる(窓の題は画面の外で決まるので、あとからでは間に合わない)。
+    init() { AppSettings.shared.language.apply() }
+
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView().environment(\.locale, AppSettings.shared.language.locale)
         }
         .defaultSize(width: 1280, height: 800)
         .commands { WorkspaceCommands() }
 
         // 規則はアプリの設定(どの一覧にも共通)なので、一覧の窓とは別の窓で直す。
-        Window("規則", id: RulesEditorView.windowID) {
-            RulesEditorView(settings: .shared)
+        Window("Rules", id: RulesEditorView.windowID) {
+            RulesEditorView(settings: .shared).environment(\.locale, AppSettings.shared.language.locale)
         }
         .defaultSize(width: 980, height: 680)
+
+        // 環境設定(⌘,)。いまは画面の言語だけ。規則とプリセットは中身が大きいので、別の窓のまま。
+        Settings {
+            GeneralSettingsView(settings: .shared)
+        }
     }
 }
 
@@ -33,15 +41,15 @@ struct RootView: View {
             }
         }
         .task { await model.openDemoIfAsked() }
-        .alert("開けませんでした", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("閉じる") { model.error = nil }
+        .alert("Could not open", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button("Close") { model.error = nil }
         } message: {
             Text(model.error ?? "")
         }
         .focusedSceneValue(\.appModel, model)
         .overlay {
             if model.isOpening {
-                ProgressView("読み込んでいます…").padding(24).background(.regularMaterial, in: .rect(cornerRadius: 12))
+                ProgressView("Loading…").padding(24).background(.regularMaterial, in: .rect(cornerRadius: 12))
             }
         }
     }
@@ -52,13 +60,13 @@ struct WelcomeView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("開いている一覧はありません", systemImage: "books.vertical")
+            Label("No list is open", systemImage: "books.vertical")
         } description: {
-            Text("書庫ファイルの入ったフォルダを開くと、名前を読んでシリーズと巻を提案します。\n直した内容は作業ファイルに残ります(蔵書は持ちません)。")
+            Text("Open a folder of books and qooMeta reads the names, then proposes a series and a volume for each one.\nWhat you correct is kept in a workfile. qooMeta holds no library of its own.")
         } actions: {
             HStack {
-                Button("フォルダを開く…") { model.openFolder() }
-                Button("作業ファイルを開く…") { model.openWorkfile() }
+                Button("Open Folder…") { model.openFolder() }
+                Button("Open Workfile…") { model.openWorkfile() }
             }
         }
     }
@@ -77,7 +85,7 @@ final class AppModel {
     func openDemoIfAsked() async {
         guard workspace == nil, CommandLine.arguments.contains("-demo") else { return }
         let books = DemoData.files.map { Workfile.Book(id: $0.id, name: $0.name) }
-        workspace = await Workspace.open(Workfile(rootPath: "(架空のデータ)", books: books), rules: settings.rules)
+        workspace = await Workspace.open(Workfile(rootPath: "(demo data)".ui, books: books), rules: settings.rules)
     }
 
     /// フォルダを開いて、書庫ファイルの名前を読み込む。
@@ -86,7 +94,7 @@ final class AppModel {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "開く"
+        panel.prompt = "Open".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await load(folder: url) }
     }
@@ -97,7 +105,7 @@ final class AppModel {
         do {
             let files = try await Task.detached { try FolderScanner.scan(root: url) }.value
             guard !files.isEmpty else {
-                error = "本が見つかりませんでした(\(FolderScanner.bookFileExtensions.sorted().joined(separator: "・")) と、画像の入ったフォルダ)"
+                error = "No books found. qooMeta reads %@, and folders that hold images.".ui(FolderScanner.bookFileExtensions.sorted().joined(separator: ", "))
                 return
             }
             let books = files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName, isFolder: $0.isFolder) }
@@ -110,7 +118,7 @@ final class AppModel {
     func openWorkfile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
-        panel.prompt = "開く"
+        panel.prompt = "Open".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             isOpening = true
@@ -137,8 +145,8 @@ final class AppModel {
         guard let workspace else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "qooMeta 作業ファイル.json"
-        panel.message = "作業ファイルには蔵書の名前が入ります。手元の場所へ保存してください。"
+        panel.nameFieldStringValue = "qooMeta workfile.json".ui
+        panel.message = "A workfile holds the names of your books. Save it somewhere of your own.".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
         write(workspace.workfile, to: url)
     }
@@ -161,29 +169,29 @@ struct WorkspaceCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .appSettings) {
-            Button("規則…") { openWindow(id: RulesEditorView.windowID) }
-                .keyboardShortcut(",")
+        CommandGroup(after: .appSettings) {
+            Button("Rules…") { openWindow(id: RulesEditorView.windowID) }
+                .keyboardShortcut(",", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .newItem) {
-            Button("フォルダを開く…") { model?.openFolder() }
+            Button("Open Folder…") { model?.openFolder() }
                 .keyboardShortcut("o")
-            Button("作業ファイルを開く…") { model?.openWorkfile() }
+            Button("Open Workfile…") { model?.openWorkfile() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .saveItem) {
-            Button("保存") { model?.save() }
+            Button("Save") { model?.save() }
                 .keyboardShortcut("s")
                 .disabled(model?.workspace == nil)
-            Button("別名で保存…") { model?.saveAs() }
+            Button("Save As…") { model?.saveAs() }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(model?.workspace == nil)
         }
         CommandGroup(replacing: .undoRedo) {
-            Button(model?.workspace?.undoName.map { "「\($0)」を取り消す" } ?? "取り消す") { model?.workspace?.undo() }
+            Button(model?.workspace?.undoName.map { "Undo “%@”".ui($0) } ?? "Undo".ui) { model?.workspace?.undo() }
                 .keyboardShortcut("z")
                 .disabled(model?.workspace?.undoName == nil)
-            Button(model?.workspace?.redoName.map { "「\($0)」をやり直す" } ?? "やり直す") { model?.workspace?.redo() }
+            Button(model?.workspace?.redoName.map { "Redo “%@”".ui($0) } ?? "Redo".ui) { model?.workspace?.redo() }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(model?.workspace?.redoName == nil)
         }

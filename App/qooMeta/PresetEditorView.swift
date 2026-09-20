@@ -30,49 +30,52 @@ struct FormatsPane: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 List(selection: Binding(get: { selection }, set: { select($0) })) {
-                    Section("同梱のプリセット") {
+                    Section("Bundled presets") {
                         ForEach(catalog.entries.filter(\.isBuiltIn)) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
                     }
                     let mine = catalog.entries.filter { !$0.isBuiltIn }
-                    Section("自分のプリセット") {
+                    Section("Your presets") {
                         if mine.isEmpty {
-                            Text("プリセットを直して「名前をつけて保存」すると、ここに並びます。").font(.caption).foregroundStyle(.secondary)
+                            Text("Change a preset and choose “Save As…” and it appears here.").font(.caption).foregroundStyle(.secondary)
                         }
                         ForEach(mine) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
                     }
                 }
                 Divider()
                 Form {
-                    Picker("既定のプリセット", selection: Binding(get: { catalog.defaultPreset }, set: { name in
+                    Picker("Default preset", selection: Binding(get: { catalog.defaultPreset }, set: { name in
                         editing.change { $0.setDefaultPreset(name, builtIn: catalog.builtInDefaultPreset) }
                     })) {
-                        ForEach(catalog.entries) { Text($0.preset.label.isEmpty ? $0.preset.name : $0.preset.label).tag($0.id) }
+                        ForEach(catalog.entries) { Text(verbatim: $0.preset.displayName).tag($0.id) }
                     }
-                    .help("フォルダにプリセットを割り当てていない本は、これで読みます")
-                    LabeledContent("著者の区切り") {
-                        Button(catalog.separators.map(RuleLabels.visible).joined(separator: " ")) { showsSeparators = true }
-                            .popover(isPresented: $showsSeparators, arrowEdge: .trailing) {
+                    .help("Books in folders with no preset assigned are read with this one")
+                    LabeledContent("Author separators") {
+                        HStack(spacing: 8) {
+                            ValueChips(items: catalog.separators.map(RuleLabels.visible))
+                            Button("Edit…") { showsSeparators = true }
+                        }
+                        .popover(isPresented: $showsSeparators, arrowEdge: .trailing) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("著者の値を分ける文字(すべてのプリセットの既定)").font(.headline)
-                                    Text("プリセットや型に区切りを書くと、そこではそちらが丸ごと勝ちます。").font(.caption).foregroundStyle(.secondary)
-                                    InlineArrayEditor(items: catalog.separators, placeholder: "区切り") { items in
+                                    Text("The characters that split the authors, shared by every preset").font(.headline)
+                                    Text("Write separators on a preset or a format and those win outright there.").font(.caption).foregroundStyle(.secondary)
+                                    InlineArrayEditor(items: catalog.separators, placeholder: "Separator") { items in
                                         editing.change { $0.setSeparators(items, builtIn: catalog.builtInSeparators) }
                                     }
-                                    Button("既定に戻す") { editing.change { $0.setSeparators(catalog.builtInSeparators, builtIn: catalog.builtInSeparators) } }
+                                    Button("Reset to the default") { editing.change { $0.setSeparators(catalog.builtInSeparators, builtIn: catalog.builtInSeparators) } }
                                         .disabled(catalog.separators == catalog.builtInSeparators)
                                 }
                                 .padding(14).frame(width: 360)
                             }
                     }
-                    LabeledContent("型として読まない文字列") {
-                        Button(catalog.plain.isEmpty ? "なし" : "\(catalog.plain.words.count + catalog.plain.patterns.count) 件") { showsPlain = true }
+                    LabeledContent("Text excluded while parsing") {
+                        Button(catalog.plain.isEmpty ? "None".ui : "%lld items".ui(catalog.plain.words.count + catalog.plain.patterns.count)) { showsPlain = true }
                             .popover(isPresented: $showsPlain, arrowEdge: .trailing) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("型として読まない文字列(すべてのプリセット)").font(.headline)
+                                    Text("Text excluded while parsing (every preset)").font(.headline)
                                     PlainTextEditor(plain: Binding(get: { catalog.plain }, set: { plain in
                                         editing.change { $0.setPlain(plain, builtIn: catalog.builtInPlain) }
                                     }))
-                                    Button("既定に戻す") { editing.change { $0.setPlain(catalog.builtInPlain, builtIn: catalog.builtInPlain) } }
+                                    Button("Reset to the default") { editing.change { $0.setPlain(catalog.builtInPlain, builtIn: catalog.builtInPlain) } }
                                         .disabled(catalog.plain == catalog.builtInPlain)
                                 }
                                 .padding(14).frame(width: 420)
@@ -91,7 +94,7 @@ struct FormatsPane: View {
                         actions(entry)
                     }
                 } else {
-                    ContentUnavailableView("プリセットを選んでください", systemImage: "textformat.abc")
+                    ContentUnavailableView("Select a preset", systemImage: "textformat.abc")
                 }
             }
             .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
@@ -104,10 +107,10 @@ struct FormatsPane: View {
             saved = PresetDraft(now)
             if !wasDirty { draft = saved }
         }
-        .confirmationDialog("保存していない変更があります", isPresented: Binding(get: { pendingSelection != nil }, set: { if !$0 { pendingSelection = nil } })) {
-            Button("変更を捨てて移る", role: .destructive) { if let next = pendingSelection { load(next) } }
+        .confirmationDialog("There are unsaved changes", isPresented: Binding(get: { pendingSelection != nil }, set: { if !$0 { pendingSelection = nil } })) {
+            Button("Discard the changes and move on", role: .destructive) { if let next = pendingSelection { load(next) } }
         } message: {
-            Text("「\(draft.preset.label.isEmpty ? draft.preset.name : draft.preset.label)」に加えた変更は、保存するまで効きません。")
+            Text("The changes you made to “%@” take effect only once you save them.".ui(draft.preset.displayName))
         }
     }
 
@@ -115,29 +118,29 @@ struct FormatsPane: View {
         let problems = draft.problems
         HStack {
             if entry.isBuiltIn {
-                Button("初期化…") { confirmsReset = true }
+                Button("Reset…") { confirmsReset = true }
                     .disabled(!entry.isModified)
-                    .help("同梱の中身に戻します")
-                    .confirmationDialog("「\(entry.preset.label)」を同梱の中身に戻しますか?", isPresented: $confirmsReset) {
-                        Button("初期化する", role: .destructive) {
+                    .help("Puts the bundled contents back")
+                    .confirmationDialog("Reset “%@” to the bundled contents?".ui(entry.preset.displayName), isPresented: $confirmsReset) {
+                        Button("Reset it", role: .destructive) {
                             editing.change { $0.removePreset(entry.id) }
                             if editing.errors.isEmpty, let original = entry.original { saved = PresetDraft(original); draft = saved }
                         }
-                    } message: { Text("このプリセットに保存した変更が消えます。名前をつけて保存したプリセットは残ります。") }
+                    } message: { Text("The changes you saved to this preset are lost. Presets you saved under a name of your own stay.") }
             } else {
-                Button("削除…", role: .destructive) { confirmsDelete = true }
-                    .confirmationDialog("「\(entry.preset.name)」を削除しますか?", isPresented: $confirmsDelete) {
-                        Button("削除する", role: .destructive) {
+                Button("Delete…", role: .destructive) { confirmsDelete = true }
+                    .confirmationDialog("Delete “%@”?".ui(entry.preset.name), isPresented: $confirmsDelete) {
+                        Button("Delete it", role: .destructive) {
                             editing.change { $0.removePreset(entry.id) }
                             if editing.errors.isEmpty { load(catalog.builtInDefaultPreset) }
                         }
-                    } message: { Text("このプリセットを割り当てていたフォルダは、既定のプリセットで読むようになります。") }
+                    } message: { Text("Folders this preset was assigned to are read with the default preset from now on.") }
             }
             if let first = problems.first { Label(first, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red) }
-            else if isDirty { Text("保存していない変更があります").font(.caption).foregroundStyle(.secondary) }
+            else if isDirty { Text("There are unsaved changes").font(.caption).foregroundStyle(.secondary) }
             Spacer()
-            Button("元に戻す") { draft = saved }.disabled(!isDirty)
-            Button("名前をつけて保存…") { showsSaveAs = true }
+            Button("Discard changes") { draft = saved }.disabled(!isDirty)
+            Button("Save As New Preset…") { showsSaveAs = true }
                 .disabled(!problems.isEmpty)
                 .popover(isPresented: $showsSaveAs, arrowEdge: .top) {
                     SaveAsView(existing: catalog.names) { name, label in
@@ -149,7 +152,7 @@ struct FormatsPane: View {
                         if editing.errors.isEmpty { saved = PresetDraft(copy); draft = saved; selection = name }
                     }
                 }
-            Button("保存") {
+            Button("Save") {
                 editing.change { $0.setPreset(draft.preset, original: entry.original) }
                 if editing.errors.isEmpty { saved = draft }
             }
@@ -179,11 +182,11 @@ private struct PresetRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                Text(entry.preset.label.isEmpty ? entry.preset.name : entry.preset.label)
-                Text("\(entry.preset.name) ・ \(entry.preset.formats.count) 通り").font(.caption2).foregroundStyle(.secondary)
+                Text(verbatim: entry.preset.displayName)
+                Text("%1$@ · %2$lld formats".ui(entry.preset.name, entry.preset.formats.count)).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            if isDefault { Image(systemName: "star.fill").foregroundStyle(.yellow).help("既定のプリセット") }
+            if isDefault { Image(systemName: "star.fill").foregroundStyle(.yellow).help("Default preset") }
             ModifiedDot(isModified: entry.isModified)
         }
     }
@@ -228,11 +231,11 @@ struct PresetDraft {
     }
 
     var problems: [String] {
-        var result = rows.enumerated().compactMap { index, row in problem(of: row).map { "\(index + 1) 行目: \($0)" } }
+        var result = rows.enumerated().compactMap { index, row in problem(of: row).map { "Line %1$lld: %2$@".ui(index + 1, $0) } }
         let texts = rows.map(\.format.text)
-        if Set(texts).count != texts.count { result.append("同じ型が 2 つあります") }
-        if rows.isEmpty { result.append("型が 1 つもありません") }
-        if let separators, separators.isEmpty { result.append("区切りが 1 つもありません") }
+        if Set(texts).count != texts.count { result.append("The same format appears twice".ui) }
+        if rows.isEmpty { result.append("There is no format at all".ui) }
+        if let separators, separators.isEmpty { result.append("There is no separator at all".ui) }
         return result
     }
 }
@@ -247,16 +250,16 @@ private struct PresetDraftEditor: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Form {
-                    TextField("見出し", text: $draft.label, prompt: Text(draft.name))
-                    TextField("説明", text: $draft.note, axis: .vertical).lineLimit(1...3)
+                    TextField("Display name", text: $draft.label, prompt: Text(key: draft.bundledName))
+                    TextField("Description", text: $draft.note, prompt: Text(key: draft.bundledNote), axis: .vertical).lineLimit(1...3)
                 }
                 .formStyle(.columns)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("型の並び").font(.headline)
-                    Text("**上から順に**試し、名前全体に合った最初の型で読みます。欄の多い形を上に、少ない形を下に置いてください。")
+                    Text("Format list").font(.headline)
+                    Text("Formats are tried **from the top down**, and the first one that matches the whole name reads it. Put the shapes with more fields above the ones with fewer.")
                         .font(.callout).foregroundStyle(.secondary)
-                    Text("予約語: @title @author @genre @event @source @info @series @volume @ignore(@author と @ignore は何度でも書けます。型には @title か @series が要ります)")
+                    Text("Reserved words: @title @author @genre @event @source @info @series @volume @ignore. @author and @ignore may appear any number of times; a format needs either @title or @series.")
                         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                     VStack(spacing: 4) {
                         // 行は ID で指す(番号で指すと、消した直後に無い番号を読んで落ちる)。
@@ -271,33 +274,35 @@ private struct PresetDraftEditor: View {
                                           remove: { draft.rows.removeAll { $0.id == row.id } })
                         }
                     }
-                    Button { draft.rows.append(.init(format: .init(text: "[@author] @title"))) } label: { Label("型を足す", systemImage: "plus") }
+                    Button { draft.rows.append(.init(format: .init(text: "[@author] @title"))) } label: { Label("Add a format", systemImage: "plus") }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("著者の区切り").font(.headline)
-                    Toggle("このプリセットだけの区切りを決める", isOn: Binding(get: { draft.separators != nil },
+                    Text("Author separators").font(.headline)
+                    Toggle("Set separators for this preset alone", isOn: Binding(get: { draft.separators != nil },
                                                                  set: { draft.separators = $0 ? catalog.separators : nil }))
                     if let separators = draft.separators {
-                        InlineArrayEditor(items: separators, placeholder: "区切り") { draft.separators = $0 }
+                        InlineArrayEditor(items: separators, placeholder: "Separator") { draft.separators = $0 }
                     } else {
-                        Text("すべてのプリセットの既定(\(catalog.separators.map(RuleLabels.visible).joined(separator: " ")))で分けます。")
+                        Text("Split with the default that every preset shares:")
                             .font(.caption).foregroundStyle(.secondary)
+                        ValueChips(items: catalog.separators.map(RuleLabels.visible))
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("名前に書かれていない欄に入れる値").font(.headline)
-                    Text("名前から読めた欄は上書きしません。どの型にも合わなかった名前にも入ります。").font(.caption).foregroundStyle(.secondary)
+                    Text("Values for fields the name does not carry").font(.headline)
+                    Text("A field read from the name is never overwritten. These also go into names that matched no format.").font(.caption).foregroundStyle(.secondary)
                     DefaultsFields(defaults: $draft.defaults)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("型として読まない文字列(このプリセットで足す分)").font(.headline)
+                    Text("Text excluded while parsing (added by this preset)").font(.headline)
                     PlainTextEditor(plain: $draft.plain)
                     if !catalog.plain.isEmpty {
-                        Text("すべてのプリセットの分(\((catalog.plain.words + catalog.plain.patterns).joined(separator: "  ")))に足されます。")
-                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text("Added to what every preset shares:")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ValueChips(items: catalog.plain.words + catalog.plain.patterns)
                     }
                 }
 
@@ -314,7 +319,7 @@ private struct DefaultsFields: View {
     var body: some View {
         Form {
             ForEach(PresetCatalog.defaultFields, id: \.self) { field in
-                TextField(BookMetadata.Field(rawValue: field)?.label ?? field,
+                TextField(LocalizedStringKey(BookMetadata.Field(rawValue: field)?.labelKey ?? field),
                           text: Binding(get: { defaults[field] ?? "" }, set: { defaults[field] = $0.isEmpty ? nil : $0 }))
             }
         }
@@ -336,33 +341,33 @@ private struct FormatRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("\(index + 1)").font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
-            TextField("型", text: $row.format.text).font(.body.monospaced()).textFieldStyle(.roundedBorder)
+            Text(verbatim: "\(index + 1)").font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
+            TextField("Format", text: $row.format.text).font(.body.monospaced()).textFieldStyle(.roundedBorder)
             if let problem {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).help(problem)
             }
             Button { showsOptions = true } label: { Image(systemName: hasOptions ? "slider.horizontal.3" : "ellipsis.circle") }
                 .buttonStyle(.borderless).foregroundStyle(hasOptions ? Color.accentColor : .secondary)
-                .help("この型だけの区切りと、既定の欄")
+                .help("Separators and default fields for this format alone")
                 .popover(isPresented: $showsOptions, arrowEdge: .trailing) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("この型で読んだ本にだけ効きます").font(.headline)
-                        Text("型 > プリセット > すべてのプリセットの既定 の順に、内側に書いたものが勝ちます。").font(.caption).foregroundStyle(.secondary)
-                        Toggle("この型だけの区切りを決める", isOn: Binding(get: { row.format.separators != nil },
+                        Text("Acts only on books read with this format").font(.headline)
+                        Text("Format beats preset, and preset beats what every preset shares: the innermost one wins.").font(.caption).foregroundStyle(.secondary)
+                        Toggle("Set separators for this format alone", isOn: Binding(get: { row.format.separators != nil },
                                                                  set: { row.format.separators = $0 ? [","] : nil }))
                         if let separators = row.format.separators {
-                            InlineArrayEditor(items: separators, placeholder: "区切り") { row.format.separators = $0.isEmpty ? nil : $0 }
+                            InlineArrayEditor(items: separators, placeholder: "Separator") { row.format.separators = $0.isEmpty ? nil : $0 }
                         }
-                        Text("名前に書かれていない欄に入れる値").font(.subheadline)
+                        Text("Values for fields the name does not carry").font(.subheadline)
                         DefaultsFields(defaults: $row.format.defaults)
-                        Text("型として読まない文字列(この型で足す分)").font(.subheadline)
+                        Text("Text excluded while parsing (added by this format)").font(.subheadline)
                         PlainTextEditor(plain: $row.format.plain, showsHelp: false)
                     }
                     .padding(14).frame(width: 420)
                 }
-            Button { move(-1) } label: { Image(systemName: "chevron.up") }.buttonStyle(.borderless).disabled(index == 0).help("優先順位を上げる")
-            Button { move(1) } label: { Image(systemName: "chevron.down") }.buttonStyle(.borderless).disabled(index == count - 1).help("優先順位を下げる")
-            Button(action: remove) { Image(systemName: "minus.circle") }.buttonStyle(.borderless).foregroundStyle(.secondary).help("この型を消す")
+            Button { move(-1) } label: { Image(systemName: "chevron.up") }.buttonStyle(.borderless).disabled(index == 0).help("Raise its priority")
+            Button { move(1) } label: { Image(systemName: "chevron.down") }.buttonStyle(.borderless).disabled(index == count - 1).help("Lower its priority")
+            Button(action: remove) { Image(systemName: "minus.circle") }.buttonStyle(.borderless).foregroundStyle(.secondary).help("Delete this format")
         }
     }
 }
@@ -375,8 +380,8 @@ private struct SampleReading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("試し読み").font(.headline)
-            TextField("ファイル名(拡張子なし)", text: $sample, prompt: Text("例: (架空の分類) [架空工房] 月の庭 3"))
+            Text("Try a name").font(.headline)
+            TextField("File name, without the extension", text: $sample, prompt: Text("For example: (Genre) [Studio] Garden of the Moon 3"))
                 .textFieldStyle(.roundedBorder)
             let name = sample.trimmingCharacters(in: .whitespaces)
             if !name.isEmpty {
@@ -395,13 +400,13 @@ private struct SampleReading: View {
                     plain: catalog.plain.adding(draft.plain))
                 let reading = formats.read(name)
                 if let matched = reading.formatIndex {
-                    Label("\(usable[matched].0 + 1) 行目の型で読めました: \(usable[matched].1.text)", systemImage: "checkmark.circle.fill")
+                    Label("Read with the format on line %1$lld: %2$@".ui(usable[matched].0 + 1, usable[matched].1.text), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green).font(.callout)
                 } else {
-                    Label("どの型にも合いません(名前の全体が仮のタイトルになります)", systemImage: "xmark.circle.fill")
+                    Label("Matches no format; the whole name becomes a provisional title", systemImage: "xmark.circle.fill")
                         .foregroundStyle(.orange).font(.callout)
                     if let nearest = reading.nearest {
-                        Text("いちばん近いのは \(usable[nearest.formatIndex].0 + 1) 行目の型で、頭から \(nearest.matchedCharacters) 文字まで合いました。")
+                        Text("The closest is the format on line %1$lld, which matched the first %2$lld characters.".ui(usable[nearest.formatIndex].0 + 1, nearest.matchedCharacters))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -410,8 +415,8 @@ private struct SampleReading: View {
                         let values = reading.metadata.values(field)
                         if !values.isEmpty {
                             GridRow {
-                                Text(field.label).foregroundStyle(.secondary)
-                                Text(values.joined(separator: " / ")).textSelection(.enabled)
+                                Text(key: field.labelKey).foregroundStyle(.secondary)
+                                ValueChips(items: values)
                             }
                         }
                     }
@@ -430,13 +435,13 @@ private struct PlainTextEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if showsHelp {
-                Text("名前の中のこの部分は、括弧であっても**型の括弧として読みません**(欄の区切りにならず、タイトルなどの値にそのまま残ります)。「月の庭 (2026)」の「(2026)」を原作や巻数にしないために使います。")
+                Text("This part of a name is **not read as a format bracket**, even when it is one: it does not divide fields, and it stays in the title or whatever value holds it. Use it so that the “(2026)” of “Garden of the Moon (2026)” becomes neither a source work nor a volume.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("語(書いたとおりの文字列)").font(.caption.bold())
-            InlineArrayEditor(items: plain.words, placeholder: "例: (仮)") { plain = PlainText(words: $0, patterns: plain.patterns) }
-            Text("正規表現").font(.caption.bold())
-            InlineArrayEditor(items: plain.patterns, placeholder: "正規表現(ICU)") { plain = PlainText(words: plain.words, patterns: $0) }
+            Text("Words, matched exactly as written").font(.caption.bold())
+            InlineArrayEditor(items: plain.words, placeholder: "For example: (draft)") { plain = PlainText(words: $0, patterns: plain.patterns) }
+            Text("Regular expressions").font(.caption.bold())
+            InlineArrayEditor(items: plain.patterns, placeholder: "Regular expression (ICU)") { plain = PlainText(words: plain.words, patterns: $0) }
         }
     }
 }
@@ -450,19 +455,39 @@ private struct SaveAsView: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let problem: String? = trimmed.isEmpty ? nil
-            : existing.contains(trimmed) ? "同じ名前のプリセットがあります"
-            : trimmed.hasPrefix("$") ? "「$」で始まる名前は使えません"
-            : trimmed.count > 100 ? "名前が長すぎます" : nil
+            : existing.contains(trimmed) ? "A preset of that name already exists".ui
+            : trimmed.hasPrefix("$") ? "A name cannot start with “$”".ui
+            : trimmed.count > 100 ? "That name is too long".ui : nil
         Form {
-            TextField("プリセットの名前", text: $name, prompt: Text("例: 自分の棚"))
-            Text("いまの下書きを、新しいプリセットとして保存します。元のプリセットは変わりません。").font(.caption).foregroundStyle(.secondary)
+            TextField("Name of the preset", text: $name, prompt: Text("For example: My shelf"))
+            Text("Saves what you have on screen as a new preset. The preset you started from is left alone.").font(.caption).foregroundStyle(.secondary)
             if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
                 // 見出しは名前と同じにする(あとで直せる)。元の見出しのままだと、一覧で見分けが付かない。
-                Button("保存") { save(trimmed, trimmed) }.keyboardShortcut(.defaultAction).disabled(trimmed.isEmpty || problem != nil)
+                Button("Save") { save(trimmed, trimmed) }.keyboardShortcut(.defaultAction).disabled(trimmed.isEmpty || problem != nil)
             }
         }
         .padding(14).frame(width: 340)
+    }
+}
+
+extension PresetCatalog.Preset {
+    /// 画面に出す名前(の鍵)。見出しを付けていなければ、同梱のプリセットの訳。利用者の見出しは、その言葉のまま。
+    /// 見出しを付けていなければ、同梱のプリセットの訳。**利用者が付けた見出しは、その言葉のまま**(訳さない)。
+    var displayName: String { label.isEmpty ? RuleLabels.preset(name).title.ui : label }
+}
+
+extension PresetDraft {
+    /// 見出しと説明を空にしたときに、代わりに出る言葉の鍵(同梱のプリセットだけが持つ)。
+    var bundledName: String { RuleLabels.preset(name).title }
+    var bundledNote: String { RuleLabels.preset(name).help }
+}
+
+extension FormatPresets {
+    /// 画面に出す名前。`title(of:)` は見出しか名前を返すので、同梱のプリセットはここで訳す。
+    func displayName(of name: String) -> String {
+        let label = presets[name]?.label ?? ""
+        return label.isEmpty ? RuleLabels.preset(name).title.ui : label
     }
 }

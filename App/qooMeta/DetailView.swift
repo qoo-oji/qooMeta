@@ -13,15 +13,15 @@ struct DetailView: View {
     var body: some View {
         let books = workspace.selectedBooks
         if books.isEmpty {
-            ContentUnavailableView("本を選んでください", systemImage: "book.closed",
-                                   description: Text("一覧で選ぶと、ここに詳細が出ます。複数選べば、まとめて書き換えられます。"))
+            ContentUnavailableView("Select a book", systemImage: "book.closed",
+                                   description: Text("Pick a book in the list and its details appear here. Pick several and you can change them together."))
         } else {
             Form {
                 Section {
                     if books.count == 1, let book = books.first {
                         FileNameView(book: book, formats: workspace.formats(for: book.id))
                     } else {
-                        Text("\(books.count) 冊を選択").font(.headline)
+                        Text("%lld books selected".ui(books.count)).font(.headline)
                     }
                 }
                 Section {
@@ -60,9 +60,9 @@ struct StampSection: View {
     var ids: Set<BookRow.ID> { Set(books.map(\.id)) }
 
     var body: some View {
-        Section("スタンプ") {
+        Section("Stamps") {
             if settings.stamps.isEmpty {
-                Text("よく使う値(ジャンル・原作など)をスタンプにすると、選んだ本へ一度に押せます。")
+                Text("Turn the values you use often, such as a genre or a source work, into a stamp and apply them to the books you picked in one go.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(settings.stamps) { stamp in
@@ -75,18 +75,18 @@ struct StampSection: View {
                         Image(systemName: "minus.circle")
                     }
                     .buttonStyle(.borderless)
-                    .help("このスタンプを消す")
+                    .help("Delete this stamp")
                 }
             }
             if showsNew {
                 HStack {
-                    TextField("スタンプの名前", text: $newName).onSubmit(createStamp)
-                    Button("作る") { createStamp() }.disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button("やめる") { showsNew = false; newName = "" }
+                    TextField("Name of the stamp", text: $newName).onSubmit(createStamp)
+                    Button("Create") { createStamp() }.disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Cancel") { showsNew = false; newName = "" }
                 }
             } else {
-                Button("いまの値からスタンプを作る") { showsNew = true }
-                    .help("選んだ本で値が揃っている欄(タイトル以外)をスタンプにする")
+                Button("Make a stamp from the current values") { showsNew = true }
+                    .help("Makes a stamp of the fields that hold the same value across the books you picked, apart from the title")
             }
         }
     }
@@ -123,55 +123,54 @@ struct SeriesSection: View {
     var confirmedCount: Int { books.filter(\.hasConfirmedSeries).count }
 
     var body: some View {
-        Section("シリーズと巻数") {
+        Section("Series and volume") {
             if let pending {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("「\(pending.name)」にすると、選んでいない \(pending.preview.others) 冊も変わります"
-                          + "(選んだ本で変わるのは \(pending.preview.selected) 冊。新しくシリーズが付く \(pending.preview.gained) 冊、"
-                          + "外れる \(pending.preview.lost) 冊)", systemImage: "exclamationmark.triangle")
+                    Label("Setting “%1$@” also changes %2$lld books you did not pick. %3$lld of the books you picked change: %4$lld gain a series and %5$lld lose one.".ui(pending.name, pending.preview.others, pending.preview.selected,
+                                   pending.preview.gained, pending.preview.lost), systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
                     HStack {
-                        Button("このまま適用") {
+                        Button("Apply anyway") {
                             workspace.setSeries(pending.name, for: ids)
                             name = ""
                             self.pending = nil
                         }
-                        Button("やめる") { self.pending = nil }
+                        Button("Cancel") { self.pending = nil }
                     }
                 }
             }
-            LabeledContent("シリーズ") {
+            LabeledContent("Series") {
                 HStack(spacing: 6) {
-                    Text(uniform(.series) ?? "<複数値>")
+                    Text(uniform(.series) ?? "<several values>")
                     if confirmedCount > 0 {
-                        Text(confirmedCount == books.count ? "確定" : "一部確定").font(.caption2).foregroundStyle(.tint)
+                        Text(confirmedCount == books.count ? "Confirmed" : "Partly confirmed").font(.caption2).foregroundStyle(.tint)
                     }
                 }
             }
-            LabeledContent("巻数(表示)", value: uniform(.volume) ?? "<複数値>")
-            LabeledContent("巻数(ソート)", value: uniformSort() ?? "<複数値>")
+            LabeledContent("Volume (as written)", value: uniform(.volume) ?? "<several values>")
+            LabeledContent("Volume (for sorting)", value: uniformSort() ?? "<several values>")
             HStack {
-                TextField("シリーズ名", text: $name, prompt: Text(workspace.suggestedSeriesName(for: ids) ?? "シリーズ名"))
+                TextField("Series name", text: $name, prompt: Text(workspace.suggestedSeriesName(for: ids) ?? "Series name"))
                     .onSubmit(applyName)
-                Button("1 つにする") { applyName() }
-                    .help("選んだ本を同じシリーズに確定する(空なら候補の名前)")
+                Button("Make one series") { applyName() }
+                    .help("Confirms the books you picked as one series. Leave the field empty to use the suggested name")
             }
             HStack {
-                Button("確かめる") { workspace.acceptProposedSeries(ids) }
-                    .help("いまの提案(シリーズと巻)をそのまま確定する")
-                Button("外す") { workspace.removeFromSeries(ids) }
-                    .help("どのシリーズにも入れない")
-                Button("巻を空に") { workspace.clearVolumes(ids) }
-                Button("提案に戻す") { workspace.revertSeries(ids) }
+                Button("Confirm") { workspace.acceptProposedSeries(ids) }
+                    .help("Confirms the proposed series and volume as they are")
+                Button("Remove") { workspace.removeFromSeries(ids) }
+                    .help("Puts the books in no series at all")
+                Button("Clear volume") { workspace.clearVolumes(ids) }
+                Button("Revert to the proposal") { workspace.revertSeries(ids) }
                     .disabled(confirmedCount == 0)
             }
             HStack {
-                Stepper("連番の開始 \(start)", value: $start, in: 0...9999)
-                Stepper("桁 \(width)", value: $width, in: 0...4)
-                Button("連番を振る") {
+                Stepper("Start at %lld".ui(start), value: $start, in: 0...9999)
+                Stepper("Digits %lld".ui(width), value: $width, in: 0...4)
+                Button("Number them") {
                     workspace.numberSequentially(books.map(\.id), start: start, width: width)
                 }
-                .help("一覧に出ている並びの順に、選んだ本へ巻を振る")
+                .help("Numbers the books you picked in the order the list shows them")
             }
         }
     }
@@ -222,18 +221,18 @@ struct FieldEditor: View {
         let edited = books.contains { $0.edited.contains(field) }
         LabeledContent {
             if field.isList {
-                ListEditor(values: current, placeholder: field.label) { workspace.set(field, to: $0, for: ids) }
+                ListEditor(values: current, placeholder: field.labelKey.ui) { workspace.set(field, to: $0, for: ids) }
             } else {
                 SingleEditor(value: current.map { $0.first ?? "" }) { workspace.set(field, to: [$0], for: ids) }
             }
         } label: {
-            Text(field.label)
+            Text(key: field.labelKey)
             if edited {
                 HStack(spacing: 4) {
-                    Text("直した").font(.caption2).foregroundStyle(.tint)
-                    Button("戻す") { workspace.revert(field, for: ids) }
+                    Text("Edited").font(.caption2).foregroundStyle(.tint)
+                    Button("Revert") { workspace.revert(field, for: ids) }
                         .buttonStyle(.link).font(.caption2)
-                        .help("ファイル名から読んだ値に戻す")
+                        .help("Back to the value read from the file name")
                 }
             }
         }
@@ -248,7 +247,7 @@ struct SingleEditor: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("", text: $text, prompt: Text(value == nil ? "複数の値" : ""))
+        TextField("", text: $text, prompt: Text(value == nil ? "Several values" : ""))
             .labelsHidden()
             .multilineTextAlignment(.leading)
             .focused($focused)
@@ -279,9 +278,9 @@ struct ListEditor: View {
         VStack(alignment: .leading, spacing: 4) {
             if values == nil, !replacing {
                 HStack {
-                    Text("複数の値").foregroundStyle(.secondary)
+                    Text("Several values").foregroundStyle(.secondary)
                     Spacer()
-                    Button("書き換える") { replacing = true; items = [""]; focusedIndex = 0 }
+                    Button("Replace") { replacing = true; items = [""]; focusedIndex = 0 }
                         .buttonStyle(.link)
                 }
             } else {
@@ -294,11 +293,11 @@ struct ListEditor: View {
                             .onSubmit(save)
                         Button { items.remove(at: i); save() } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
-                            .help("この値を消す")
+                            .help("Delete this value")
                     }
                     .contextMenu {
-                        Button("上へ") { items.swapAt(i, i - 1); save() }.disabled(i == 0)
-                        Button("下へ") { items.swapAt(i, i + 1); save() }.disabled(i == items.count - 1)
+                        Button("Move up") { items.swapAt(i, i - 1); save() }.disabled(i == 0)
+                        Button("Move down") { items.swapAt(i, i + 1); save() }.disabled(i == items.count - 1)
                     }
                 }
                 // 足すボタンは、消すボタン(各行の右端)と同じ列に置く。
@@ -308,7 +307,7 @@ struct ListEditor: View {
                         Image(systemName: "plus.circle")
                     }
                     .buttonStyle(.borderless)
-                    .help("値を足す")
+                    .help("Add a value")
                 }
             }
         }
@@ -377,15 +376,14 @@ struct FileNameView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(colored).font(.title3).textSelection(.enabled)
             if let index = book.reading.formatIndex {
-                Label("型 \(index + 1): \(formats.formats[index].text)", systemImage: "checkmark.circle")
+                Label("Format %1$lld: %2$@".ui(index + 1, formats.formats[index].text), systemImage: "checkmark.circle")
                     .font(.caption).foregroundStyle(.secondary)
             } else if let near = book.reading.nearest {
-                Label("どの型にも合わない。最も近いのは型 \(near.formatIndex + 1)(\(formats.formats[near.formatIndex].text))で、"
-                      + "\(near.matchedCharacters) 文字目の後で外れた。名前全体を仮のタイトルにした",
+                Label("Matched no format. The closest is format %1$lld (%2$@), which broke after character %3$lld. The whole name became a provisional title.".ui(near.formatIndex + 1, formats.formats[near.formatIndex].text, near.matchedCharacters),
                       systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             } else {
-                Label("どの型にも合わない(近い型も無い)。名前全体を仮のタイトルにした", systemImage: "exclamationmark.triangle")
+                Label("Matched no format, and no format came close. The whole name became a provisional title.", systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
             LegendView(words: Set(book.reading.spans.map(\.word)))
@@ -423,7 +421,7 @@ struct LegendView: View {
             ForEach(FormatWord.allCases.filter(words.contains), id: \.self) { word in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2).fill(word.color.opacity(0.4)).frame(width: 10, height: 10)
-                    Text(word.field?.label ?? "読まない").font(.caption2).foregroundStyle(.secondary)
+                    Text(key: word.field?.labelKey ?? "Not read").font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }

@@ -16,6 +16,8 @@ final class AppSettings {
     var stamps: [Stamp] = []
     /// 書き出し先ごとの欄の対応表(既定からの変更だけを持つ)。
     var mappings: [ExportTarget: FieldMapping] = [:]
+    /// 画面の言葉の言語(`system` なら macOS の設定に従う)。
+    private(set) var language: AppLanguage = .system
 
     /// 規則の差分を読み込んだ結果(誤りがあれば既定のまま使い、理由を持つ)。
     private(set) var rules: CompiledRules = .builtin
@@ -29,6 +31,14 @@ final class AppSettings {
 
     init() {
         load()
+    }
+
+    /// 画面の言葉の言語を変える。すぐ効かせる(`Bundle.main` の引き先を替え、画面を描き直させる)。
+    func setLanguage(_ language: AppLanguage) {
+        guard language != self.language else { return }
+        self.language = language
+        language.apply()
+        save()
     }
 
     /// 画面で変えた規則(差分を、操作しやすい形で)。
@@ -62,7 +72,7 @@ final class AppSettings {
             save()
             return []
         }
-        guard let builtIn = try? BuiltInRules.bundled() else { return ["同梱の規則を読めません"] }
+        guard let builtIn = try? BuiltInRules.bundled() else { return ["The bundled rules could not be read".ui] }
         let compiled = CompiledRules.compile(RuleSources(builtIn: builtIn, userChanges: Data(trimmed.utf8)))
         guard let compiledRules = compiled.rules else {
             ruleIssues = compiled.errors.map(\.description)
@@ -81,6 +91,7 @@ final class AppSettings {
         var rulesDiff: String = ""
         var stamps: [Stamp] = []
         var mappings: [FieldMapping] = []
+        var language: AppLanguage = .system
     }
 
     func load() {
@@ -88,11 +99,12 @@ final class AppSettings {
         else { return }
         stamps = stored.stamps
         mappings = Dictionary(stored.mappings.map { ($0.target, $0) }, uniquingKeysWith: { a, _ in a })
+        language = stored.language
         setRulesDiff(stored.rulesDiff)
     }
 
     func save() {
-        let stored = Stored(rulesDiff: rulesDiff, stamps: stamps, mappings: Array(mappings.values))
+        let stored = Stored(rulesDiff: rulesDiff, stamps: stamps, mappings: Array(mappings.values), language: language)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         guard let data = try? encoder.encode(stored) else { return }
@@ -119,7 +131,7 @@ struct Stamp: Codable, Hashable, Identifiable {
     var summary: String {
         BookMetadata.Field.allCases.compactMap { field in
             guard let value = values[field], !value.isEmpty else { return nil }
-            return "\(field.label): \(value.joined(separator: "、"))"
+            return "\(field.labelKey.ui): \(value.joined(separator: ", "))"
         }.joined(separator: " / ")
     }
 

@@ -3,8 +3,11 @@
 name: qooMeta
 options:
   bundleIdPrefix: com.qooProject
+  developmentLanguage: en
   deploymentTarget:
     macOS: "15.0"
+# 画面の言葉は英語を元にして、訳は qooMeta/Localizable.xcstrings が持つ(鍵は英語の文そのもの)。
+knownRegions: [en, ja]
 packages:
   QooMetaPackage:
     path: ..

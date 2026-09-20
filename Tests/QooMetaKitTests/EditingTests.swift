@@ -270,7 +270,7 @@ import QooMetaRules
         #expect(start.entries.allSatisfy { $0.isBuiltIn && !$0.isModified })
         #expect(start.defaultPreset == "mixed" && start.separators == [",", "，", "、"])
         let commercial = try #require(start.entries.first { $0.id == "commercial" })
-        #expect(commercial.preset.label == "商業誌" && commercial.preset.formats.count == 10)
+        #expect(commercial.preset.label.isEmpty && commercial.preset.formats.count == 10)
 
         // 同梱のプリセットを直す: 型を先頭に足し、その型だけの区切りを決め、既定の欄を入れる。
         var changes = RuleChanges.none

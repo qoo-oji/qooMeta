@@ -73,7 +73,7 @@ enum ValueKey: Hashable, Comparable {
 
     var label: String {
         switch self {
-        case .empty: "(空)"
+        case .empty: "(empty)".ui
         case .value(let v): v
         }
     }
@@ -122,12 +122,12 @@ final class Workspace {
         var id: Self { self }
         var label: String {
             switch self {
-            case .all: "すべて"
-            case .notInSeries: "シリーズに入っていない"
-            case .noVolume: "巻が空"
-            case .unmatched: "型に合わなかった"
-            case .edited: "直した本"
-            case .confirmed: "シリーズを確定した本"
+            case .all: "All".ui
+            case .notInSeries: "Not in a series".ui
+            case .noVolume: "No volume".ui
+            case .unmatched: "Matched no format".ui
+            case .edited: "Corrected".ui
+            case .confirmed: "Series confirmed".ui
             }
         }
         func contains(_ book: BookRow) -> Bool {
@@ -247,7 +247,7 @@ final class Workspace {
     /// 選んだ本の欄を、その値で置き換える(並びの欄は値の並び、1 つの値の欄は先頭だけ)。直したら、シリーズを組み直す。
     func set(_ field: BookMetadata.Field, to newValues: [String], for ids: Set<BookRow.ID>) {
         let values = newValues.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        edit("\(field.label)を書き換える") { input in
+        edit("Change %@".ui(field.labelKey.ui)) { input in
             guard ids.contains(input.id) else { return }
             var fields = input.confirmation.fields
             fields[field] = values
@@ -257,7 +257,7 @@ final class Workspace {
 
     /// 選んだ本の欄を、型で読んだ値(提案)に戻す。
     func revert(_ field: BookMetadata.Field, for ids: Set<BookRow.ID>) {
-        edit("\(field.label)を提案に戻す") { input in
+        edit("Revert %@ to the proposal".ui(field.labelKey.ui)) { input in
             guard ids.contains(input.id) else { return }
             var fields = input.confirmation.fields
             fields[field] = nil
@@ -269,7 +269,7 @@ final class Workspace {
     func apply(_ stamp: Stamp, to ids: Set<BookRow.ID>) {
         let values = stamp.values.filter { !$0.value.isEmpty }
         guard !values.isEmpty else { return }
-        edit("スタンプ「\(stamp.name)」を押す") { input in
+        edit("Apply stamp “%@”".ui(stamp.name)) { input in
             guard ids.contains(input.id) else { return }
             var fields = input.confirmation.fields
             for (field, value) in values { fields[field] = value }
@@ -289,7 +289,7 @@ final class Workspace {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         let volumes = Dictionary(books.map { ($0.id, Self.confirmedVolume($0)) }, uniquingKeysWith: { a, _ in a })
-        edit("シリーズを「\(trimmed)」にする") { input in
+        edit("Set the series to “%@”".ui(trimmed)) { input in
             guard ids.contains(input.id) else { return }
             input.confirmation = .series(name: trimmed, volume: volumes[input.id] ?? nil, fields: input.confirmation.fields)
         }
@@ -297,7 +297,7 @@ final class Workspace {
 
     /// シリーズから外す(規則が組にしても入れない)。
     func removeFromSeries(_ ids: Set<BookRow.ID>) {
-        edit("シリーズから外す") { input in
+        edit("Remove from the series".ui) { input in
             guard ids.contains(input.id) else { return }
             input.confirmation = .notInSeries(fields: input.confirmation.fields)
         }
@@ -306,7 +306,7 @@ final class Workspace {
     /// いまの提案(シリーズと巻)をそのまま確定する = 「確かめた」印。シリーズに入っていない本は「シリーズではない」と確定する。
     func acceptProposedSeries(_ ids: Set<BookRow.ID>) {
         let rows = Dictionary(books.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        edit("シリーズと巻を確かめる") { input in
+        edit("Confirm the series and volume".ui) { input in
             guard ids.contains(input.id), let row = rows[input.id] else { return }
             let fields = input.confirmation.fields
             if row.seriesID != nil, !row.metadata.series.isEmpty {
@@ -328,7 +328,7 @@ final class Workspace {
             numbers[id] = (number < 0 ? "-" : "") + String(repeating: "0", count: max(0, width - digits.count)) + digits
             number += step
         }
-        edit("巻を振り直す") { input in
+        edit("Number the volumes again".ui) { input in
             guard let volume = numbers[input.id], let name = names[input.id] else { return }
             input.confirmation = .series(name: name, volume: volume, fields: input.confirmation.fields)
         }
@@ -337,7 +337,7 @@ final class Workspace {
     /// 巻だけを消す(「巻は無い」と確定する)。
     func clearVolumes(_ ids: Set<BookRow.ID>) {
         let names = Dictionary(books.map { ($0.id, Self.currentSeriesName($0)) }, uniquingKeysWith: { a, _ in a })
-        edit("巻を空にする") { input in
+        edit("Clear the volume".ui) { input in
             guard ids.contains(input.id), let name = names[input.id], !name.isEmpty else { return }
             input.confirmation = .series(name: name, volume: "", fields: input.confirmation.fields)
         }
@@ -345,7 +345,7 @@ final class Workspace {
 
     /// シリーズと巻の確定を取り消して、規則の提案に戻す(欄の直しはそのまま)。
     func revertSeries(_ ids: Set<BookRow.ID>) {
-        edit("シリーズを提案に戻す") { input in
+        edit("Revert the series to the proposal".ui) { input in
             guard ids.contains(input.id) else { return }
             let fields = input.confirmation.fields
             input.confirmation = fields.values.isEmpty ? .none : .fields(fields)
@@ -454,7 +454,7 @@ final class Workspace {
             inputs[id]?.preset = preset
             changed.append(id)
         }
-        pushUndo("型の並びを替える", beforeInputs, presets: beforePresets)
+        pushUndo("Change the format list".ui, beforeInputs, presets: beforePresets)
         hasUnsavedChanges = true
         push(changed)
     }

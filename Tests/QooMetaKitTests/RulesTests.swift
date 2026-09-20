@@ -40,7 +40,8 @@ import QooMetaRules
         for name in rules.formats.names {
             #expect(rules.formats[name].formats.map(\.text) == FormatPresets.bundled[name].formats.map(\.text))
         }
-        #expect(rules.formats["commercial"].label == "商業誌")
+        // 同梱のプリセットは見出しを持たない(画面が訳して出す。2026-09-21)。
+        #expect(rules.formats["commercial"].label == nil)
         #expect(rules.formats.names == ["commercial", "doujinshi", "doujinshi-event", "mixed"])
         // 催しの型のプリセットだけが、名前に書かれないジャンルの既定を持つ。
         #expect(rules.formats["doujinshi-event"].defaults[.genre] == ["同人誌"])

@@ -19,47 +19,47 @@ struct ExportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("書き出し").font(.headline)
-            Picker("書き出し先", selection: $target) {
+            Text("Export").font(.headline)
+            Picker("Export to", selection: $target) {
                 ForEach(ExportTarget.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             Text(note).font(.caption).foregroundStyle(.secondary)
             Form {
-                Section("欄の対応(どこへ渡すか)") {
+                Section("Field mapping (where each field goes)") {
                     ForEach(FieldMapping.Key.allCases, id: \.self) { key in
                         LabeledContent {
                             HStack(spacing: 8) {
                                 Picker("", selection: Binding(
                                     get: { mapping.slots[key] },
                                     set: { settings.setMapping(mapping.merging([key: $0])) })) {
-                                    Text("渡さない").tag(ExportSlot?.none)
-                                    ForEach(target.slots, id: \.self) { Text($0.label(in: target)).tag(ExportSlot?.some($0)) }
+                                    Text("Do not pass it on").tag(ExportSlot?.none)
+                                    ForEach(target.slots, id: \.self) { Text(key: $0.labelKey(in: target)).tag(ExportSlot?.some($0)) }
                                 }
                                 .labelsHidden()
                                 if let row = preview?.rows.first(where: { $0.key == key }) {
                                     if row.droppedBooks > 0 {
-                                        Label("\(row.droppedBooks) 冊の値が落ちる", systemImage: "exclamationmark.triangle")
+                                        Label("%lld books lose this value".ui(row.droppedBooks), systemImage: "exclamationmark.triangle")
                                             .font(.caption).foregroundStyle(.orange)
                                     } else if row.truncatedBooks > 0 {
-                                        Label("\(row.truncatedBooks) 冊は先頭だけ", systemImage: "info.circle")
+                                        Label("%lld books keep only the first value".ui(row.truncatedBooks), systemImage: "info.circle")
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
                             }
                         } label: {
-                            Text(key.label)
+                            Text(key: key.labelKey)
                         }
                     }
                 }
             }
             .formStyle(.grouped)
             HStack {
-                Button("既定に戻す") { settings.setMapping(.standard(for: target)) }
+                Button("Reset to the default") { settings.setMapping(.standard(for: target)) }
                 if let error { Text(error).font(.caption).foregroundStyle(.red) }
                 Spacer()
-                Button("閉じる") { dismiss() }
-                Button("書き出す…") { write() }
+                Button("Close") { dismiss() }
+                Button("Export…") { write() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(workspace.books.isEmpty)
             }
@@ -73,9 +73,9 @@ struct ExportView: View {
 
     var note: String {
         switch target {
-        case .qooViewer: "qooViewer の保存データ JSON(「保存データの読み込み」で取り込む)。持てる欄はタイトル・著者・シリーズ・巻数の表記だけ。"
-        case .stackNest: "StackNest が取り込む Stackroom XML。**新しいライブラリを作る**形式で、既存のライブラリへは足せない。メモの欄は取り込みに無い。"
-        case .shelfRow: "ShelfRow が取り込む Stackroom XML。取り込みが読むのはタイトル・著者・キーワード A / B・メモ(Neta)だけで、ジャンル・シリーズ・巻数の欄は読まれない。"
+        case .qooViewer: "The qooViewer library JSON, taken in with “Load library data”. It can hold only the title, the authors, the series and the volume as written.".ui
+        case .stackNest: "The Stackroom XML that StackNest takes in. It builds a new library rather than adding to one you already have, and its import has no memo field.".ui
+        case .shelfRow: "The Stackroom XML that ShelfRow takes in. Its import reads only the title, the authors, keywords A and B and the memo (Neta); the genre, series and volume fields are not read.".ui
         }
     }
 
@@ -86,8 +86,8 @@ struct ExportView: View {
     func write() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = target.format == .qooViewerJSON ? [.json] : [.xml]
-        panel.nameFieldStringValue = target.format == .qooViewerJSON ? "qooViewer メタデータ.json" : "Stackroom.xml"
-        panel.message = "書き出したファイルには蔵書の名前が入ります。手元の場所へ保存してください。"
+        panel.nameFieldStringValue = target.format == .qooViewerJSON ? "qooViewer metadata.json".ui : "Stackroom.xml"
+        panel.message = "The exported file holds the names of your books. Save it somewhere of your own.".ui
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             do {
@@ -103,6 +103,42 @@ struct ExportView: View {
             } catch {
                 self.error = String(describing: error)
             }
+        }
+    }
+}
+
+extension FieldMapping.Key {
+    /// 画面に出す言葉の鍵(英語)。QooMetaExport の `label` は、CLI が使う日本語のままにしてある。
+    var labelKey: String {
+        switch self {
+        case .title: "Title"
+        case .authors: "Authors"
+        case .genre: "Genre"
+        case .event: "Event"
+        case .source: "Source work"
+        case .info: "Info"
+        case .series: "Series"
+        case .volume: "Volume (as written)"
+        case .volumeSort: "Volume (for sorting)"
+        }
+    }
+}
+
+extension ExportSlot {
+    /// 行き先の欄の見出しの鍵。同じ欄でも、取り込む側での呼び名が違うことがある。
+    func labelKey(in target: ExportTarget) -> String {
+        if self == .neta, target == .shelfRow { return "Memo (Neta)" }
+        return switch self {
+        case .title: "Title"
+        case .author: "Author"
+        case .genre: "Genre"
+        case .series: "Series"
+        case .volume: "Volume (number)"
+        case .seriesIndex: "Volume (as written)"
+        case .neta: "Neta"
+        case .keywordA: "Keyword A"
+        case .keywordB: "Keyword B"
+        case .keywordC: "Keyword C"
         }
     }
 }
