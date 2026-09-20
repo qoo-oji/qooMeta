@@ -186,52 +186,70 @@ struct Goal: Identifiable {
     let symbol: String
     /// 「こうすると、こうなります」の 1 行。
     let help: String
+    /// **まず試す設定。** 8 つの操作を平らに並べても、どれから触ればよいかは分からない
+    /// (2026-09-20、設計の見直し)。効きの大きいものだけを出し、残りは畳む。
     let controls: [Control]
+    /// それでも直らないときの、細かい調整。
+    var more: [Control] = []
+
+    /// この項目が触るものすべて(「初期値に戻す」の対象)。
+    var everything: [Control] { controls + more }
 
     /// 並びは**当たる頻度の順**。まとまり方の相談がいちばん多く、雑誌はいちばん少ない。
+    ///
+    /// 規則の一覧を端から突き合わせて、ここから触れない設定が無いかを確かめてある(2026-09-20)。
+    /// **わざと入れていない**のは次のものだけ:
+    /// - `splitByRelation`・`rejectSameWork`・`firstVolume`: 働くかどうかを方針が決める規則(入切できない)
+    /// - `edition`・`source`・`plain`・`compilationMark`・`compilation`: 規則そのものの入切。語の一覧はここから触れ、
+    ///   丸ごと止めるのは方針の「この語を見分けない」で足りる
+    /// - `volumeHead`: 1 段目そのものを止める設定。効きが大きすぎて、困りごとの答えにならない
+    /// - `treat`・`pairs`・`prefixes` などの、一覧を指すだけのパラメータ: 指す先の一覧をここに出している
+    ///
+    /// これらは「詳しい設定」から触れる。**「やりたいこと」に無い＝触れない、ではない。**
     static let all: [Goal] = [
         Goal(id: "join", title: "Books that belong together end up apart",
              symbol: "arrow.triangle.merge",
              help: "qooMeta splits a group when the books differ in genre or source work, and when the shared part of their titles looks too thin to trust. Loosen the ones that are splitting your books.",
-             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled"),
-                        .ruleToggle("reject-hiragana-ending"), .ruleToggle("reject-single-script"),
-                        .ruleToggle("reject-common-english"),
-                        .parameter(rule: "sharedPrefix", name: "minPrefix"),
-                        .parameter(rule: "sharedPrefix", name: "minWholeTitle")]),
+             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled")], more: [.ruleToggle("reject-hiragana-ending"), .ruleToggle("reject-single-script"),
+                    .ruleToggle("reject-common-english"),
+                    .parameter(rule: "sharedPrefix", name: "minPrefix"),
+                    .parameter(rule: "sharedPrefix", name: "minWholeTitle"),
+                    .list("ignoredInComparison"), .list("variantKanji"),
+                    .parameter(rule: "reject-common-english", name: "unlessVolume")]),
         Goal(id: "split", title: "Books that do not belong together are put in one series",
              symbol: "arrow.triangle.branch",
              help: "Tighten the same settings the other way: split on a difference qooMeta is now ignoring, or ask for more shared characters before two titles count as one series.",
-             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled"),
-                        .parameter(rule: "sharedPrefix", name: "minPrefix"),
-                        .parameter(rule: "sharedPrefix", name: "minWholeTitle")]),
+             controls: [.policy("differentGenre"), .policy("differentRelation"), .policy("subtitled")], more: [.parameter(rule: "sharedPrefix", name: "minPrefix"),
+                    .parameter(rule: "sharedPrefix", name: "minWholeTitle"),
+                    .ruleToggle("sharedPrefix")]),
         Goal(id: "volume", title: "A volume number is missing or wrong",
              symbol: "number",
              help: "Which shapes count as a volume number, and what may stand before or after it.",
              controls: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"),
-                        .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position"),
-                        .ruleToggle("sharedLeadingKanji"),
-                        .list("volumePrefixes"), .list("volumeCounters")]),
+                        .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position")], more: [.ruleToggle("sharedLeadingKanji"), .list("volumePrefixes"), .list("volumeCounters"),
+                    .list("kanjiCounters"), .list("positionFirst"), .list("positionMiddle"), .list("positionLast"),
+                    .list("wholeOnlyCounters"), .parameter(rule: "number", name: "mergedSpan"),
+                    .parameter(rule: "sharedLeadingKanji", name: "minBooks")]),
         Goal(id: "duplicate", title: "The same work shows up twice",
              symbol: "square.on.square",
              help: "Two files of one work, one of them carrying a word for a version or a publication form. Say whether they are the same book or two books.",
-             controls: [.policy("editions"), .policy("sources"),
-                        .list("editionWords"), .list("sourceWords")]),
+             controls: [.policy("editions"), .policy("sources")], more: [.list("editionWords"), .list("sourceWords")]),
         Goal(id: "name", title: "The series name is cut off, or carries something extra",
              symbol: "textformat",
              help: "How the name is tidied once the books are grouped: what is dropped from its end, and what is kept.",
              controls: [.ruleToggle("includeClosingBrackets"), .ruleToggle("includeFollowing"),
-                        .ruleToggle("trimTrailing"), .ruleToggle("dropLastWord"),
-                        .list("trimTrailing"), .list("keepFollowing"), .list("labelIntroducers")]),
+                        .ruleToggle("trimTrailing"), .ruleToggle("dropLastWord")], more: [.list("trimTrailing"), .list("keepFollowing"), .list("labelIntroducers"),
+                    .list("brackets"), .list("boundaryCharacters")]),
         Goal(id: "compilation", title: "A compilation is in the wrong place",
              symbol: "books.vertical",
              help: "Where a compilation or a side story goes, and what volume number it is given once it is there.",
-             controls: [.policy("compilations"), .policy("compilationVolume"),
-                        .parameter(rule: "compilation", name: "volumeOffset"),
-                        .list("compilationWords")]),
+             controls: [.policy("compilations"), .policy("compilationVolume")], more: [.parameter(rule: "compilation", name: "volumeOffset"), .list("compilationWords"),
+                    .ruleToggle("compilationMark")]),
         Goal(id: "first", title: "A book on its own is given volume 1, or is not",
              symbol: "1.circle",
              help: "What to do with a book that carries no number at all.",
-             controls: [.policy("unnumberedFirst"), .list("notFirstMarkers"), .list("notFirstPrefixes")]),
+             controls: [.policy("unnumberedFirst")], more: [.list("notFirstMarkers"), .list("notFirstPrefixes"),
+                    .parameter(rule: "firstVolume", name: "excludePrefixes")]),
         Goal(id: "word", title: "A word in the title is read as something it is not",
              symbol: "eye.slash",
              help: "A word qooMeta took for a version, a compilation or a volume when it is simply part of the title. Add it here and it is left alone.",
@@ -252,40 +270,93 @@ private struct GoalPane: View {
     var editing: RulesEditing
     var catalog: RuleCatalog
     var goal: Goal
+    @State private var showsMore = false
+    @State private var confirmsReset = false
 
     var body: some View {
         Form {
             Section {
                 Text(key: goal.help).font(.callout).foregroundStyle(.secondary)
             }
-            ForEach(Array(goal.controls.enumerated()), id: \.offset) { _, control in
-                switch control {
-                case .policy(let id):
-                    if let policy = catalog.policies.first(where: { $0.id == id }) {
-                        if id == "compilations", let rule = catalog.entries.first(where: { $0.id == "compilation" }),
-                           let single = rule.parameters.first(where: { $0.name == CompilationPlacementRow.single }) {
-                            CompilationPlacementRow(editing: editing, policy: policy, rule: rule, single: single)
-                        } else {
-                            PolicyRow(editing: editing, policy: policy)
-                        }
-                    }
-                case .ruleToggle(let id):
-                    if let rule = catalog.entries.first(where: { $0.id == id }) { GoalRuleToggle(editing: editing, rule: rule) }
-                case .parameter(let ruleID, let name):
-                    if let rule = catalog.entries.first(where: { $0.id == ruleID }),
-                       let parameter = rule.parameters.first(where: { $0.name == name }) {
-                        ParameterRow(editing: editing, entry: rule, parameter: parameter, catalog: catalog)
-                    }
-                case .list(let id):
-                    if let list = catalog.lists.first(where: { $0.id == id }) { GoalList(editing: editing, list: list) }
+            Section {
+                ForEach(Array(goal.controls.enumerated()), id: \.offset) { _, control in row(control) }
+            } header: {
+                Text("Try these first")
+            }
+            if !goal.more.isEmpty {
+                Section(isExpanded: $showsMore) {
+                    ForEach(Array(goal.more.enumerated()), id: \.offset) { _, control in row(control) }
+                } header: {
+                    Text("If that did not settle it")
                 }
             }
             Section {
-                Text("Every one of these also sits in “All the settings” below, among the rest.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("These settings also sit in “All the settings”, each in its own place — they are the same settings.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Put this back to the default") { confirmsReset = true }
+                        .disabled(!isModified)
+                        .confirmationDialog("Put “%@” back to the default?".ui(goal.title.ui), isPresented: $confirmsReset) {
+                            Button("Put it back", role: .destructive) { reset() }
+                        } message: {
+                            Text("Only the settings on this screen go back. Everything else you changed stays.")
+                        }
+                }
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// この項目の設定を、1 つでも既定から変えているか。
+    private var isModified: Bool {
+        goal.everything.contains { control in
+            switch control {
+            case .policy(let id): catalog.policies.first { $0.id == id }?.isModified ?? false
+            case .ruleToggle(let id): catalog.entries.first { $0.id == id }?.isModified ?? false
+            case .parameter(let ruleID, let name):
+                catalog.entries.first { $0.id == ruleID }?.parameters.first { $0.name == name }?.isModified ?? false
+            case .list(let id):
+                catalog.lists.first { $0.id == id }.map { !$0.added.isEmpty || !$0.removed.isEmpty } ?? false
+            }
+        }
+    }
+
+    /// **この画面の分だけ**既定に戻す。窓ぜんぶを戻すのは重すぎて、試した設定を捨てるのに使えなかった。
+    private func reset() {
+        editing.change { changes in
+            for control in goal.everything {
+                switch control {
+                case .policy(let id): changes.resetPolicy(id)
+                case .ruleToggle(let id): changes.reset(rule: id)
+                case .parameter(let ruleID, let name): changes.resetValue(rule: ruleID, parameter: name)
+                case .list(let id): changes.resetList(id)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ control: Goal.Control) -> some View {
+        switch control {
+        case .policy(let id):
+            if let policy = catalog.policies.first(where: { $0.id == id }) {
+                if id == "compilations", let rule = catalog.entries.first(where: { $0.id == "compilation" }),
+                   let single = rule.parameters.first(where: { $0.name == CompilationPlacementRow.single }) {
+                    CompilationPlacementRow(editing: editing, policy: policy, rule: rule, single: single)
+                } else {
+                    PolicyRow(editing: editing, policy: policy)
+                }
+            }
+        case .ruleToggle(let id):
+            if let rule = catalog.entries.first(where: { $0.id == id }) { GoalRuleToggle(editing: editing, rule: rule) }
+        case .parameter(let ruleID, let name):
+            if let rule = catalog.entries.first(where: { $0.id == ruleID }),
+               let parameter = rule.parameters.first(where: { $0.name == name }) {
+                ParameterRow(editing: editing, entry: rule, parameter: parameter, catalog: catalog)
+            }
+        case .list(let id):
+            if let list = catalog.lists.first(where: { $0.id == id }) { GoalList(editing: editing, list: list) }
+        }
     }
 }
 

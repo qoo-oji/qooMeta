@@ -2763,23 +2763,6 @@
         }
       }
     },
-    "Every one of these also sits in “All the settings” below, among the rest.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Every one of these also sits in “All the settings” below, among the rest."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ここの設定は、下の「詳しい設定」にもあります(同じものです)。"
-          }
-        }
-      }
-    },
     "Exclude %lld brackets": {
       "extractionState": "manual",
       "localizations": {
@@ -3439,6 +3422,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "タイトルの語の見分け方"
+          }
+        }
+      }
+    },
+    "If that did not settle it": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If that did not settle it"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "それでも直らないとき"
           }
         }
       }
@@ -4633,6 +4633,23 @@
         }
       }
     },
+    "Only the settings on this screen go back. Everything else you changed stays.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the settings on this screen go back. Everything else you changed stays."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この画面にある設定だけが戻ります。ほかで変えたものはそのままです。"
+          }
+        }
+      }
+    },
     "Open": {
       "extractionState": "manual",
       "localizations": {
@@ -4820,6 +4837,23 @@
         }
       }
     },
+    "Put it back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put it back"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "初期値に戻す"
+          }
+        }
+      }
+    },
     "Put them in separate series": {
       "extractionState": "manual",
       "localizations": {
@@ -4833,6 +4867,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "別のシリーズにする"
+          }
+        }
+      }
+    },
+    "Put this back to the default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put this back to the default"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この項目を初期値に戻す"
+          }
+        }
+      }
+    },
+    "Put “%@” back to the default?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put “%@” back to the default?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」の設定を初期値に戻しますか?"
           }
         }
       }
@@ -6707,6 +6775,23 @@
         }
       }
     },
+    "These settings also sit in “All the settings”, each in its own place — they are the same settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These settings also sit in “All the settings”, each in its own place — they are the same settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ここの設定は「詳しい設定」にもそれぞれの場所で並んでいます(同じものです)。"
+          }
+        }
+      }
+    },
     "These settle **what to do** with what qooMeta found. There is no single right answer, so choose what suits your books. The ones nearer the top are the ones most often turned to.": {
       "extractionState": "manual",
       "localizations": {
@@ -6907,6 +6992,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "解析のテスト"
+          }
+        }
+      }
+    },
+    "Try these first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try these first"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まず試す"
           }
         }
       }
