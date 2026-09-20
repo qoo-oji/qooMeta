@@ -66,6 +66,24 @@
 - 例のファイルに `"preset": "<名前>"` を書けるようにした(例ごとに読む並びを選ぶ)。例は 90 件。
 - 手元の蔵書の指紋は変わらない(`ae41e4e8aede473b418c22c0`)。割り当てを変えていないので当然だが、確かめてある。
 
+## 書き出しを、取り込み側のコードで確かめた(2026-09-20、利用者の指示)
+
+StackNest・ShelfRow の取り込みのコードを読み、**qooMeta が書く XML を実際にそのパーサへ通して**確かめた
+(StackNest は `StackroomFormat` をそのまま使って復号。ShelfRow は取り込みが読むキーをなぞって照合)。
+**名前は合成したものだけを使った。**
+
+- 見つかった取りこぼし(直した): **ShelfRow は `Genre` を読まない**(取り込みでジャンルは必ず空)。
+  **StackNest にも ShelfRow にも `Memo` というキーは無い**(StackNest 本体はメモを持つが、XML からは渡らない)。
+  どちらも既定の対応表で使っていたので、値が黙って消えていた。
+- 直した既定(docs/metadata.md の表):
+  - StackNest: 情報 → **キーワード A**(メモの欄が無いため)。ほかは同じ。
+  - ShelfRow: ジャンル → **キーワード A**、情報 → **メモ(`Neta`)**、巻数(表示)→ キーワード B。原作は既定では落とす。
+- 行き先の一覧も、**そのアプリが読む欄だけ**にした(`ExportTarget.slots`)。書いたキーが読む欄だけであることは
+  テスト(`everyKeyWeWriteIsOneTheAppReads`)で守る。
+- 形式そのものは両アプリとも問題なく読めた(StackNest のパーサで異常 0 件。日付・実数・真偽の型、`Playlists` が空、
+  `Path` と `Cover Image Path`、ShelfRow の `PathParser` の分解まで確かめた)。
+- qooViewer の `LibraryJSONSchema.swift` も読んだ。`formatVersion: 4` の `metadata`(bookID・author・title・series・seriesIndex)で合っている。
+
 ## JSON のブラッシュアップ(着手前のメモ。2026-09-20)
 
 読み直して見つけた、直す値打ちのありそうな点。**まだ何も直していない。**

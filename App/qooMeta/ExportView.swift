@@ -34,7 +34,7 @@ struct ExportView: View {
                                     get: { mapping.slots[key] },
                                     set: { settings.setMapping(mapping.merging([key: $0])) })) {
                                     Text("渡さない").tag(ExportSlot?.none)
-                                    ForEach(target.slots, id: \.self) { Text($0.label).tag(ExportSlot?.some($0)) }
+                                    ForEach(target.slots, id: \.self) { Text($0.label(in: target)).tag(ExportSlot?.some($0)) }
                                 }
                                 .labelsHidden()
                                 if let row = preview?.rows.first(where: { $0.key == key }) {
@@ -74,8 +74,8 @@ struct ExportView: View {
     var note: String {
         switch target {
         case .qooViewer: "qooViewer の保存データ JSON(「保存データの読み込み」で取り込む)。持てる欄はタイトル・著者・シリーズ・巻数の表記だけ。"
-        case .stackNest: "StackNest が取り込む Stackroom XML。**新しいライブラリを作る**形式で、既存のライブラリへは足せない。"
-        case .shelfRow: "ShelfRow が取り込む Stackroom XML。シリーズと巻の欄が無いので、巻数の表記は空いている欄へ回す。"
+        case .stackNest: "StackNest が取り込む Stackroom XML。**新しいライブラリを作る**形式で、既存のライブラリへは足せない。メモの欄は取り込みに無い。"
+        case .shelfRow: "ShelfRow が取り込む Stackroom XML。取り込みが読むのはタイトル・著者・キーワード A / B・メモ(Neta)だけで、ジャンル・シリーズ・巻数の欄は読まれない。"
         }
     }
 

@@ -137,7 +137,8 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(entries[0]["inodeNumber"] as? Int == 11)
     }
 
-    /// 同じ Stackroom XML でも、ShelfRow へは読む欄だけを渡す(シリーズと巻の欄が無い。著者は先頭だけ)。
+    /// 同じ Stackroom XML でも、ShelfRow へは**その取り込みが読む欄だけ**を渡す
+    /// (2026-09-20 に ShelfRow/LibraryImporter.swift を読んで数え直した。シリーズ・巻数・ジャンルは読まれない)。
     @Test func shelfRowGetsOnlyTheFieldsItReads() throws {
         let data = try Exporter.stackroomXML(Self.proposals(), files: ["a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz")],
                                              mapping: .standard(for: .shelfRow))
@@ -145,11 +146,31 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         let book = try #require((root["Books"] as? [String: [String: Any]])?["1"])
         #expect(book["Title"] as? String == "星降る夜の喫茶店 1")
         #expect(book["Author"] as? String == "架空工房")        // 先頭だけ。
-        #expect(book["Genre"] as? String == "分類A")
+        #expect(book["Keyword A"] as? String == "分類A")        // ジャンルの欄は読まれないので、キーワード A へ。
         #expect(book["Keyword B"] as? String == "1")           // 巻数(表示)は空いている欄へ。
+        #expect(book["Genre"] == nil)
         #expect(book["Series"] == nil)
         #expect(book["Volume"] == nil)
-        #expect(book["Neta"] == nil)                            // 取り込みでメモに入るので既定では渡さない。
+    }
+
+    /// **書き出したキーは、そのアプリの取り込みが読むものだけ**(読まない欄へ渡すと、書き出しは通るのに値だけ消える)。
+    @Test(arguments: [ExportTarget.stackNest, .shelfRow])
+    func everyKeyWeWriteIsOneTheAppReads(target: ExportTarget) throws {
+        let data = try Exporter.stackroomXML(Self.proposals(), files: [
+            "a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz"),
+            "b.cbr": .init(path: "/nowhere/b.cbr", fileExtension: "cbr"),
+        ], mapping: .standard(for: target))
+        let root = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let books = try #require(root["Books"] as? [String: [String: Any]])
+        for (_, book) in books {
+            let unread = Set(book.keys).subtracting(target.readableStackroomKeys)
+            #expect(unread.isEmpty, "\(target.label) が読まないキー: \(unread.sorted())")
+        }
+        // 行き先として選べる欄も、読む欄の中だけ。
+        for slot in target.slots {
+            guard let key = slot.stackroomKey else { continue }
+            #expect(target.readableStackroomKeys.contains(key), "\(target.label): \(key)")
+        }
     }
 
     /// 対応表は利用者が変えられる(イベントをキーワード A へ回す、など)。

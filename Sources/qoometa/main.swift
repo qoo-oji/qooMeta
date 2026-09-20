@@ -187,7 +187,7 @@ func run() async throws {
         // 落ちる欄は、書き出す前に数で見せる(名前は出さない)。
         let preview = Exporter.preview(set, mapping: mapping)
         for row in FieldMapping.Key.allCases.map({ key in preview.rows.first { $0.key == key }! }) {
-            let where_ = row.slot.map { "→ \($0.label)" } ?? "落ちる"
+            let where_ = row.slot.map { "→ \($0.label(in: target))" } ?? "落ちる"
             let extra = row.truncatedBooks > 0 ? "、先頭だけ渡す \(row.truncatedBooks) 冊" : ""
             print("  \(row.key.label): \(where_)(値のある本 \(row.booksWithValue) 冊\(extra))")
         }

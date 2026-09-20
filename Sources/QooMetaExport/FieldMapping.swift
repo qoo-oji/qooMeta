@@ -29,13 +29,34 @@ public enum ExportTarget: String, Sendable, Hashable, Codable, CaseIterable {
         }
     }
 
-    /// 選べる行き先(このアプリが読む欄)。
+    /// 選べる行き先(**そのアプリの取り込みが実際に読む欄だけ**)。
+    ///
+    /// 2026-09-20 に、StackNest(`StackroomFormat/BookRecord.swift`・`LibraryStore/LibraryImporter.swift`)と
+    /// ShelfRow(`ShelfRow/LibraryImporter.swift`)の取り込みのコードを読んで数え直した。読まない欄へ渡すと、
+    /// 書き出しは成功するのに値だけが消えるので、**行き先に出さない**。
+    ///
+    /// - ShelfRow は `Genre` を読まない(取り込みでジャンルは必ず空になる)。シリーズ・巻数・キーワード C の欄も持たない。
+    ///   ShelfRow の「メモ」に入るのは `Neta`。
+    /// - StackNest に `Memo` という欄は無い(本体はメモを持つが、Stackroom XML からは渡らない)。
     public var slots: [ExportSlot] {
         switch self {
         case .qooViewer: [.title, .author, .series, .seriesIndex]
-        // ShelfRow はシリーズと巻の欄を持たない(取り込んでも捨てられる)ので、行き先に出さない。
-        case .shelfRow: [.title, .author, .genre, .memo, .keywordA, .keywordB, .keywordC]
-        case .stackNest: [.title, .author, .genre, .series, .volume, .neta, .memo, .keywordA, .keywordB, .keywordC]
+        case .shelfRow: [.title, .author, .neta, .keywordA, .keywordB]
+        case .stackNest: [.title, .author, .genre, .series, .volume, .neta, .keywordA, .keywordB, .keywordC]
+        }
+    }
+
+    /// 取り込みが読む Stackroom XML のキー(書き出しの確かめに使う)。
+    public var readableStackroomKeys: Set<String> {
+        switch self {
+        case .qooViewer: []
+        // ShelfRow/LibraryImporter.swift が bookData から読むキー。
+        case .shelfRow: ["ID", "Path", "Title", "Author", "My Rate", "Unseen", "Pages", "Book Type", "File Type",
+                         "Cover Image Name", "Cover Image Path", "Keyword A", "Keyword B", "Neta", "Date Added", "Play Date"]
+        // StackNest/StackroomFormat/BookRecord.swift の CodingKeys。
+        case .stackNest: ["ID", "Title", "Author", "Genre", "Path", "Cover Image Path", "Cover Image Name", "Date Added",
+                          "Play Date", "Book Type", "File Type", "Pages", "My Rate", "Unseen",
+                          "Keyword A", "Keyword B", "Keyword C", "Neta", "Series", "Volume"]
         }
     }
 
@@ -57,9 +78,9 @@ public enum ExportSlot: String, Sendable, Hashable, Codable, CaseIterable {
     case volume
     /// 巻数の表記の欄(qooViewer の seriesIndex)。
     case seriesIndex
-    /// 二次創作の元作品(Stackroom の Neta)。
+    /// Stackroom の Neta。StackNest では「ネタ」の欄、**ShelfRow では「メモ」の欄**になる
+    /// (ShelfRow の取り込みが `Neta` をメモへ入れる)。
     case neta
-    case memo
     case keywordA, keywordB, keywordC
 
     public var label: String {
@@ -71,11 +92,16 @@ public enum ExportSlot: String, Sendable, Hashable, Codable, CaseIterable {
         case .volume: "巻数(数)"
         case .seriesIndex: "巻数(表記)"
         case .neta: "ネタ"
-        case .memo: "メモ"
         case .keywordA: "キーワード A"
         case .keywordB: "キーワード B"
         case .keywordC: "キーワード C"
         }
+    }
+
+    /// 画面に出す名前。同じ欄でも、取り込む側での呼び名が違うことがある。
+    public func label(in target: ExportTarget) -> String {
+        if self == .neta, target == .shelfRow { return "メモ(Neta)" }
+        return label
     }
 
     /// Stackroom XML のキー(qooViewer の欄には無い)。
@@ -87,7 +113,6 @@ public enum ExportSlot: String, Sendable, Hashable, Codable, CaseIterable {
         case .series: "Series"
         case .volume: "Volume"
         case .neta: "Neta"
-        case .memo: "Memo"
         case .keywordA: "Keyword A"
         case .keywordB: "Keyword B"
         case .keywordC: "Keyword C"
@@ -186,15 +211,16 @@ public struct FieldMapping: Sendable, Hashable, Codable {
             FieldMapping(target: target, slots: [.title: .title, .authors: .author, .series: .series, .volume: .seriesIndex])
         case .stackNest:
             // 巻数の欄は数なので、ソート用をそのまま渡す。表記は空いている欄(キーワード C)へ。
-            // イベントは既定では落とす(キーワードへ回せる)。
+            // StackNest に「メモ」の欄は無いので、情報はキーワード A へ。イベントは既定では落とす(キーワード B へ回せる)。
             FieldMapping(target: target, slots: [.title: .title, .authors: .author, .genre: .genre, .source: .neta,
-                                                 .info: .memo, .series: .series, .volumeSort: .volume,
+                                                 .info: .keywordA, .series: .series, .volumeSort: .volume,
                                                  .volume: .keywordC])
         case .shelfRow:
-            // ShelfRow にはシリーズと巻の欄が無い。表記だけを空いている欄(キーワード B)へ回す。
-            // 原作は、取り込みでメモへ入ってしまう(roadmap.md の 12)ので既定では渡さない。
-            FieldMapping(target: target, slots: [.title: .title, .authors: .author, .genre: .genre,
-                                                 .info: .memo, .volume: .keywordB])
+            // ShelfRow が読むのは タイトル・著者・キーワード A・キーワード B・Neta(= メモ)だけ。
+            // ジャンルの欄は取り込みで読まれないので、キーワード A へ回す。情報は Neta へ入れると「メモ」になる。
+            // 原作は既定では渡さない(空いている行き先が残っていない。キーワード B と入れ替えられる)。
+            FieldMapping(target: target, slots: [.title: .title, .authors: .author, .genre: .keywordA,
+                                                 .info: .neta, .volume: .keywordB])
         }
     }
 
