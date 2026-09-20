@@ -68,14 +68,6 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(v?.number == nil)
     }
 
-    /// 続きの語(「アフター」「後日談」)は、表記だけを読む。数はシリーズの中の文脈で決まる。
-    @Test func sequelWordsAreReadAsTextOnly() {
-        let v = builtinEngine.volumes.extract(fromRemainder: " アフターエピソード")
-        #expect(v?.text == "アフターエピソード")
-        #expect(v?.number == nil)
-        #expect(builtinEngine.volumes.extract(fromRemainder: " 後日談 2")?.text == "後日談 2")
-    }
-
     /// 続きの語は「巻だけでできている形」には数えない。ここへ入れると、シリーズの組み立ての 1 段目が
     /// 「夏の|アフターヌーン」をタイトル + 巻と読んで、関わりの無い本を 1 つのシリーズにしてしまう。
     @Test func sequelWordsAreNotAVolumeOnTheirOwn() {

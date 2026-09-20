@@ -29,7 +29,7 @@ enum RuleLabels {
         "editions": ["sameWork": "The same work (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
         "sources": ["sameWork": "The same work (a duplicate)", "separateBooks": "Count them as separate books", "ignore": "Do not look for the mark"],
         "compilations": ["ownSeries": "In a series of their own, “X Compilation”", "inMainSeries": "In the main series", "notInSeries": "In no series at all"],
-        "compilationVolume": ["offset": "Add the offset (Compilation 2 becomes 102)", "none": "Give them no volume number", "afterRange": "Right after the last volume they collect (1–4 becomes 4.5)"],
+        "compilationVolume": ["none": "Leave the number empty (the volume still shows what the name says)", "afterRange": "Right after the last volume they collect (1–4 becomes 4.5)"],
         "magazines": ["perYear": "One series per year", "whole": "One series for the whole magazine"],
         "unnumberedFirst": ["inferFirst": "Read it as volume 1", "leaveEmpty": "Leave the volume empty"],
         "differentRelation": ["split": "Put them in separate series", "keep": "Keep them together"],
@@ -93,7 +93,6 @@ enum RuleLabels {
     static let parameters: [String: String] = [
         "treat": "What the words in it mean", "words": "Words", "patterns": "Regular expressions",
         "singleWhenMainExists": "Make a series of a single compilation when the main series exists",
-        "volumeOffset": "Offset for compilations and side stories",
         "minPrefix": "Fewest characters when the shared text is cut mid-word",
         "minWholeTitle": "Fewest characters when one whole title matches",
         "dictionary": "Dictionary",

@@ -97,13 +97,17 @@ enum RuleSchema {
         ("editions", ["sameWork", "separateBooks", "ignore"]),
         ("sources", ["sameWork", "separateBooks", "ignore"]),
         ("compilations", ["ownSeries", "inMainSeries", "notInSeries"]),
-        ("compilationVolume", ["offset", "none", "afterRange"]),
+        ("compilationVolume", ["none", "afterRange"]),
         ("magazines", ["perYear", "whole"]),
         ("unnumberedFirst", ["inferFirst", "leaveEmpty"]),
+        ("unnumberedVolume", ["asWritten", "leaveEmpty"]),
         ("differentRelation", ["split", "keep"]),
         ("differentGenre", ["split", "keep"]),
         ("subtitled", ["attach", "separate"]),
     ]
+
+    /// 廃止した方針の値。古い設定を読んだときに、書き間違いではなく「廃止」として警告し、既定へ落とす。
+    static let retiredPolicyChoices: [String: Set<String>] = ["compilationVolume": ["offset"]]
 
     /// 規則が名前で指せる辞書(実体は利用側が渡す)。
     static let dictionaries = ["english"]
@@ -116,9 +120,7 @@ enum RuleSchema {
         ]))),
         f("markers", .markers),
         f("grouping", .object(Node([
-            f("compilation", rule([
-                f("singleWhenMainExists", .bool), f("volumeOffset", .int(0...100_000)),
-            ], enabled: false)),
+            f("compilation", rule([f("singleWhenMainExists", .bool)], enabled: false)),
             f("volumeHead", rule()),
             f("sharedPrefix", rule([
                 f("minPrefix", .int(1...20)), f("minWholeTitle", .int(1...20)),

@@ -291,8 +291,7 @@ struct RuleCompiler {
                 stripsSources: policies["sources"] != "separateBooks"),
             compilation: .init(
                 placement: SeriesRules.Compilation.Placement(rawValue: policies["compilations"] ?? "") ?? .ownSeries,
-                volumeMode: SeriesRules.Compilation.VolumeMode(rawValue: policies["compilationVolume"] ?? "") ?? .offset,
-                volumeOffset: Double(grouping?["compilation"]?["volumeOffset"]?.intValue ?? 100)),
+                volumeMode: SeriesRules.Compilation.VolumeMode(rawValue: policies["compilationVolume"] ?? "") ?? .none),
             volume: .init(
                 readers: readers,
                 prefixes: words(number?["prefixes"], lists),
@@ -310,6 +309,7 @@ struct RuleCompiler {
                 sharedLeadingKanjiEnabled: enabled(leadingKanji),
                 sharedLeadingKanjiMinBooks: leadingKanji?["minBooks"]?.intValue ?? 2,
                 inferFirstVolume: policies["unnumberedFirst"] != "leaveEmpty",
+                unreadAsWritten: policies["unnumberedVolume"] != "leaveEmpty",
                 magazinesWhole: policies["magazines"] == "whole",
                 notFirstMarkers: words(firstVolume?["excludeMarkers"], lists),
                 notFirstPrefixes: words(firstVolume?["excludePrefixes"], lists)))
@@ -422,17 +422,17 @@ struct SeriesRules: Sendable {
 
     struct Compilation: Sendable {
         enum Placement: String, Sendable { case ownSeries, inMainSeries, notInSeries }
-        enum VolumeMode: String, Sendable { case offset, none, afterRange }
+        enum VolumeMode: String, Sendable { case none, afterRange }
         /// 方針 `compilations`。
         var placement: Placement
         /// 本編に含めたとき(`inMainSeries`)の巻の付け方(方針 `compilationVolume`)。
-        /// - `offset`: オフセットを足した数にする(既定。オフセット 100 の「総集編2」は 102。利用者の決定 2026-09-20)。
-        /// - `none`: 巻を付けない。
-        /// - `afterRange`: 収録範囲の最後の巻の直後にする(「X 総集編 1~4」は 4.5)。
+        /// - `none`: 並べ替えの数を付けない(**既定**)。巻数(表示)には名前のとおりの表記(「総集編1」)が入る。
+        /// - `afterRange`: 収録範囲の最後の巻の直後にする(「X 総集編 1~4」は 4.5)。**名前に書いてある範囲から
+        ///   導く**ので、これだけ残した。
+        ///
+        /// 2026-09-22、オフセット(100 を足して本編の後ろへ置く)は捨てた ―― 100 という数は名前のどこにも
+        /// 書いておらず、道具が作った順番だから(利用者の判断)。
         var volumeMode: VolumeMode
-        /// `offset` のときに足す数(規則 grouping.compilation.volumeOffset。画面の設定は規則の差分として持つ)。
-        /// 総集編も番外編も同じオフセットを使う(利用者の決定。分けない)。
-        var volumeOffset: Double
     }
 
     /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。
@@ -477,6 +477,9 @@ struct SeriesRules: Sendable {
         var sharedLeadingKanjiMinBooks: Int
         /// 方針 `unnumberedFirst`。
         var inferFirstVolume: Bool
+        /// 方針 `unnumberedVolume` = `asWritten`。巻として読めなかったら、シリーズ名より後ろの文字列を
+        /// そのまま巻数(表示)にする(並べ替えの数は付けない)。
+        var unreadAsWritten: Bool
         /// 方針 `magazines` が `whole`(雑誌全体で 1 つのシリーズにし、年と号を巻として読む)。
         var magazinesWhole: Bool
         /// シリーズ名より後ろにこの語があれば、1 巻の推定の候補にしない。

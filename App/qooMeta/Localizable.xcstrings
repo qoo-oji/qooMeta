@@ -977,23 +977,6 @@
         }
       }
     },
-    "Add the offset (Compilation 2 becomes 102)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add the offset (Compilation 2 becomes 102)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "決めた数を足す(総集編2 → 102)"
-          }
-        }
-      }
-    },
     "Added rule": {
       "extractionState": "manual",
       "localizations": {
@@ -3494,23 +3477,6 @@
         }
       }
     },
-    "Give them no volume number": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Give them no volume number"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "巻数を付けない"
-          }
-        }
-      }
-    },
     "Greek letters (α β γ)": {
       "extractionState": "manual",
       "localizations": {
@@ -4170,6 +4136,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "合併号とみなす、前後の号の差の上限"
+          }
+        }
+      }
+    },
+    "Leave the number empty (the volume still shows what the name says)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave the number empty (the volume still shows what the name says)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "並べ替えの数を空のままにする(巻数の表示には名前のとおりの表記が入ります)"
           }
         }
       }
@@ -4986,23 +4969,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "デフォルトは切です(macOS の作法)。すべてのウインドウを閉じてもアプリは動いたままで、Dock から次の一覧を開けます。入にすると、次にウインドウを閉じたときから効きます。"
-          }
-        }
-      }
-    },
-    "Offset for compilations and side stories": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offset for compilations and side stories"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "総集編・番外編に足す数"
           }
         }
       }

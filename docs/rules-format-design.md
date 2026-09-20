@@ -44,7 +44,7 @@
 | `editions` | **`sameWork`** / `separateBooks` / `ignore` | 版違い(フルカラー版 …)を、同じ作品の別の版とみなす(同じ巻。版違いだけの組はシリーズにしない)/ 別の本としてシリーズに数える(「X」と「X フルカラー版」で組になる)/ 印を見分けない |
 | `sources` | **`sameWork`** / `separateBooks` / `ignore` | 入手経路違い(DL版・特装版 …)。同上 |
 | `compilations` | **`ownSeries`** / `inMainSeries` / `notInSeries` | 総集編を「X 総集編」という別のシリーズにする / 本編のシリーズ「X」に含める / どのシリーズにも入れない |
-| `compilationVolume` | **`none`** / `afterRange` | (`inMainSeries` のとき)本編の中での総集編の巻。付けない(並びは末尾)/ 収録範囲が読めたら、その最後の巻の直後(「1~4」なら 4.5) |
+| `compilationVolume` | **`none`** / `afterRange` | (`inMainSeries` のとき)本編の中での総集編の巻。付けない(並びは末尾)/ 収録範囲が読めたら、その最後の巻の直後(「1~4」なら 4.5)。オフセットは 2026-09-22 に捨てた |
 | `magazines` | **`perYear`** / `whole` | 雑誌を 1 年ぶんごとのシリーズにする(巻は号)/ 雑誌全体で 1 つのシリーズにする(並べ替え用の数は 年 × 100 + 号) |
 | `unnumberedFirst` | **`inferFirst`** / `leaveEmpty` | 番号の無い 1 冊を 1 巻とみなす / みなさない |
 | `differentRelation` | **`split`** / `keep` | ネタ(関連)が違う本を別のシリーズに分ける / 分けない |
@@ -223,7 +223,7 @@
   ],
 
   "grouping": {
-    "compilation":  { "singleWhenMainExists": true, "volumeOffset": 100 },
+    "compilation":  { "singleWhenMainExists": true },
     "volumeHead":   { "enabled": true },
     "sharedPrefix": {
       "enabled": true, "minPrefix": 4, "minWholeTitle": 2,
@@ -253,7 +253,7 @@
       { "id": "greek",    "type": "greekLetter", "enabled": true },
       { "id": "roman",    "type": "romanNumeral", "enabled": true },
       { "id": "position", "type": "positionWord", "enabled": true, "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" },
-      { "id": "sequel", "type": "sequel", "enabled": true, "since": 3, "words": "@list:sequelWords" }
+      { "id": "sequel", "type": "sequel", "enabled": false, "since": 3, "words": "@list:sequelWords" }
     ],
     "inference": {
       "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },

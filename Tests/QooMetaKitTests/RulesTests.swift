@@ -33,7 +33,7 @@ import QooMetaRules
         #expect(c.errors.isEmpty, "\(c.errors)")
         #expect(c.warnings.isEmpty)
         let rules = try #require(c.rules)
-        #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .kanjiAlone, .wordNumber, .greek, .roman, .position, .sequel])
+        #expect(rules.series.volume.readers == [.ordinal, .number, .kanji, .kanjiAlone, .wordNumber, .greek, .roman, .position])
         #expect(rules.series.grouping.minPrefix == 4)
         #expect(rules.formats[nil].formats.count == 10)  // 既定は商業誌
         // 同梱の JSON と、規則ファイルを読む前に使うコードの側の並びは同じ。
@@ -104,22 +104,24 @@ import QooMetaRules
     @Test func readersCanBeDisabledAndReordered() throws {
         let c = Self.compile(Self.diff(#""volume": { "readers": { "roman": { "enabled": false }, "$order": ["position", "number"] } }"#))
         let rules = try #require(c.rules, "\(c.errors)")
-        #expect(rules.series.volume.readers == [.position, .number, .ordinal, .kanji, .kanjiAlone, .wordNumber, .greek, .sequel])
+        #expect(rules.series.volume.readers == [.position, .number, .ordinal, .kanji, .kanjiAlone, .wordNumber, .greek])
     }
 
-    /// 続きの語は一覧(`sequelWords`)で足せて、読み手ごと止められる。「そのまま読む語」を上に置けば、
-    /// その語で始まる本は続きの本にならない(段階をまたいで、上で取られた語には後ろの規則が反応しない)。
-    @Test func sequelWordsComeFromTheListAndCanBeStopped() throws {
-        let added = try #require(Self.compile(Self.diff(#""lists": { "sequelWords": { "$add": ["外伝"] } }"#)).rules)
-        #expect(RuleEngine(rules: added, dictionaries: [:]).volumes.extract(fromRemainder: " 外伝")?.text == "外伝")
+    /// **続きの語の読み手は、既定では止めてある**(2026-09-22、利用者の判断。語を並べて「続きもの」と決めつけるやり方は、
+    /// 名前の付け方がサークルごとに違う以上きりが無い)。入れたい利用者は、読み手を入にするだけで戻せる
+    /// ―― 語の一覧は同梱のまま残してある。
+    @Test func theSequelReaderIsOffButCanBeTurnedOn() throws {
+        #expect(builtinEngine.volumes.extract(fromRemainder: " アフターエピソード") == nil)
 
-        let kept = try #require(Self.compile(Self.diff(#""lists": { "plainWords": { "$add": ["アフターケア"] } }"#)).rules)
-        let keptEngine = RuleEngine(rules: kept, dictionaries: [:])
-        #expect(keptEngine.volumes.extract(fromRemainder: " アフターケア") == nil)
-        #expect(keptEngine.volumes.extract(fromRemainder: " アフターエピソード")?.text == "アフターエピソード")
-
-        let off = try #require(Self.compile(Self.diff(#""volume": { "readers": { "sequel": { "enabled": false } } }"#)).rules)
-        #expect(RuleEngine(rules: off, dictionaries: [:]).volumes.extract(fromRemainder: " アフターエピソード") == nil)
+        let on = try #require(Self.compile(Self.diff(#""volume": { "readers": { "sequel": { "enabled": true } } }"#)).rules)
+        let names = ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 アフターエピソード"]
+        let set = proposeSync(inputs(names), rules: on, dictionaries: [:])
+        #expect(set["002"]?.metadata.volume == "アフターエピソード")
+        #expect(set["002"]?.metadata.volumeSort == 3)        // 本編の最後の番号(2)の次。
+        // 止めてあるあいだも、名前に書いてある文字はそのまま巻数(表示)に入る(方針 unnumberedVolume)。
+        let off = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        #expect(off["002"]?.metadata.volume == "アフターエピソード")
+        #expect(off["002"]?.metadata.volumeSort == nil)
     }
 
     @Test func rulesAndParametersCanBeChanged() throws {
@@ -154,25 +156,22 @@ import QooMetaRules
         #expect(rules.series.volume.magazinesWhole)
     }
 
-    /// 総集編をシリーズに含める切り替えと、そのときのオフセットは、どちらも規則で決まる(画面の設定は規則の差分として持つ。
-    /// concept.md の原則 8)。**番外編は総集編ではなく「続きの本」**(2026-09-22、利用者の指示)なので、
-    /// オフセットではなく本編の最後の番号の次に置く。
-    @Test func compilationsJoinTheMainSeriesWithAnOffset() throws {
+    /// 総集編をシリーズに含めるかは規則で決まる(画面の設定は規則の差分として持つ。concept.md の原則 8)。
+    /// **本編に入れても、並べ替えの数は作らない**(2026-09-22、利用者の判断でオフセットを捨てた)。
+    /// 巻数(表示)には名前のとおりの表記が入り、番外編もほかの本と同じ扱いになる。
+    @Test func compilationsJoinTheMainSeriesWithoutAnInventedNumber() throws {
         let names = ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編2", "[架空工房] 月の庭 番外編"]
         let included = try #require(CompiledRules.builtin.applying(policies: ["compilations": "inMainSeries"]).rules)
         let set = proposeSync(inputs(names), rules: included, dictionaries: [:])
         #expect(seriesName(set, "002") == "月の庭")
         #expect(set["002"]?.metadata.volume == "総集編2")
-        #expect(set["002"]?.metadata.volumeSort == 102)      // 既定のオフセット 100 + 2。
+        #expect(set["002"]?.metadata.volumeSort == nil)
         #expect(set["003"]?.metadata.volume == "番外編")
-        #expect(set["003"]?.metadata.volumeSort == 3)        // 続きの本は、本編の最後の番号(2)の次。
-        let shifted = try #require(Self.compile(Self.diff("""
-        "grouping": { "compilation": { "volumeOffset": 500 } },
-        "policies": { "compilations": "inMainSeries" }
-        """)).rules)
-        let moved = proposeSync(inputs(names), rules: shifted, dictionaries: [:])
-        #expect(moved["002"]?.metadata.volumeSort == 502)
-        #expect(moved["003"]?.metadata.volumeSort == 3)        // オフセットが効くのは総集編だけ。
+        #expect(set["003"]?.metadata.volumeSort == nil)
+        // 古い設定に残った「オフセット」は、書き間違いではなく廃止として知らせ、既定で読む。
+        let old = Self.compile(Self.diff(#""policies": { "compilationVolume": "offset" }"#))
+        #expect(old.errors.isEmpty, "\(old.errors)")
+        #expect(old.warnings.map(\.code) == [.retiredID])
         // 含めない(既定)ときは、総集編だけが別のシリーズ。番外編は続きの本なので本編に残る。
         let apart = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
         #expect(seriesName(apart, "002") == "月の庭 総集編")

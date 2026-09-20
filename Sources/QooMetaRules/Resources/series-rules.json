@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.22.15",
+  "revision": "2026.09.22.18",
   "lists": {
     "ignoredInComparison": [
       " ", "　", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",", "「", "」", "『", "』", "【",
@@ -85,9 +85,10 @@
     "editions": "sameWork",
     "sources": "sameWork",
     "compilations": "ownSeries",
-    "compilationVolume": "offset",
+    "compilationVolume": "none",
     "magazines": "perYear",
     "unnumberedFirst": "inferFirst",
+    "unnumberedVolume": "asWritten",
     "differentRelation": "split",
     "differentGenre": "split",
     "subtitled": "attach"
@@ -101,8 +102,7 @@
   ],
   "grouping": {
     "compilation": {
-      "singleWhenMainExists": true,
-      "volumeOffset": 100
+      "singleWhenMainExists": true
     },
     "volumeHead": { "enabled": true },
     "sharedPrefix": {
@@ -149,7 +149,7 @@
         "middle": "@list:positionMiddle",
         "last": "@list:positionLast"
       },
-      { "id": "sequel", "type": "sequel", "enabled": true, "since": 3, "words": "@list:sequelWords" }
+      { "id": "sequel", "type": "sequel", "enabled": false, "since": 3, "words": "@list:sequelWords" }
     ],
     "followers": { "since": 5, "characters": "@list:volumeFollowers" },
     "inference": {
@@ -157,6 +157,6 @@
       "firstVolume": { "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
     }
   },
-  "retiredIDs": ["reject-edition-prefix", "editionPrefixWords"],
+  "retiredIDs": ["reject-edition-prefix", "editionPrefixWords", "volumeOffset"],
   "aliases": {}
 }

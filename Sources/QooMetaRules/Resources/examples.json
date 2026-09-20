@@ -181,7 +181,7 @@
       ]
     },
     {
-      "id": "subtitled-unnumbered-book-is-the-first",
+      "id": "a-subtitled-book-is-not-taken-for-the-first",
       "files": [
         "[架空工房] 月影 はじまりの章",
         "[架空工房] 月影 2"
@@ -189,8 +189,8 @@
       "expect": [
         {
           "series": "月影",
-          "volumeSort": 1,
-          "inferred": true
+          "volumeSort": null,
+          "inferred": false
         },
         {
           "series": "月影",
@@ -218,7 +218,7 @@
         },
         {
           "series": "星降る夜の喫茶店",
-          "volume": null,
+          "volume": "冬の章",
           "inferred": false
         },
         {
@@ -240,11 +240,11 @@
       "expect": [
         {
           "inferred": false,
-          "volume": null
+          "volume": "春の章"
         },
         {
           "inferred": false,
-          "volume": null
+          "volume": "冬の章"
         },
         {
           "volumeSort": 2
@@ -286,7 +286,7 @@
       "expect": [
         {
           "inferred": false,
-          "volume": null
+          "volume": "再録"
         },
         {
           "volumeSort": 2
@@ -335,7 +335,7 @@
         },
         {
           "series": "雪鍋",
-          "volume": null,
+          "volume": "exとっておき",
           "inferred": false
         }
       ],
@@ -355,8 +355,8 @@
       "expect": [
         {
           "series": "雪鍋",
-          "volumeSort": 1,
-          "inferred": true
+          "volumeSort": null,
+          "inferred": false
         },
         {
           "series": "雪鍋",
@@ -531,10 +531,12 @@
       ],
       "expect": [
         {
-          "volume": null
+          "volume": "にっこり",
+          "volumeSort": null
         },
         {
-          "volume": null
+          "volume": "ごちそう",
+          "volumeSort": null
         }
       ],
       "covers": [
@@ -584,11 +586,13 @@
       "expect": [
         {
           "series": "花の丘",
-          "volume": null
+          "volume": "ふたつの影",
+          "volumeSort": null
         },
         {
           "series": "花の丘",
-          "volume": null
+          "volume": "みっつの星",
+          "volumeSort": null
         }
       ],
       "covers": [
@@ -606,8 +610,9 @@
           "volume": "2"
         },
         {
-          "volume": "1",
-          "inferred": true
+          "volume": "三人の夜",
+          "inferred": false,
+          "volumeSort": null
         }
       ],
       "covers": [
@@ -823,7 +828,8 @@
       "expect": [
         {
           "series": "星の海",
-          "volume": null
+          "volume": "二",
+          "volumeSort": null
         },
         {
           "series": "星の海",
@@ -832,7 +838,8 @@
         },
         {
           "series": "星の海",
-          "volume": null
+          "volume": "参加者たち",
+          "volumeSort": null
         }
       ],
       "covers": [
@@ -1530,7 +1537,7 @@
         {
           "title": "月の庭 フルカラー総集編",
           "series": "月の庭",
-          "volume": null,
+          "volume": "フルカラー総集編",
           "editionMark": false
         }
       ],
@@ -1553,7 +1560,7 @@
         {
           "title": "月の庭 フルカラー版総集編",
           "series": "月の庭",
-          "volume": null,
+          "volume": "フルカラー版総集編",
           "editionMark": false
         },
         {
@@ -1611,11 +1618,11 @@
         },
         {
           "series": "星降る夜の喫茶店",
-          "volume": null
+          "volume": "冬の章"
         },
         {
           "series": "星降る夜の喫茶店",
-          "volume": null
+          "volume": "おかわり"
         },
         {
           "series": null
@@ -2237,7 +2244,8 @@
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
         "[架空工房] 月の庭 総集編",
-        "[架空工房] 月の庭 総集編2"
+        "[架空工房] 月の庭 総集編2",
+        "[架空工房] 月の庭 まとめ版"
       ],
       "expect": [
         {
@@ -2251,55 +2259,25 @@
         {
           "series": "月の庭",
           "volume": "総集編",
-          "volumeSort": 101,
+          "volumeSort": null,
           "inferred": false
         },
         {
           "series": "月の庭",
           "volume": "総集編2",
-          "volumeSort": 102
+          "volumeSort": null
+        },
+        {
+          "series": "月の庭",
+          "volume": "まとめ版",
+          "volumeSort": null
         }
       ],
       "covers": [
         "compilations",
         "compilationVolume",
-        "compilation"
-      ]
-    },
-    {
-      "id": "a-side-story-follows-the-numbering-not-the-offset",
-      "policies": {
-        "compilations": "inMainSeries"
-      },
-      "files": [
-        "[架空工房] 月の庭 1",
-        "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 総集編",
-        "[架空工房] 月の庭 番外編"
-      ],
-      "expect": [
-        {
-          "series": "月の庭",
-          "volumeSort": 1
-        },
-        {
-          "series": "月の庭",
-          "volumeSort": 2
-        },
-        {
-          "series": "月の庭",
-          "volume": "総集編",
-          "volumeSort": 101
-        },
-        {
-          "series": "月の庭",
-          "volume": "番外編",
-          "volumeSort": 3
-        }
-      ],
-      "covers": [
-        "sequel",
-        "compilationVolume"
+        "compilation",
+        "unnumberedVolume"
       ]
     },
     {
@@ -2324,7 +2302,7 @@
         },
         {
           "series": "月の庭",
-          "volume": null,
+          "volume": "総集編",
           "inferred": false
         }
       ],
@@ -2397,41 +2375,12 @@
       ]
     },
     {
-      "id": "a-summary-edition-in-the-main-series-takes-the-offset",
-      "policies": {
-        "compilations": "inMainSeries"
-      },
+      "id": "text-instead-of-a-number-is-the-volume-as-written",
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 まとめ版"
-      ],
-      "expect": [
-        {
-          "volumeSort": 1
-        },
-        {
-          "volumeSort": 2
-        },
-        {
-          "series": "月の庭",
-          "volume": "まとめ版",
-          "volumeSort": 101,
-          "inferred": false
-        }
-      ],
-      "covers": [
-        "compilation",
-        "compilationVolume",
-        "compilations"
-      ]
-    },
-    {
-      "id": "after-story-follows-the-last-numbered-volume",
-      "files": [
-        "[架空工房] 月の庭 1",
-        "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 アフターエピソード"
+        "[架空工房] 月の庭 アフターエピソード",
+        "[架空工房] 月の庭 夏美の場合"
       ],
       "expect": [
         {
@@ -2447,16 +2396,22 @@
         {
           "series": "月の庭",
           "volume": "アフターエピソード",
-          "volumeSort": 3,
+          "volumeSort": null,
+          "inferred": false
+        },
+        {
+          "series": "月の庭",
+          "volume": "夏美の場合",
+          "volumeSort": null,
           "inferred": false
         }
       ],
       "covers": [
-        "sequel"
+        "unnumberedVolume"
       ]
     },
     {
-      "id": "after-story-counts-the-numbering-not-the-compilation",
+      "id": "a-compilation-in-the-main-series-shows-its-text",
       "policies": {
         "compilations": "inMainSeries"
       },
@@ -2478,120 +2433,17 @@
         {
           "series": "月の庭",
           "volume": "総集編",
-          "volumeSort": 101
+          "volumeSort": null
         },
         {
           "series": "月の庭",
           "volume": "後日談",
-          "volumeSort": 7
+          "volumeSort": null
         }
       ],
       "covers": [
-        "sequel",
+        "unnumberedVolume",
         "compilationVolume"
-      ]
-    },
-    {
-      "id": "after-story-with-its-own-number",
-      "files": [
-        "[架空工房] 月の庭 1",
-        "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 その後",
-        "[架空工房] 月の庭 後日談 2"
-      ],
-      "expect": [
-        {
-          "volumeSort": 1
-        },
-        {
-          "volumeSort": 2
-        },
-        {
-          "series": "月の庭",
-          "volume": "その後",
-          "volumeSort": 3
-        },
-        {
-          "series": "月の庭",
-          "volume": "後日談 2",
-          "volumeSort": 4
-        }
-      ],
-      "covers": [
-        "sequel"
-      ]
-    },
-    {
-      "id": "several-sequels-are-numbered-in-name-order",
-      "files": [
-        "[架空工房] 月の庭 1",
-        "[架空工房] 月の庭 2",
-        "[架空工房] 月の庭 おまけ本",
-        "[架空工房] 月の庭 アフターエピソード",
-        "[架空工房] 月の庭 外伝"
-      ],
-      "expect": [
-        {
-          "volumeSort": 1
-        },
-        {
-          "volumeSort": 2
-        },
-        {
-          "series": "月の庭",
-          "volume": "おまけ本",
-          "volumeSort": 3
-        },
-        {
-          "series": "月の庭",
-          "volume": "アフターエピソード",
-          "volumeSort": 4
-        },
-        {
-          "series": "月の庭",
-          "volume": "外伝",
-          "volumeSort": 5
-        }
-      ],
-      "covers": [
-        "sequel",
-        "firstVolume"
-      ]
-    },
-    {
-      "id": "a-single-character-stands-in-for-the-numbering",
-      "files": [
-        "[架空工房] 星の海 1",
-        "[架空工房] 星の海 2",
-        "[架空工房] 星の海 EXTRA",
-        "[架空工房] 星の海 続",
-        "[架空工房] 星の海 補"
-      ],
-      "expect": [
-        {
-          "volumeSort": 1
-        },
-        {
-          "volumeSort": 2
-        },
-        {
-          "series": "星の海",
-          "volume": "EXTRA",
-          "volumeSort": 3
-        },
-        {
-          "series": "星の海",
-          "volume": "続",
-          "volumeSort": 4
-        },
-        {
-          "series": "星の海",
-          "volume": "補",
-          "volumeSort": 5
-        }
-      ],
-      "covers": [
-        "sequel"
       ]
     },
     {
@@ -2632,49 +2484,6 @@
       ]
     },
     {
-      "id": "a-side-story-follows-the-numbering-too",
-      "files": [
-        "[架空工房] 星降る夜の喫茶店 外伝",
-        "[架空工房] 星降る夜の喫茶店 2"
-      ],
-      "expect": [
-        {
-          "series": "星降る夜の喫茶店",
-          "volume": "外伝",
-          "volumeSort": 3,
-          "inferred": false
-        },
-        {
-          "series": "星降る夜の喫茶店",
-          "volumeSort": 2
-        }
-      ],
-      "covers": [
-        "sequel"
-      ]
-    },
-    {
-      "id": "after-story-without-any-numbering-keeps-the-words-only",
-      "files": [
-        "[架空工房] 月の庭 夏の章",
-        "[架空工房] 月の庭 アフターエピソード"
-      ],
-      "expect": [
-        {
-          "series": "月の庭",
-          "volume": null
-        },
-        {
-          "series": "月の庭",
-          "volume": "アフターエピソード",
-          "volumeSort": null
-        }
-      ],
-      "covers": [
-        "sequel"
-      ]
-    },
-    {
       "id": "policy-compilation-volume-after-range",
       "policies": {
         "compilations": "inMainSeries",
@@ -2698,7 +2507,7 @@
         },
         {
           "series": "月の庭",
-          "volume": null
+          "volume": "総集編"
         },
         {
           "series": "月の庭",
@@ -2756,17 +2565,17 @@
         {
           "series": "月の庭",
           "volume": "総集編",
-          "volumeSort": 101
+          "volumeSort": null
         },
         {
           "series": "月の庭",
           "volume": "総集編II",
-          "volumeSort": 102
+          "volumeSort": null
         },
         {
           "series": "月の庭",
           "volume": "総集編III",
-          "volumeSort": 103
+          "volumeSort": null
         }
       ],
       "covers": [
@@ -2802,7 +2611,7 @@
         {
           "series": "月の庭",
           "volume": "総集編",
-          "volumeSort": 101
+          "volumeSort": null
         }
       ],
       "covers": [

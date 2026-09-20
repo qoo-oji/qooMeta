@@ -151,6 +151,11 @@ struct RuleLoader {
                 if full { report(.missingKey, Self.join(path, name)) }
                 continue
             }
+            // 廃止した値(古い設定に残っている)は、書き間違いではなく廃止として知らせ、既定を使う。
+            if let s = v.stringValue, RuleSchema.retiredPolicyChoices[name]?.contains(s) == true {
+                report(.retiredID, Self.join(path, name), s)
+                continue
+            }
             checkChoice(v, choices, Self.join(path, name))
         }
         for key in o.keys.sorted() where !RuleSchema.policies.contains(where: { $0.name == key }) {
@@ -438,7 +443,9 @@ struct RuleLoader {
         if let policies = diff["policies"] {
             checkPolicies(policies, "policies", full: false)
             if case .object(var current) = merged["policies"] ?? .object([:]), let changes = policies.objectValue {
-                for (name, v) in changes where RuleSchema.policies.contains(where: { $0.name == name }) && v.stringValue != nil {
+                for (name, v) in changes where RuleSchema.policies.contains(where: { $0.name == name })
+                    && v.stringValue != nil
+                    && RuleSchema.retiredPolicyChoices[name]?.contains(v.stringValue!) != true {
                     current[name] = v
                     changedPaths.append("policies.\(name)")
                 }
