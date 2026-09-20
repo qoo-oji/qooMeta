@@ -129,8 +129,27 @@ struct BookTableView: View {
         let preview: Workspace.SeriesChangePreview
     }
 
-    /// ファイル名のほかの列(どれも見出しで昇順・降順に並べ替えられる)。
-    static let columns: [BookMetadata.Field] = [.title, .authors, .genre, .event, .source, .info, .series, .volume]
+    /// 列の既定の並び(利用者の指示 2026-09-21)。左から ファイル名・ジャンル・著者・タイトル・シリーズ・
+    /// 巻数(表示)・巻数(並べ替え用)・原作・イベント・情報。**書いた順がそのまま画面の順**なので、
+    /// 巻数(並べ替え用)を挟むために欄の列を 2 つに分ける。並べ替え・表示する列の選択は利用者が変えられる。
+    static let columns: [BookMetadata.Field] = [.genre, .authors, .title, .series, .volume]
+    static let columnsAfterVolume: [BookMetadata.Field] = [.source, .event, .info]
+
+    /// 欄ごとの幅。**中身に合わせた自動調整は Table に無い**ので、欄ごとに決める(2026-09-21、利用者の指摘)。
+    /// 短い欄には上限を付ける ―― 上限が無いと、余った幅をどの列も等分に受け取り、3 文字のジャンルの列が
+    /// 名前の列と同じくらい広くなる。広がってほしいのは、ファイル名・タイトル・シリーズ・著者だけ。
+    static func width(_ field: BookMetadata.Field) -> (min: CGFloat, ideal: CGFloat, max: CGFloat?) {
+        switch field {
+        case .genre: (56, 88, 160)
+        case .authors: (80, 160, nil)
+        case .title: (120, 240, nil)
+        case .series: (100, 180, nil)
+        case .volume: (40, 72, 140)
+        case .source: (70, 130, 220)
+        case .event: (56, 100, 200)
+        case .info: (56, 110, 220)
+        }
+    }
 
     var body: some View {
         // 列は Group でまとめない(Group に入れた列は見出しを押しても並べ替わらない)。欄の列は TableColumnForEach で作る。
@@ -141,21 +160,17 @@ struct BookTableView: View {
                 .width(min: 160, ideal: 360)
                 .customizationID("fileName")
                 .disabledCustomizationBehavior(.visibility)
+            TableColumnForEach(Self.columns, id: \.self) { field in
+                fieldColumn(field)
+            }
             TableColumn("Volume (for sorting)", value: \BookRow[sortKey: .volume]) { book in
                 Text(book.volumeSortText)
                     .help("Derived from the volume as written, by the rules for reading a volume")
             }
-            .width(min: 60, ideal: 90)
+            .width(min: 50, ideal: 72, max: 110)
             .customizationID("volumeSort")
-            TableColumnForEach(Self.columns, id: \.self) { field in
-                TableColumn(LocalizedStringKey(field.labelKey), sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
-                    EditableCell(text: book[text: field], isEdited: isEdited(field, book),
-                                 canEdit: canEdit(field, book), help: help(field, book)) { value in
-                        commit(field, value, for: book)
-                    }
-                }
-                .width(min: field == .volume ? 40 : 80, ideal: field == .volume ? 60 : field == .title ? 200 : 140)
-                .customizationID(field.rawValue)
+            TableColumnForEach(Self.columnsAfterVolume, id: \.self) { field in
+                fieldColumn(field)
             }
         }
         .modifier(HideTopScrollEdgeEffect())
@@ -168,6 +183,20 @@ struct BookTableView: View {
                   },
                   secondaryButton: .cancel())
         }
+    }
+
+    /// 欄の列 1 つ(見出しを押して並べ替えられ、セルを 2 回押すと直せる)。
+    private func fieldColumn(_ field: BookMetadata.Field) -> some TableColumnContent<BookRow, KeyPathComparator<BookRow>> {
+        let size = Self.width(field)
+        return TableColumn(LocalizedStringKey(field.labelKey),
+                           sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
+            EditableCell(text: book[text: field], isEdited: isEdited(field, book),
+                         canEdit: canEdit(field, book), help: help(field, book)) { value in
+                commit(field, value, for: book)
+            }
+        }
+        .width(min: size.min, ideal: size.ideal, max: size.max)
+        .customizationID(field.rawValue)
     }
 
     /// 巻数は、シリーズ名の決まっている本にしか入らない(シリーズの中の番号なので)。
