@@ -68,6 +68,48 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(v?.number == nil)
     }
 
+    /// 続きの語(「アフター」「後日談」)は、表記だけを読む。数はシリーズの中の文脈で決まる。
+    @Test func sequelWordsAreReadAsTextOnly() {
+        let v = builtinEngine.volumes.extract(fromRemainder: " アフターエピソード")
+        #expect(v?.text == "アフターエピソード")
+        #expect(v?.number == nil)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 後日談 2")?.text == "後日談 2")
+    }
+
+    /// 続きの語は「巻だけでできている形」には数えない。ここへ入れると、シリーズの組み立ての 1 段目が
+    /// 「夏の|アフターヌーン」をタイトル + 巻と読んで、関わりの無い本を 1 つのシリーズにしてしまう。
+    @Test func sequelWordsAreNotAVolumeOnTheirOwn() {
+        #expect(!builtinEngine.volumes.isWholeVolume("アフターエピソード"))
+        #expect(!builtinEngine.volumes.isWholeVolume("後日談"))
+        #expect(builtinEngine.volumes.isWholeVolume("第3巻"))
+    }
+
+    /// 大字(壱・弐・参)は、前に語も後ろに単位も無くても巻。ふつうの漢数字は、題名の言葉と見分けが
+    /// 付かないので読まない(「二」は読まず、「参加者たち」も 3 にしない)。
+    @Test func oldStyleKanjiNumeralsStandAlone() {
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 弐")?.number == 2)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 参")?.number == 3)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 肆")?.number == 4)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 伍")?.number == 5)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 第弐巻")?.number == 2)
+        // 旧字体(壹 = 一、貳 = 二、參 = 三)も同じ(利用者の指摘 2026-09-22)。区切りの中に挟まれた形も読む。
+        #expect(builtinEngine.volumes.extract(fromRemainder: "-壹-夏の章")?.number == 1)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 貳")?.number == 2)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 第參巻")?.number == 3)
+        // 同梱の一覧は壱〜伍とその旧字体まで。それより先の大字(陸・柒・捌・玖・拾 …)は、使う利用者が足す。
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 弐拾") == nil)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 二") == nil)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 参加者たち") == nil)
+    }
+
+    /// 数を語で書いた巻(利用者の指示 2026-09-22)。語のまとまりとして書かれているときだけ読む。
+    @Test func numbersWrittenAsWords() {
+        #expect(builtinEngine.volumes.extract(fromRemainder: " ふたつ")?.number == 2)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " みっかめ")?.number == 3)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " いつつ")?.text == "いつつ")
+        #expect(builtinEngine.volumes.extract(fromRemainder: " ふたつの影") == nil)
+    }
+
     @Test(arguments: [" 2人の夜", " 冬の章", ""])
     func notVolumes(remainder: String) {
         #expect(builtinEngine.volumes.extract(fromRemainder: remainder) == nil)

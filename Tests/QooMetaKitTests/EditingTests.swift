@@ -154,7 +154,7 @@ import QooMetaRules
         #expect(!catalog.policies.contains { $0.isModified })
         #expect(!catalog.entries.contains { $0.isModified })
         #expect(catalog.entries.map(\.id).contains("reject-common-english"))
-        #expect(catalog.entries.filter { $0.stage == "volume.readers" }.map(\.id) == ["ordinal", "number", "kanji", "greek", "roman", "position"])
+        #expect(catalog.entries.filter { $0.stage == "volume.readers" }.map(\.id) == ["ordinal", "number", "kanji", "kanjiAlone", "wordNumber", "greek", "roman", "position", "sequel"])
         #expect(catalog.lists.first { $0.id == "labelIntroducers" }?.added.isEmpty == true)
     }
 

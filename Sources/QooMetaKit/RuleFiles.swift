@@ -39,7 +39,7 @@ public struct RulesCompilation: Sendable {
 /// 組み立て済みの規則。
 public struct CompiledRules: Sendable {
     /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
-    public static let engineLevel = 2
+    public static let engineLevel = 6
 
     let series: SeriesRules
     /// 名前を付けた型の並び。本ごとに、どのプリセットで読むかを選べる(フォルダごとに分けたい利用者のため)。
@@ -255,6 +255,7 @@ struct RuleCompiler {
             return SeriesRules.Reader(rawValue: id)
         }
         let number = reader("number"), kanji = reader("kanji"), position = reader("position")
+        let sequel = reader("sequel"), kanjiAlone = reader("kanjiAlone"), wordNumber = reader("wordNumber")
         let inference = volume?["inference"]
         let leadingKanji = inference?["sharedLeadingKanji"], firstVolume = inference?["firstVolume"]
 
@@ -299,8 +300,12 @@ struct RuleCompiler {
                 wholeOnlyCounters: words(number?["wholeOnlyCounters"], lists),
                 kanjiPrefixes: words(kanji?["prefixes"], lists),
                 kanjiCounters: words(kanji?["counters"], lists),
+                followers: words(volume?["followers"]?["characters"], lists),
+                numberWords: pairs(wordNumber?["words"], lists).compactMapValues(Double.init),
+                kanjiAloneDigits: words(kanjiAlone?["digits"], lists),
                 positionWords: .init(first: words(position?["first"], lists), middle: words(position?["middle"], lists),
                                      last: words(position?["last"], lists)),
+                sequelWords: words(sequel?["words"], lists),
                 mergedIssueMaxSpan: number?["mergedSpan"]?.intValue ?? 3,
                 sharedLeadingKanjiEnabled: enabled(leadingKanji),
                 sharedLeadingKanjiMinBooks: leadingKanji?["minBooks"]?.intValue ?? 2,
@@ -432,7 +437,7 @@ struct SeriesRules: Sendable {
 
     /// 巻の読み手(docs/rules-format-design.md の `volume.readers`)。
     enum Reader: String, Sendable {
-        case ordinal, number, kanji, greek, roman, position
+        case ordinal, number, kanji, kanjiAlone, wordNumber, greek, roman, position, sequel
     }
 
     struct Volume: Sendable {
@@ -454,7 +459,18 @@ struct SeriesRules: Sendable {
         var kanjiPrefixes: [String]
         /// 漢数字の後ろに付く単位。
         var kanjiCounters: [String]
+        /// 巻の番号のすぐ後ろに来てよい文字(規則 volume.followers)。単位でも空白でもない区切り
+        /// (「X 4ー純愛編ー」の「ー」)。ここに無い文字が続くと、その数字は巻として読まない。
+        var followers: [String]
+        /// 数を語で書いた巻(「ふたつ」= 2、「みっかめ」= 3)。語 → 数の対応表(規則 volume.readers の wordNumber)。
+        var numberWords: [String: Double]
+        /// 前に語も後ろに単位も無しで、それだけで巻と読んでよい漢数字(大字。壱・弐・参)。
+        /// ふつうの漢数字(一・二・三)をここへ入れないのは、1 冊だけ見ると題名の言葉と見分けが付かないため。
+        var kanjiAloneDigits: [String]
         var positionWords: PositionWords
+        /// 本編のナンバリングの後ろに続くことを示す語(「アフター」「後日談」…)。数はシリーズの中の文脈で決める
+        /// (ProposalFinalizer.numberSequels)。
+        var sequelWords: [String]
         /// 「36-37」を合併号とみなす、前後の差の上限。
         var mergedIssueMaxSpan: Int
         var sharedLeadingKanjiEnabled: Bool
@@ -489,6 +505,13 @@ extension SeriesRules.Volume {
     }
 
     var prefixPattern: String { alternation(prefixes, allowDot: true) }
+    /// 巻の番号の後ろに来てよい文字。**文字の集合([…])ではなく選択肢**で書く ―― 集合にすると、利用者の
+    /// 並べた文字のあいだの「-」が範囲の意味になってしまう(「~-・」が U+007E〜U+30FB の範囲になる)。
+    var followerPattern: String {
+        let items = followers.filter { !$0.isEmpty }
+        return items.isEmpty ? "(?!)"
+            : "(?:" + items.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")"
+    }
     /// 漢数字の前に付く語(英字・記号でないもの)。
     var kanjiPrefixPattern: String { alternation(kanjiPrefixes.filter { !$0.allSatisfy(\.isASCII) }) }
     var positionPattern: String { alternation(positionWords.first + positionWords.middle + positionWords.last) }

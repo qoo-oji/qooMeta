@@ -83,7 +83,7 @@
 | `revision` | 規則ファイル(作者が書く印。日付など) | 中身を改訂したとき | 不具合の報告に添える。キャッシュの判定には使わない(本体が内容のハッシュを別に計算する) |
 | パッケージの版(SemVer) | Git のタグ | Swift の API を変えたとき | 利用側の依存の指定 |
 
-- `schemaVersion` は今 2。`engineLevel` は第 2 版の最初の実装を 1 とする。
+- `schemaVersion` は今 2。`engineLevel` は第 2 版の最初の実装を 1 とし、**今は 6**(2: 語の規則を順番のある規則表にした / 3: 続きの巻の読み手 `sequel` と一覧 `sequelWords` / 4: 大字の巻の読み手 `kanjiAlone` と一覧 `kanjiAloneDigits` / 5: 規則 `volume.followers` と一覧 `volumeFollowers` / 6: 語で書いた数の読み手 `wordNumber` と一覧 `numberWords`、一覧の種類「語 → 語」)。
 - 規則・パラメータ・一覧を足したら `engineLevel` を 1 上げ、足したものに `"since": その番号` を書く。
 - 第 1 版(`version: 1`、公開から間もなく利用者がいない)からのマイグレーションは、仕組みだけ用意して後回しにする。
 
@@ -196,9 +196,13 @@
     "volumePrefixes": ["vol", "volume", "ver", "no", "#", "第", "その", "其ノ"],
     "volumeCounters": ["月号", "月", "巻", "話", "号", "章", "弾", "つめ"],
     "kanjiCounters": ["巻", "話", "号", "章"],
+    "kanjiAloneDigits": ["壱", "弐", "参", "肆", "伍", "壹", "貳", "參"],
+    "volumeFollowers": ["~", "-", "・", "!", "?", ".", ")", "ー"],
+    "numberWords": { "ふたつ": "2", "みっつ": "3", "よっつ": "4", "いつつ": "5" },
     "positionFirst": ["上", "上巻", "前編"],
     "positionMiddle": ["中", "中巻", "中編"],
     "positionLast": ["下", "下巻", "後編"],
+    "sequelWords": ["アフター", "後日談", "その後", "外伝", "おまけ"],
     "notFirstMarkers": ["総集編", "番外編", "外伝"],
     "notFirstPrefixes": ["ex", "extra", "sp"]
   },
@@ -248,7 +252,8 @@
       { "id": "kanji",    "type": "kanjiNumber", "enabled": true, "prefixes": "@list:volumePrefixes", "counters": "@list:kanjiCounters" },
       { "id": "greek",    "type": "greekLetter", "enabled": true },
       { "id": "roman",    "type": "romanNumeral", "enabled": true },
-      { "id": "position", "type": "positionWord", "enabled": true, "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" }
+      { "id": "position", "type": "positionWord", "enabled": true, "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" },
+      { "id": "sequel", "type": "sequel", "enabled": true, "since": 3, "words": "@list:sequelWords" }
     ],
     "inference": {
       "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },

@@ -14,6 +14,8 @@ enum RuleSchema {
         case words
         /// 1 文字 → 1 文字の対応表(異体字、閉じ括弧 → 開き括弧)。
         case pairs
+        /// 語 → 語の対応表(ひらがなの数え方 → 数字)。
+        case wordPairs
     }
 
     indirect enum Shape: Sendable {
@@ -83,8 +85,11 @@ enum RuleSchema {
         "trimTrailing": .characters, "keepFollowing": .characters, "brackets": .pairs, "labelIntroducers": .words,
         "editionWords": .words, "sourceWords": .words, "compilationWords": .words,
         "plainWords": .words, "standaloneWords": .words, "volumePrefixes": .words,
-        "volumeCounters": .words, "wholeOnlyCounters": .words, "kanjiCounters": .words, "positionFirst": .words,
-        "positionMiddle": .words, "positionLast": .words, "notFirstMarkers": .words, "notFirstPrefixes": .words,
+        "volumeCounters": .words, "wholeOnlyCounters": .words, "kanjiCounters": .words,
+        "kanjiAloneDigits": .words, "volumeFollowers": .characters, "numberWords": .wordPairs,
+        "positionFirst": .words,
+        "positionMiddle": .words, "positionLast": .words, "sequelWords": .words,
+        "notFirstMarkers": .words, "notFirstPrefixes": .words,
     ]
 
     /// 方針(好みで選ぶ扱い)と、選べる値。最初の値が既定(今の扱い)。
@@ -134,6 +139,8 @@ enum RuleSchema {
         ]))),
         f("volume", .object(Node([
             f("readers", .readers),
+            // 巻の番号のすぐ後ろに来てよい文字。読み手ごとではなく、番号を読むどの読み手にも同じように効く。
+            f("followers", rule([f("characters", .list(.characters))], enabled: false)),
             f("inference", .object(Node([
                 f("sharedLeadingKanji", rule([f("minBooks", .int(2...10))])),
                 f("firstVolume", rule([f("excludeMarkers", .list(.words)), f("excludePrefixes", .list(.words))], enabled: false)),
@@ -162,9 +169,17 @@ enum RuleSchema {
         ("number", "number", [f("prefixes", .list(.words)), f("counters", .list(.words)),
                               f("wholeOnlyCounters", .list(.words)), f("mergedSpan", .int(0...10))]),
         ("kanji", "kanjiNumber", [f("prefixes", .list(.words)), f("counters", .list(.words))]),
+        // 大字(壱・弐・参)は、前に語も後ろに単位も無くても巻と読める。ふつうの漢数字と分けてあるのは、
+        // 「三人の夜」のような題名の言葉と見分けが付くのが大字だけだから。
+        ("kanjiAlone", "kanjiAloneNumeral", [Field(name: "digits", shape: .list(.words), since: 4)]),
+        // 数を語で書いた巻(「ふたつ」「みっかめ」)。どの語がどの数かは一覧が決める。
+        ("wordNumber", "numberWord", [Field(name: "words", shape: .list(.wordPairs), since: 6)]),
         ("greek", "greekLetter", []),
         ("roman", "romanNumeral", []),
         ("position", "positionWord", [f("first", .list(.words)), f("middle", .list(.words)), f("last", .list(.words))]),
+        // 本編のナンバリングの後ろに続く本(「アフターエピソード」「後日談」)。数はシリーズの中の文脈で決まる
+        // ので、読み手は表記だけを返す(位置の語と同じ作り)。
+        ("sequel", "sequel", [Field(name: "words", shape: .list(.words), since: 3)]),
     ]
 
     // MARK: - ファイル名のフォーマット

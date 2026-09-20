@@ -299,10 +299,26 @@ struct SeriesGrouper: Sendable {
                 let members = byName[key]!
                 let hasMain = members[0].1.mains.contains { mainKeys.contains(String(text.comparable($0).key)) }
                 // 本編に含める: 本編のシリーズがあれば、その組へ入れる。無ければ既定と同じく「X 総集編」にする。
-                if placement == .inMainSeries, let main = (groupsBefore..<groups.count).first(where: { i in
-                    members[0].1.mains.contains { text.key($0) == text.key(groups[i].ruleName) }
-                }) {
-                    groups[main].memberIDs = (groups[main].memberIDs + members.map(\.0.id)).sorted()
+                if placement == .inMainSeries,
+                   let main = mainGroup(for: members[0].1.mains, in: groups, from: groupsBefore) {
+                    groups[main.index].memberIDs = (groups[main.index].memberIDs + members.map(\.0.id)).sorted()
+                    if let name = main.rename { groups[main.index].ruleName = name }
+                    continue
+                }
+                // 本編が組になっていなくても、本編の本が残っているなら、その本と総集編で 1 つのシリーズにする
+                // (利用者の事例 2026-09-22: 1〜10 は総集編に入っているので捨て、本編は 11 の 1 冊だけ。
+                // 本編が 1 冊では組にならないので、総集編だけが「X 総集編」の別シリーズになっていた)。
+                if placement == .inMainSeries,
+                   let main = mainBooksFor(members[0].1.mains, items: items,
+                                           claimed: Set(groups[groupsBefore...].flatMap(\.memberIDs))) {
+                    var g = CandidateGroup(
+                        id: 0, writerKey: writerKey.components(separatedBy: "\u{1}")[0],
+                        memberIDs: (main.ids + members.map(\.0.id)).sorted(), ruleName: main.name,
+                        cleanBoundary: true, writersSharingPrefix: 0)
+                    // 本編が 1 冊でも作る組(総集編が本編の名前を言っているので、シリーズがあることは分かっている)。
+                    g.allowsSingle = true
+                    g.evidence = .compilation
+                    groups.append(g)
                     continue
                 }
                 guard members.count >= 2 || (hasMain && singleCompilationWithMain) else { continue }
@@ -328,6 +344,56 @@ struct SeriesGrouper: Sendable {
             groups[i].id = i + 1
         }
         return groups
+    }
+
+    /// 総集編が言っている本編の名前(「X 総集編」の「X」)で、入れる先の組を探す(方針 compilations = inMainSeries)。
+    ///
+    /// 名前がそのまま一致する組が第一。無ければ、**本編の名前で始まり、余りがひらがなだけの名前**の組
+    /// (「鬼ヶ島の安息」「鬼ヶ島の繁栄」… だけで組を作ると、名前が「鬼ヶ島の」になる)。その組は名前を
+    /// 総集編の言う名前(「鬼ヶ島」)に直して受け入れる ―― 共通部分が助詞で終わるのは 2 段目の弱点で、
+    /// 総集編はシリーズ名がどこまでかを名前で言っているから、そちらを採る(利用者の事例 2026-09-22)。
+    /// 余りが漢字・カタカナを含むとき(「鬼ヶ島戦記」)は、別の作品なので受け入れない。
+    private func mainGroup(for mains: [String], in groups: [CandidateGroup],
+                           from first: Int) -> (index: Int, rename: String?)? {
+        for main in mains {
+            if let i = (first..<groups.count).first(where: { text.key(main) == text.key(groups[$0].ruleName) }) {
+                return (i, nil)
+            }
+        }
+        for main in mains {
+            let key = text.key(main)
+            guard !key.isEmpty else { continue }
+            let found = (first..<groups.count).filter { i in
+                let name = text.key(groups[i].ruleName)
+                guard name.count > key.count, name.hasPrefix(key) else { return false }
+                return name.dropFirst(key.count).allSatisfy(Self.isHiragana)
+            }
+            if let i = found.min(by: { text.key(groups[$0].ruleName).count < text.key(groups[$1].ruleName).count }) {
+                return (i, main)
+            }
+        }
+        return nil
+    }
+
+    /// 総集編の名前から導いた本編の名前(「X 総集編」の「X」)で、**まだどの組にも入っていない本編の本**を探す
+    /// (方針 compilations = inMainSeries のとき)。
+    ///
+    /// 拾うのは、タイトルが本編の名前そのものか、**そのすぐ後ろが巻だけでできている**本に限る(1 段目と同じ見方)。
+    /// 語の切れ目だけを頼りにすると、「X の住人たち」のような別の作品まで引き込んでしまう。
+    private func mainBooksFor(_ mains: [String], items: [(id: Int, text: ComparableText)],
+                              claimed: Set<Int>) -> (name: String, ids: [Int])? {
+        for main in mains {
+            let key = text.key(main)
+            guard !key.isEmpty else { continue }
+            let ids = items.filter { item in
+                guard !claimed.contains(item.id), String(item.text.key).hasPrefix(key) else { return false }
+                if item.text.key.count == key.count { return true }
+                return !Self.splitsANumber(item.text, at: key.count) && Self.isCleanCut(item.text, at: key.count)
+                    && engine.volumes.isWholeVolume(item.text.originalRemainder(afterKeyLength: key.count))
+            }.map(\.id)
+            if !ids.isEmpty { return (main, ids) }
+        }
+        return nil
     }
 
     private struct Member { let item: (id: Int, text: ComparableText); var prefixLength: Int }

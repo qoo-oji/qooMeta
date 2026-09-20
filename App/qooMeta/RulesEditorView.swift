@@ -268,11 +268,13 @@ struct Goal: Identifiable {
         Goal(id: "volume", title: "A volume number is missing or wrong",
              symbol: "number",
              help: "Which shapes count as a volume number, and what may stand before or after it.",
-             controls: [.list("volumePrefixes"), .list("volumeCounters"), .list("kanjiCounters")], more: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"),
+             controls: [.list("volumePrefixes"), .list("volumeCounters"), .list("kanjiCounters"),
+                        .list("kanjiAloneDigits")], more: [.ruleToggle("ordinal"), .ruleToggle("number"), .ruleToggle("kanji"), .ruleToggle("kanjiAlone"),
                     .ruleToggle("greek"), .ruleToggle("roman"), .ruleToggle("position"),
                     .ruleToggle("sharedLeadingKanji"),
                     .list("positionFirst"), .list("positionMiddle"), .list("positionLast"),
-                    .list("wholeOnlyCounters"), .parameter(rule: "number", name: "mergedSpan"),
+                    .list("wholeOnlyCounters"), .list("volumeFollowers"), .list("numberWords"),
+                    .parameter(rule: "number", name: "mergedSpan"),
                     .parameter(rule: "sharedLeadingKanji", name: "minBooks")]),
         Goal(id: "duplicate", title: "The same work shows up twice",
              symbol: "square.on.square",
@@ -289,6 +291,10 @@ struct Goal: Identifiable {
              help: "Where a compilation or a side story goes, and what volume number it is given once it is there.",
              controls: [.policy("compilations"), .policy("compilationVolume")], more: [.parameter(rule: "compilation", name: "volumeOffset"), .list("compilationWords"),
                     .ruleToggle("compilationMark")]),
+        Goal(id: "sequel", title: "A book that follows the story has no volume number",
+             symbol: "arrow.turn.down.right",
+             help: "A book that carries a word such as “after” or “epilogue” where the others carry a number. The wording in the name is kept as the volume you see, and it is sorted right after the last numbered volume of the series.",
+             controls: [.list("sequelWords")], more: [.ruleToggle("sequel")]),
         Goal(id: "first", title: "A book on its own is given volume 1, or is not",
              symbol: "1.circle",
              help: "What to do with a book that carries no number at all.",
@@ -1159,7 +1165,9 @@ private struct RuleListEditor: View {
     @State private var newItem = ""
     @State private var newValue = ""
 
-    private var isPairs: Bool { list.kind == "pairs" }
+    /// 対応表(「左 → 右」)。1 文字どうしの対応表と、語 → 数の対応表(「ふたつ → 2」)。
+    private var isPairs: Bool { list.kind == "pairs" || list.kind == "wordPairs" }
+    private var isWordPairs: Bool { list.kind == "wordPairs" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1172,11 +1180,13 @@ private struct RuleListEditor: View {
                 }
             }
             HStack {
-                TextField(isPairs ? "Left character".ui : list.kind == "characters" ? "One character".ui : "Word".ui, text: $newItem)
-                    .frame(maxWidth: isPairs ? 90 : 240).onSubmit(add)
+                TextField(isWordPairs ? "Word".ui : isPairs ? "Left character".ui
+                            : list.kind == "characters" ? "One character".ui : "Word".ui, text: $newItem)
+                    .frame(maxWidth: isWordPairs ? 140 : isPairs ? 90 : 240).onSubmit(add)
                 if isPairs {
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                    TextField("Right character".ui, text: $newValue).frame(maxWidth: 90).onSubmit(add)
+                    TextField(isWordPairs ? "Number".ui : "Right character".ui, text: $newValue)
+                        .frame(maxWidth: isWordPairs ? 90 : 90).onSubmit(add)
                 }
                 Button("Add", action: add).disabled(newItem.isEmpty || (isPairs && newValue.isEmpty))
                 Spacer()

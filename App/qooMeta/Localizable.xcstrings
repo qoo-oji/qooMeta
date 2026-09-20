@@ -433,6 +433,57 @@
         }
       }
     },
+    "A book that carries a word such as “after” or “epilogue” where the others carry a number. The wording in the name is kept as the volume you see, and it is sorted right after the last numbered volume of the series.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book that carries a word such as “after” or “epilogue” where the others carry a number. The wording in the name is kept as the volume you see, and it is sorted right after the last numbered volume of the series."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほかの本が番号を持つ所に、「アフター」「後日談」のような語が書いてある本です。名前に書いてある表記をそのまま巻数(表示用)にして、並べる数はシリーズの最後の巻の次にします。"
+          }
+        }
+      }
+    },
+    "A book that carries one of these words instead of a number is placed right after the last numbered volume of its series": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book that carries one of these words instead of a number is placed right after the last numbered volume of its series"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "番号の代わりにこの語が書いてある本を、そのシリーズの最後の巻のすぐ後ろに置きます"
+          }
+        }
+      }
+    },
+    "A book that follows the story has no volume number": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book that follows the story has no volume number"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本編の後の話に巻数が付かない"
+          }
+        }
+      }
+    },
     "A book whose title holds one of these joins no series. The bundled list is empty": {
       "extractionState": "manual",
       "localizations": {
@@ -633,6 +684,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "足した規則は並びの先頭に入り、ほかより先に見られます。"
+          }
+        }
+      }
+    },
+    "A number is read as the volume when a unit, a space, the end of the name, or one of these characters follows it (“X 4ー夜編ー”)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A number is read as the volume when a unit, a space, the end of the name, or one of these characters follows it (“X 4ー夜編ー”)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数字の後ろが単位・空白・名前の終わり、またはここに挙げた文字なら、その数字を巻数として読みます(「X 4ー夜編ー」)"
           }
         }
       }
@@ -1705,6 +1773,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "シリーズ名のすぐ後ろにあれば含める文字"
+          }
+        }
+      }
+    },
+    "Characters that may come right after a volume number": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Characters that may come right after a volume number"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数のすぐ後ろに来てよい文字"
           }
         }
       }
@@ -3766,6 +3851,23 @@
         }
       }
     },
+    "Kanji numerals that count on their own": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kanji numerals that count on their own"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "それだけで巻になる漢数字"
+          }
+        }
+      }
+    },
     "Kanji treated as the same character": {
       "extractionState": "manual",
       "localizations": {
@@ -4684,6 +4786,23 @@
         }
       }
     },
+    "Number": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Number"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数"
+          }
+        }
+      }
+    },
     "Number the volumes again": {
       "extractionState": "manual",
       "localizations": {
@@ -4735,6 +4854,23 @@
         }
       }
     },
+    "Numbers written out as words (ふたつ, みっかめ)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numbers written out as words (ふたつ, みっかめ)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語で書いた数(ふたつ、みっかめ)"
+          }
+        }
+      }
+    },
     "Off by default, as macOS expects: closing every window leaves the app running, so you can open the next list from the Dock. Turning it on takes effect the next time you close a window.": {
       "extractionState": "manual",
       "localizations": {
@@ -4765,6 +4901,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "総集編・番外編に足す数"
+          }
+        }
+      }
+    },
+    "Old-style kanji numerals on their own (弐, 参)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Old-style kanji numerals on their own (弐, 参)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "それだけで巻になる大字(弐、参)"
           }
         }
       }
@@ -7540,6 +7693,23 @@
         }
       }
     },
+    "What may come right after a volume number": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What may come right after a volume number"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "巻数のすぐ後ろに来てよい文字"
+          }
+        }
+      }
+    },
     "What the words in it mean": {
       "extractionState": "manual",
       "localizations": {
@@ -7948,6 +8118,23 @@
         }
       }
     },
+    "Which word stands for which number is set by the list; the word is kept as the volume you see": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which word stands for which number is set by the list; the word is kept as the volume you see"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "どの語がどの数かは一覧が決めます。巻数(表示)は名前に書いてある語のまま残ります"
+          }
+        }
+      }
+    },
     "Windows": {
       "extractionState": "manual",
       "localizations": {
@@ -8046,6 +8233,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "シリーズ名の末尾から落とす語"
+          }
+        }
+      }
+    },
+    "Words for a book that comes after the numbering": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Words for a book that comes after the numbering"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本編の後に続くことを示す語"
+          }
+        }
+      }
+    },
+    "Words for a book that comes after the numbering (after, epilogue)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Words for a book that comes after the numbering (after, epilogue)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "番号の代わりに続きを示す語(アフター、後日談)"
           }
         }
       }
@@ -8318,6 +8539,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 巻とみなさない語"
+          }
+        }
+      }
+    },
+    "Words that stand for a number": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Words that stand for a number"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数を表す語"
           }
         }
       }
@@ -8611,6 +8849,23 @@
         }
       }
     },
+    "~ - ・ ! ? . ) ー … A number is read as the volume when one of these follows it. 〜 and ― are not in the list: add them if your names use them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~ - ・ ! ? . ) ー … A number is read as the volume when one of these follows it. 〜 and ― are not in the list: add them if your names use them."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~ - ・ ! ? . ) ー … 数字の後ろがこれらの文字なら、巻数として読みます。「〜」「―」は入れていないので、使う蔵書なら足してください。"
+          }
+        }
+      }
+    },
     "“X ex”, “X SP”": {
       "extractionState": "manual",
       "localizations": {
@@ -8675,6 +8930,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "□(全角の空白)"
+          }
+        }
+      }
+    },
+    "ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ふたつ → 2, みっかめ → 3 … Some names spell the number out in kana on purpose. The word is kept as the volume you see; the number on the right is the one it sorts by. It is only read when the word stands on its own."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ふたつ → 2、みっかめ → 3 … わざとかなで数を書く名前があります。巻数(表示)は書いてある語のまま、並べる数は右の数字です。語がひとまとまりで書かれているときだけ読みます。"
+          }
+        }
+      }
+    },
+    "アフター, 後日談, その後 … The wording in the name is kept as the volume you see. The number it sorts by is the last volume of that series plus one; compilations and side stories, which sit at the offset, are not counted as part of the numbering.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アフター, 後日談, その後 … The wording in the name is kept as the volume you see. The number it sorts by is the last volume of that series plus one; compilations and side stories, which sit at the offset, are not counted as part of the numbering."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アフター、後日談、その後 … 名前に書いてある表記が、そのまま巻数(表示用)になります。並べる数は、そのシリーズの最後の巻に 1 を足した数です。オフセットで後ろに置いてある総集編・番外編は、ナンバリングには数えません。"
+          }
+        }
+      }
+    },
+    "壱, 弐, 参 are the old way of writing 一, 二, 三. They are read as the volume with no word before and no unit after, because — unlike an ordinary kanji numeral — they are not mistaken for a word in the title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "壱, 弐, 参 are the old way of writing 一, 二, 三. They are read as the volume with no word before and no unit after, because — unlike an ordinary kanji numeral — they are not mistaken for a word in the title"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "壱・弐・参 は 一・二・三 の古い書き方です。ふつうの漢数字と違って題名の言葉と見間違えないので、前に語が無くても後ろに単位が無くても巻として読みます"
+          }
+        }
+      }
+    },
+    "壱, 弐, 参, 肆, 伍 … The old way of writing 一 to 五, together with the traditional forms 壹 貳 參. “X 弐” is volume 2, while “X 二” is not read, because an ordinary kanji numeral cannot be told from a word in the title. Add 陸 and the ones after it if your books use them — mind that 陸 is an ordinary word too.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "壱, 弐, 参, 肆, 伍 … The old way of writing 一 to 五, together with the traditional forms 壹 貳 參. “X 弐” is volume 2, while “X 二” is not read, because an ordinary kanji numeral cannot be told from a word in the title. Add 陸 and the ones after it if your books use them — mind that 陸 is an ordinary word too."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "壱、弐、参、肆、伍 … 一〜五 の古い書き方と、その旧字体 壹・貳・參 です。「X 弐」は 2 巻になります。「X 二」を読まないのは、ふつうの漢数字が題名の言葉と見分けられないためです。陸から先を使う蔵書なら、ここに足してください(「陸」はふつうの語でもあることに注意)。"
           }
         }
       }

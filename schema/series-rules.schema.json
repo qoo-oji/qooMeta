@@ -195,6 +195,16 @@
             }
           ]
         },
+        "kanjiAloneDigits": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
         "positionFirst": {
           "oneOf": [
             {
@@ -216,6 +226,16 @@
           ]
         },
         "positionLast": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
+        },
+        "sequelWords": {
           "oneOf": [
             {
               "$ref": "#/$defs/words"
@@ -841,6 +861,81 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "sequel"
+                      },
+                      "type": {
+                        "const": "sequel"
+                      },
+                      "words": {
+                        "$ref": "#/$defs/wordsValue"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "kanjiAlone"
+                      },
+                      "type": {
+                        "const": "kanjiAloneNumeral"
+                      },
+                      "digits": {
+                        "$ref": "#/$defs/wordsValue"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "const": "wordNumber"
+                      },
+                      "type": {
+                        "const": "numberWord"
+                      },
+                      "words": {
+                        "$ref": "#/$defs/wordPairsValue"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -1022,11 +1117,102 @@
                     ]
                   },
                   "description": "挙げた読み手をこの順で先頭に寄せる"
+                },
+                "sequel": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "sequel"
+                    },
+                    "type": {
+                      "const": "sequel"
+                    },
+                    "words": {
+                      "$ref": "#/$defs/wordsValue"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "kanjiAlone": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "kanjiAlone"
+                    },
+                    "type": {
+                      "const": "kanjiAloneNumeral"
+                    },
+                    "digits": {
+                      "$ref": "#/$defs/wordsValue"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "wordNumber": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "const": "wordNumber"
+                    },
+                    "type": {
+                      "const": "numberWord"
+                    },
+                    "words": {
+                      "$ref": "#/$defs/wordPairsValue"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "additionalProperties": false
             }
           ]
+        },
+        "followers": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "characters": {
+              "$ref": "#/$defs/charactersValue"
+            }
+          },
+          "additionalProperties": false
         },
         "inference": {
           "type": "object",
@@ -1109,6 +1295,15 @@
         "maxLength": 2
       },
       "description": "1 文字 → 1 文字"
+    },
+    "wordPairs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      },
+      "description": "語 → 語(ひらがなの数え方 → 数字)"
     },
     "patterns": {
       "type": "array",
@@ -1219,6 +1414,19 @@
         },
         {
           "$ref": "#/$defs/pairs"
+        },
+        {
+          "$ref": "#/$defs/pairOps"
+        }
+      ]
+    },
+    "wordPairsValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/listRef"
+        },
+        {
+          "$ref": "#/$defs/wordPairs"
         },
         {
           "$ref": "#/$defs/pairOps"

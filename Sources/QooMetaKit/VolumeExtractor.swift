@@ -5,10 +5,14 @@ import Foundation
 /// **読めないものは作らない。** 番号の無いシリーズの順番を推測で埋めると、利用者には
 /// 推測と事実の区別が付かなくなる。読めるのは次の形だけ:
 /// - 数字(`2` `Vol.3` `ver2` `#4` `第5話` `その6` `Part 7`)。数字の直後が語なら読まない(「2人の…」は巻ではない)
-/// - 漢数字(`第三話` `その二`)
+/// - 語で書いた数(`ふたつ` = 2、`みっかめ` = 3)。どの語がどの数かは規則の対応表が決める
+/// - 漢数字(`第三話` `その二`)。**大字(`壱` `弐` `参`)は、前に語も後ろに単位も無くても読む**
+///   ―― 題名の言葉と見分けが付くのは大字だけ(`X 弐` は 2 巻、`X 二` は読まない)
 /// - 「第」+ 数字 + 任意の漢字 1 字の単位(`第1幕` `第三部` `第2夜`)。`第04-1章` は分冊(数は 4.1)
 /// - ローマ数字(`I` `II` `Ⅳ`。大文字だけ)
 /// - 位置の語(`上` `中` `下` `前編` `中編` `後編`)。数はシリーズの中の文脈で決める(ProposalFinalizer.numberPositionWords)
+/// - 続きの語(`アフターエピソード` `後日談` `その後`)。本編のナンバリングの後ろに続く 1 冊で、数はシリーズの中の
+///   文脈で決める(ProposalFinalizer.numberSequels)
 /// - ギリシャ文字の小文字 1 字(`α` = 1)
 /// - 雑誌の号・月号(`36号` `03月号`)と合併号(`36-37号`。表記は範囲、数は最初の号)。年はシリーズ名の側に残す
 ///   (「週刊〇〇 2025年」を 1 年ぶんのシリーズにする。利用者の判断)
@@ -24,14 +28,25 @@ final class VolumeExtractor: Sendable {
     let rules: SeriesRules.Volume
     /// 語の規則。「そのまま読む語」(`treat: keep`)に重なる表記は、巻として読まない。
     private let words: WordRules?
-    static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟"
+    static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒捌玖拾佰仟"
 
     /// 語の一覧を空にしたとき、空の選択肢が何にでも一致しないよう、決して一致しない形にする。
     static func nonEmpty(_ pattern: String) -> String { pattern.isEmpty ? "(?!)" : pattern }
 
     private let numeric: NSRegularExpression
     private let kanji: NSRegularExpression
+    /// 大字だけでできた巻(「X 弐」)。
+    private let kanjiAlone: NSRegularExpression
+    /// 数を語で書いた巻(「ふたつ」)。
+    private let wordNumber: NSRegularExpression
+    /// 「第」+ 数字 + 任意の漢字 1 字、ギリシャ文字、ローマ数字。**巻の後ろに来てよい文字**(規則 volume.followers)を
+    /// 使うので、規則ごとに組み立てる。
+    private let ordinal: NSRegularExpression
+    private let greek: NSRegularExpression
+    private let roman: NSRegularExpression
     private let position: NSRegularExpression
+    /// 続きの語で始まるか(語そのものだけを見る。表記は残り全体)。
+    private let sequel: NSRegularExpression
     /// 巻だけでできている形。止めた読み手の形は含めない。
     private let wholeVolume: NSRegularExpression
 
@@ -51,13 +66,30 @@ final class VolumeExtractor: Sendable {
         let nonEmpty = Self.nonEmpty, kanjiDigits = Self.kanjiDigits
         numeric = try! NSRegularExpression(
             pattern: #"^(?:"# + nonEmpty(rules.prefixPattern) + #")?\s*(\d+(?:\.\d+)?)(?:[-‐~〜](\d+))?(?:"#
-                + nonEmpty(rules.alternation(rules.counters)) + #"|$|\s|[~\-・!?.)])"#,
+                + nonEmpty(rules.alternation(rules.counters)) + #"|$|\s|"# + rules.followerPattern + #")"#,
             options: [.caseInsensitive])
         kanji = try! NSRegularExpression(
             pattern: #"^(?:(?:"# + nonEmpty(rules.kanjiPrefixPattern) + #")(["# + kanjiDigits + #"]+)|(["# + kanjiDigits + #"]+)(?:"#
                 + nonEmpty(rules.alternation(rules.kanjiCounters)) + #"))"#)
+        // 語の切れ目まで求める(「参加者たち」の「参」を 3 と読まないため)。
+        kanjiAlone = try! NSRegularExpression(
+            pattern: #"^((?:"# + nonEmpty(rules.alternation(rules.kanjiAloneDigits)) + #")+)(?:$|\s|"# + rules.followerPattern + #")"#)
+        // 語で書いた数。長い語から試す(「みっかめ」を「みっか」より先に)。
+        wordNumber = try! NSRegularExpression(
+            pattern: #"^("# + nonEmpty(rules.alternation(Array(rules.numberWords.keys))) + #")(?:$|\s|"#
+                + rules.followerPattern + #")"#,
+            options: [.caseInsensitive])
+        let followers = rules.followerPattern
+        ordinal = try! NSRegularExpression(
+            pattern: #"^第\s*(\d+(?:\.\d+)?|["# + kanjiDigits + #"]+)(?:[-‐](\d+))?\s*(?:\p{Han}|$|\s|"# + followers + #")"#)
+        greek = try! NSRegularExpression(pattern: #"^([α-ω])(?:$|\s|"# + followers + #")"#)
+        roman = try! NSRegularExpression(pattern: #"^(?:vol\.?\s*)?(X{0,3}(?:IX|IV|V?I{0,3}))(?:$|\s|"# + followers + #")"#)
         position = try! NSRegularExpression(
             pattern: #"^((?:"# + nonEmpty(rules.positionPattern) + #")(?:\s*\d{1,2})?)(?:$|\s)"#)
+        // 続きの語は、語の切れ目を求めない(「アフターエピソード」の「アフター」は次の語とつながっている)。
+        // 英字の語は大文字小文字を問わない(「EXTRA」「Extra」「extra」を一覧に 3 つ書かせない)。
+        sequel = try! NSRegularExpression(pattern: #"^(?:"# + nonEmpty(rules.alternation(rules.sequelWords)) + #")"#,
+                                          options: [.caseInsensitive])
         let values = [
             rules.reads(.number) ? #"\d+(?:\.\d+)?(?:[-‐~〜]\d+)?"# : nil,
             rules.reads(.kanji) ? "[" + kanjiDigits + "]+" : nil,
@@ -85,6 +117,20 @@ final class VolumeExtractor: Sendable {
             if words.keptRanges(in: s).contains(where: { NSIntersectionRange($0, read).length > 0 }) { return nil }
         }
         return volume
+    }
+
+    /// 続きの語で始まるか。始まるなら、その語より後ろ(番号を書く所)を返す。
+    ///
+    /// **巻だけでできているか(`isWholeVolume`)には数えない。** そちらはシリーズの組み立ての 1 段目と
+    /// ファイル名の `@volume` が見るもので、続きの語をそこへ入れると、タイトルの中のただの言葉
+    /// (「アフターケア」)を巻と見て、別々の本を 1 つのシリーズにしてしまう。続きの語が効くのは、
+    /// シリーズが決まったあとの巻の読み取りだけにする(2026-09-22、利用者の事例)。
+    func sequelRest(in text: String) -> String? {
+        guard rules.reads(.sequel) else { return nil }
+        let s = text.precomposedNFKC.trimmingCharacters(in: leadingSeparators)
+        let ns = s as NSString
+        guard let m = sequel.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(from: m.range.length)
     }
 
     private func read(fromRemainder remainder: String) -> Volume? {
@@ -119,7 +165,7 @@ final class VolumeExtractor: Sendable {
         switch reader {
         case .ordinal:
             // 「第」が付いていれば、数字の後ろの単位は何でもよい(「第1幕」「第三部」「第2夜」)。
-            guard let m = Self.ordinal.firstMatch(in: s, range: range) else { return nil }
+            guard let m = ordinal.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
             guard let number = Double(text) ?? Self.kanjiNumber(text).map(Double.init) else { return nil }
             // 「第04-1章」: 後ろが前以下なら分冊(4.1、4.2 …)。前より大きければ合併(「第1-2巻」。数は最初)。
@@ -145,31 +191,36 @@ final class VolumeExtractor: Sendable {
             let r = m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2)
             let text = ns.substring(with: r)
             return Volume(text: text, number: Self.kanjiNumber(text).map(Double.init))
+        case .kanjiAlone:
+            guard let m = kanjiAlone.firstMatch(in: s, range: range) else { return nil }
+            let text = ns.substring(with: m.range(at: 1))
+            return Self.kanjiNumber(text).map { Volume(text: text, number: Double($0)) }
+        case .wordNumber:
+            guard let m = wordNumber.firstMatch(in: s, range: range) else { return nil }
+            let text = ns.substring(with: m.range(at: 1))
+            // 表記は名前に書いてあるまま(「ふたつ」)。並べ替えの数だけを対応表から採る。
+            return rules.numberWords[text].map { Volume(text: text, number: $0) }
         case .greek:
-            guard let m = Self.greek.firstMatch(in: s, range: range) else { return nil }
+            guard let m = greek.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
             return Self.greekNumber(text).map { Volume(text: text, number: Double($0)) }
         case .roman:
-            guard let m = Self.roman.firstMatch(in: s, range: range) else { return nil }
+            guard let m = roman.firstMatch(in: s, range: range) else { return nil }
             let text = ns.substring(with: m.range(at: 1))
             return Self.romanNumber(text).map { Volume(text: text, number: Double($0)) }
         case .position:
             guard let m = position.firstMatch(in: s, range: range) else { return nil }
             return Volume(text: ns.substring(with: m.range(at: 1)), number: nil)
+        case .sequel:
+            // 表記は残り全体(「アフターエピソード」。語だけを抜き出すと、名前に書いてある呼び方が消える)。
+            guard sequel.firstMatch(in: s, range: range) != nil else { return nil }
+            return Volume(text: s, number: nil)
         }
     }
 
-    /// 「第」+ 数字 + 任意の漢字 1 字の単位。
-    private static let ordinal = try! NSRegularExpression(
-        pattern: #"^第\s*(\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟]+)(?:[-‐](\d+))?\s*(?:\p{Han}|$|\s|[~\-・!?.)])"#)
+    /// 「第」+ 数字 + 任意の漢字 1 字の単位(巻だけでできているかを見るとき。後ろの文字は問わない)。
     private static let wholeOrdinal = try! NSRegularExpression(
-        pattern: #"^第\s*(?:\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参肆伍陸柒捌玖拾佰仟]+)(?:[-‐]\d+)?\s*\p{Han}?$"#)
-
-    private static let greek = try! NSRegularExpression(pattern: #"^([α-ω])(?:$|\s|[~\-・!?.)])"#)
-
-    /// ローマ数字の巻(「X II」)。大文字だけ(NFKC で「Ⅱ」も「II」になる)。1〜39。
-    private static let roman = try! NSRegularExpression(
-        pattern: #"^(?:vol\.?\s*)?(X{0,3}(?:IX|IV|V?I{0,3}))(?:$|\s|[~\-・!?.)])"#)
+        pattern: #"^第\s*(?:\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒捌玖拾佰仟]+)(?:[-‐]\d+)?\s*\p{Han}?$"#)
 
     static func romanNumber(_ s: String) -> Int? {
         guard !s.isEmpty else { return nil }
@@ -208,18 +259,21 @@ final class VolumeExtractor: Sendable {
             return true
         }
         // ローマ数字だけ(「II」)。
-        if rules.reads(.roman), let m = Self.roman.firstMatch(in: s, range: range), m.range.length == ns.length || m.range(at: 1).length == ns.length {
+        if rules.reads(.roman), let m = roman.firstMatch(in: s, range: range), m.range.length == ns.length || m.range(at: 1).length == ns.length {
             return Self.romanNumber(ns.substring(with: m.range(at: 1))) != nil
         }
         return false
     }
 
 
-    /// 漢数字を数にする。大字(壱弐参…)・百・千・〇にも対応する(StackNest の NumeralNormalizer(MIT)の表に倣った)。
+    /// 漢数字を数にする。大字(壱弐参…)とその旧字体(壹貳參)・百・千・〇にも対応する
+    /// (StackNest の NumeralNormalizer(MIT)の表に倣った)。
     static func kanjiNumber(_ s: String) -> Int? {
         let digits: [Character: Int] = [
             "〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
             "壱": 1, "弐": 2, "参": 3, "肆": 4, "伍": 5, "陸": 6, "柒": 7, "捌": 8, "玖": 9,
+            // 大字の旧字体(利用者の指摘 2026-09-22)。壹 = 壱 = 一、貳 = 弐 = 二、參 = 参 = 三。
+            "壹": 1, "貳": 2, "參": 3,
         ]
         let powers: [Character: Int] = ["十": 10, "百": 100, "千": 1000, "拾": 10, "佰": 100, "仟": 1000]
         // 位取りで書いた漢数字(「二〇」= 20、「二〇二五」= 2025)。十・百・千が 1 つも無く、2 文字以上なら桁として読む。
@@ -319,6 +373,7 @@ enum ProposalFinalizer {
         }
         if engine.volumes.rules.sharedLeadingKanjiEnabled { readLeadingKanjiNumerals(&document, engine: engine, log: log) }
         numberPositionWords(&document, engine: engine)
+        numberSequels(&document, engine: engine, log: log)
         if engine.volumes.rules.inferFirstVolume { inferFirstVolumes(&document, engine: engine, log: log) }
     }
 
@@ -393,6 +448,51 @@ enum ProposalFinalizer {
                 let base = Double(k == 2 ? (hasMiddle ? 3 : 2) : k + 1)
                 let sub = split(document.books[i].volumeText).sub.map { Double($0) / ($0 < 10 ? 10 : 100) } ?? 0
                 document.books[i].volumeNumber = base + sub
+            }
+        }
+    }
+
+    /// 本編の完結後に出た 1 冊(「アフターエピソード」「後日談」「その後」)を、**そのシリーズの最後の番号の次**に置く。
+    ///
+    /// 利用者の事例(2026-09-22): 番号の代わりに「アフター」と書いてある本は、名前のとおりの表記を巻数(表示用)にし、
+    /// 巻数(ソート用)はシリーズのナンバリングの続きにしたい(0〜6 まである所へ来た 1 冊は 7)。
+    /// 数は 1 冊ずつでは決まらないので、位置の語(上・下)と同じく、組がそろってからここで決める。
+    ///
+    /// 「最後の番号」に数えるのは**本編の巻だけ**。総集編・番外編は、本編の後ろへ置くためにオフセット(既定 100)を
+    /// 足した数を持っているので、ナンバリングの一部として数えない(数えると「アフター」が 102 になってしまう)。
+    /// 番号がどこにも無いシリーズでは、続く先が無いので数を付けない(表記だけ残す。推測で番号を作らない)。
+    static func numberSequels(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
+        guard engine.volumes.rules.reads(.sequel) else { return }
+        let seriesBooks = document.books.indices.filter { !document.books[$0].series.isEmpty }
+        for (_, indices) in Dictionary(grouping: seriesBooks, by: { document.books[$0].groupID ?? -1 }) {
+            let sequels = indices.filter {
+                document.books[$0].volumeNumber == nil && engine.volumes.sequelRest(in: document.books[$0].volumeText) != nil
+            }.sorted { document.books[$0].id < document.books[$1].id }
+            guard !sequels.isEmpty else { continue }
+            let numbering = indices.filter { i in
+                guard document.books[i].volumeNumber != nil, !sequels.contains(i) else { return false }
+                let text = document.books[i].volumeText
+                return engine.compilation.keywordRange(in: text)?.lowerBound != text.startIndex
+            }
+            guard let last = numbering.compactMap({ document.books[$0].volumeNumber }).max() else { continue }
+            // 続きの語の後ろに番号があれば、その番号だけ後ろへ(「後日談 2」は最後の巻 + 2)。
+            let written = sequels.reduce(into: [Int: Double]()) { found, i in
+                guard let rest = engine.volumes.sequelRest(in: document.books[i].volumeText),
+                      let number = engine.volumes.extract(fromRemainder: rest)?.number else { return }
+                found[i] = number
+            }
+            // 番号の無い続きの本が何冊もあるときは、名前の順に 1 つずつ後ろへ置く(同じ数に重ねると並びが決まらない)。
+            var taken = Set(written.values)
+            var next = 1.0
+            for i in sequels {
+                var step = written[i]
+                if step == nil {
+                    while taken.contains(next) { next += 1 }
+                    step = next
+                    taken.insert(next)
+                }
+                document.books[i].volumeNumber = last + step!
+                log?.apply("sequel", to: document.books[i].id)
             }
         }
     }
@@ -476,7 +576,14 @@ enum ProposalFinalizer {
                 let t = document.books[j].volumeText
                 return !t.isEmpty && t.allSatisfy { "IVX".contains($0) }
             }
-            document.books[i].volumeText = usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1"
+            // ほかの巻が漢数字だけ(「二籠」「三鼎」)なら、推定した 1 巻も同じ書き方にする ―― 並びの中で
+            // 1 冊だけ算用数字が混ざらないように(2026-09-22、利用者の指摘)。大字なら「壱」、その旧字体なら「壹」。
+            let others = indices.filter { $0 != i }.map { document.books[$0].volumeText }.filter { !$0.isEmpty }
+            let kanji = !others.isEmpty && others.allSatisfy { $0.allSatisfy(VolumeExtractor.kanjiDigits.contains) }
+            let one = !kanji ? nil
+                : others.joined().contains(where: "壹貳參".contains) ? "壹"
+                : others.joined().contains(where: "壱弐参肆伍陸柒捌玖拾佰仟".contains) ? "壱" : "一"
+            document.books[i].volumeText = one ?? (usesRoman ? "I" : String(repeating: "0", count: max(0, width - 1)) + "1")
             document.books[i].volumeNumber = 1
             document.books[i].volumeInferred = true
             log?.apply("firstVolume", to: document.books[i].id)

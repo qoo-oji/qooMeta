@@ -307,15 +307,18 @@ struct RuleLoader {
             }
             if items.count > Limits.items { report(.tooLarge, path, "\(items.count) 件") }
             for (i, item) in items.enumerated() { checkListItem(item, kind, "\(path)[\(i)]") }
-        case .pairs:
+        case .pairs, .wordPairs:
             guard let map = value.objectValue else {
-                report(.invalidValue, path, "1 文字から 1 文字への対応表であるべきところが\(value.kindName)")
+                report(.invalidValue, path, "対応表であるべきところが\(value.kindName)")
                 return
             }
             if map.count > Limits.items { report(.tooLarge, path, "\(map.count) 件") }
             for key in map.keys.sorted() {
-                if key.count != 1 { report(.invalidValue, Self.join(path, key), "キーは 1 文字") }
-                checkListItem(map[key]!, .characters, Self.join(path, key))
+                if kind == .pairs, key.count != 1 { report(.invalidValue, Self.join(path, key), "キーは 1 文字") }
+                if kind == .wordPairs, key.isEmpty || key.count > Limits.wordLength {
+                    report(.invalidValue, Self.join(path, key), "キーは 1〜\(Limits.wordLength) 文字の語")
+                }
+                checkListItem(map[key]!, kind == .pairs ? .characters : .words, Self.join(path, key))
             }
         }
     }
@@ -325,7 +328,7 @@ struct RuleLoader {
         switch kind {
         case .characters, .pairs:
             if s.count != 1 { report(.invalidValue, path, "1 文字であるべきところが \(s.count) 文字") }
-        case .words:
+        case .words, .wordPairs:
             if s.isEmpty { report(.invalidValue, path, "空の語") }
             if s.count > Limits.wordLength { report(.tooLarge, path, "\(s.count) 文字") }
         }
@@ -713,7 +716,7 @@ struct RuleLoader {
         switch kind {
         case .characters, .words:
             return applyArrayOps(diff, to: base, path, allowsAt: false) { this, item, p in this.checkListItem(item, kind, p) }
-        case .pairs:
+        case .pairs, .wordPairs:
             guard let ops = diff.objectValue else {
                 report(.invalidValue, path, "差分では { \"$set\": {...}, \"$unset\": [...] } か { \"$replace\": {...} } で書く")
                 return base
@@ -722,7 +725,7 @@ struct RuleLoader {
             guard checkOps(ops, allowed: allowed, path) else { return base }
             if let replacement = ops["$replace"] {
                 let before = issues.count
-                checkListValue(replacement, .pairs, "\(path).$replace")
+                checkListValue(replacement, kind, "\(path).$replace")
                 guard issues.count == before else { return base }
                 if replacement != base { changedPaths.append(path) }
                 return replacement
@@ -731,7 +734,7 @@ struct RuleLoader {
             let original = map
             if let set = ops["$set"] {
                 let before = issues.count
-                checkListValue(set, .pairs, "\(path).$set")
+                checkListValue(set, kind, "\(path).$set")
                 if issues.count == before, let s = set.objectValue { map.merge(s) { _, new in new } }
             }
             if let unset = ops["$unset"] {
