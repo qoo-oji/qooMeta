@@ -331,25 +331,25 @@
 
 ## ファイル名のフォーマット(`qoometa.filename-formats`)
 
-**この節は 2026-09-20 に書き直した**(第 5 版)。ここにあった第 2 版の案(`@circle`・`@relation`・`@keywordA`、
+**この節は 2026-09-21 に書き直した**(第 6 版)。ここにあった第 2 版の案(`@circle`・`@relation`・`@keywordA`、
 `profiles`・`protectedTokens`)は、qooLibrary に引っ張られた形で、段階 6 で捨てた。書き方と**形式の説明の本体は
 [filename-format.md](filename-format.md) の 4**(キーの表・優先順位・差分の書き方)。ここには要点だけを書く。
 
 ```json
 {
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "defaultPreset": "commercial",
-  "separators": [",", "，", "、"],
   "presets": {
     "commercial": {
-      "label": "商業誌",
+      "separators": [",", "，", "、"],
       "formats": [
-        "[@author] @title (@volume)",
+        "[@author] @series (@volume)",
         { "format": "@series (@volume) - @author", "separators": ["×"] }
       ]
     },
     "doujinshi-event": {
+      "separators": [",", "，", "、"],
       "defaults": { "genre": "同人誌" },
       "formats": ["(@event) [@author] @title (@source)"]
     }
@@ -361,12 +361,19 @@
 - **プリセット**(名前を付けた型の並び)は本ごとに選ぶ。並びは上から試し、名前全体に一致した最初の型で読む。
   同じ位置を奪い合う型(先頭の丸括弧が `@genre` の型と `@event` の型)は**同居できない**ので、プリセットを分ける。
   プリセットの名前は JSON が決める(コードは決め打ちしない。利用者は差分で新しいプリセットを足せる)。
-- **`separators`(著者の区切り)と `defaults`(名前に書かれていない欄の値)は、ファイル全体・プリセット・型の 3 か所に書け、
-  内側に書いたものが勝つ**(型 > プリセット > ファイル全体)。`separators` は書いた所で丸ごと置き換わり、`defaults` は欄ごと。
+- **`separators`(著者の区切り)と `defaults`(名前に書かれていない欄の値)は、プリセットと型の 2 か所に書け、
+  内側に書いたものが勝つ**(型 > プリセット)。`separators` は書いた所で丸ごと置き換わり、`defaults` は欄ごと。
   名前から読めた値は、どの既定よりも強い。
+- **`@volume` は、巻の読み手(`series-rules.json` の `volume.readers`)が巻数と認めた値にだけ当たる。**
+  巻数に変換する語の一覧が別にあるのだから、そこに無い文字列を巻数として読まない(2026-09-21、利用者の指示)。
+  名前が巻数を持つ形では、その手前は `@title` ではなく **`@series`**(`@title` にすると、読んだ巻数と、
+  タイトルから導いた巻数が競合する)。
 - 1 つの型は文字列か、`{ "format": "…", "separators": [...], "defaults": {...}, "plain": {...} }`。
 - **`plain`(型として読まない文字列。`words` と `patterns`)**: 名前の中のこの部分は、型の照合のあいだだけただの文字として扱う
-  (括弧でも型の括弧に当たらず、値には残る)。3 か所に書けて、**足し合わさる**。同梱の既定は丸括弧の中の西暦。
+  (括弧でも型の括弧に当たらず、値には残る)。プリセットと型に書けて、**足し合わさる**。同梱の既定は丸括弧の中の西暦。
+- 第 5 版から変えたこと: **ファイル全体の段(`separators`・`defaults`・`plain`)をやめ、プリセットごとの設定にした**
+  (2026-09-21、利用者の指示。解析のしかたはルールセットを選ぶことで決まるべきで、外にもう 1 段あると見通しが悪い)。
+  `@volume` の判定を巻の読み手に任せ、商業誌用の巻数を持つ型を `@series (@volume)` にした。
 - 第 4 版から変えたこと: 型ごと・プリセットごとの `separators`、ファイル全体・型ごとの `defaults`、`label`・`note`、
   利用者のプリセット、`defaultPreset` を差分で変えられること、区切りが 1 文字に限られないこと。
   `retiredIDs`・`aliases`(型には ID が無いので意味が無かった)と、プリセットを配列だけで書く短い形(書き方を 1 つにする)は外した。

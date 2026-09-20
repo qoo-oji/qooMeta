@@ -179,7 +179,7 @@ private struct ChoosePresetStep: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("How should the file names be read?").font(.title2.bold())
-                        Text("A rule set is a list of name shapes. qooMeta tries them from the top and reads the name with the first shape that fits the whole of it. The count shows how many of your names each rule set can read.")
+                        Text("A rule set is a list of name shapes. qooMeta tries them from the top and reads the name with the first shape that fits the whole of it. The count shows how many of your names it read in full — a name whose brackets ended up inside a field is not counted.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if model.isFitting { ProgressView().controlSize(.small) }
@@ -228,10 +228,15 @@ private struct PresetFitRow: View {
                     Text(verbatim: fit.title).font(.headline)
                     if !fit.note.isEmpty { Text(key: fit.note).font(.caption).foregroundStyle(.secondary) }
                     HStack(spacing: 8) {
-                        ProgressView(value: total == 0 ? 0 : Double(fit.matched) / Double(total))
+                        ProgressView(value: total == 0 ? 0 : Double(fit.read) / Double(total))
                             .frame(width: 130)
-                        Text("%1$lld of %2$lld names read".ui(fit.matched, total))
+                        Text("%1$lld of %2$lld names read in full".ui(fit.read, total))
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    if fit.leftover > 0 {
+                        Label("%lld names keep a bracket that became no field".ui(fit.leftover),
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange)
                     }
                 }
                 Spacer()

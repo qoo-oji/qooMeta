@@ -173,19 +173,17 @@ enum RuleSchema {
     ///
     /// 著者の区切り(`separators`)と既定の欄(`defaults`)は ファイル全体 → プリセット → 型 の 3 か所に同じ綴りで書け、
     /// **内側に書いたものが勝つ**。ファイル全体の `separators` だけは必ず書く(いちばん外側の値が無いと、読み方が決まらない)。
-    static let formatStages = Node([
-        f("defaultPreset", .string), f("separators", .separators), optional("defaults", .presetDefaults),
-        optional("plain", .object(plainNode)), f("presets", .presets),
-    ])
+    static let formatStages = Node([f("defaultPreset", .string), f("presets", .presets)])
 
-    /// 型として読まない文字列(`plain`)。ファイル全体・プリセット・型の 3 か所に書け、**足し合わさる**(区切りや既定の欄と違い、
+    /// 型として読まない文字列(`plain`)。プリセットと型の 2 か所に書け、**足し合わさる**(区切りや既定の欄と違い、
     /// 内側が外側を打ち消さない。どの文字列を型として読まないかは、足していくものだから)。
     static let plainNode = Node([optional("words", .strings), optional("patterns", .patterns)])
 
     /// 同梱のプリセットの名前(綴りの候補を出すのに使う。利用者は差分で別の名前のプリセットを足せる)。
     static let presetNames = ["commercial", "doujinshi", "doujinshi-event"]
 
-    /// 1 つのプリセット。要るのは `formats` だけで、ほかは省ける(省いた区切りと既定は、ファイル全体のものを使う)。
+    /// 1 つのプリセット。要るのは `formats` だけで、ほかは省ける(省いた区切りは、同梱の既定の `,` `，` `、`)。
+    /// **ファイル全体の段は持たない**(2026-09-21、利用者の指示。設定はルールセットごと)。
     static let presetNode = Node([
         optional("label", .string), optional("note", .string), optional("separators", .separators),
         optional("defaults", .presetDefaults), optional("plain", .object(plainNode)), f("formats", .formats),

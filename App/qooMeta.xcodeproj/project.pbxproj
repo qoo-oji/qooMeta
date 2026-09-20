@@ -13,6 +13,7 @@
 		3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */ = {isa = PBXBuildFile; productRef = F548B9A73E497C1459503F3C /* QooMetaRules */; };
 		4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71455F79C155AD9BA794D099 /* RuleLabels.swift */; };
 		5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */; };
+		5A2AB806B7D6379BED910D76 /* NameCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138FEC4FDD497B6939D5FDD7 /* NameCheckView.swift */; };
 		607003FDEC0C80EB9B4D0020 /* FileNameRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C73DDAD7508057D88D7964AA /* FileNameRulesView.swift */; };
 		7BF76DE96EF4BB7DE6443B99 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBE6AC3A9BF51E635EC3162 /* Localization.swift */; };
 		93B52A0640283F3E27829F56 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B18F5A13C7BB642774DDFB1 /* DetailView.swift */; };
@@ -34,6 +35,7 @@
 		0874B8EB5ABA307C2EF67551 /* qooMeta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qooMeta.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0CBE6AC3A9BF51E635EC3162 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		1311E009BFF802530697F398 /* qooMeta */ = {isa = PBXFileReference; lastKnownFileType = folder; name = qooMeta; path = ..; sourceTree = SOURCE_ROOT; };
+		138FEC4FDD497B6939D5FDD7 /* NameCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameCheckView.swift; sourceTree = "<group>"; };
 		1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetEditorView.swift; sourceTree = "<group>"; };
 		2DB2856F960656F4827707B6 /* FlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowView.swift; sourceTree = "<group>"; };
 		33523722EB945A78FD030518 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
@@ -94,6 +96,7 @@
 				33523722EB945A78FD030518 /* GeneralSettingsView.swift */,
 				65C865450ED6D8B81C407CAD /* Localizable.xcstrings */,
 				0CBE6AC3A9BF51E635EC3162 /* Localization.swift */,
+				138FEC4FDD497B6939D5FDD7 /* NameCheckView.swift */,
 				1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */,
 				D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */,
 				71455F79C155AD9BA794D099 /* RuleLabels.swift */,
@@ -200,6 +203,7 @@
 				A8E1D278E63A338023183B62 /* FlowView.swift in Sources */,
 				0E9D5B82C1D889870FF49E92 /* GeneralSettingsView.swift in Sources */,
 				7BF76DE96EF4BB7DE6443B99 /* Localization.swift in Sources */,
+				5A2AB806B7D6379BED910D76 /* NameCheckView.swift in Sources */,
 				10F407650B50A45F6D6689D5 /* PresetEditorView.swift in Sources */,
 				A93B9C1B2D44FDBE80DD4E05 /* QooMetaApp.swift in Sources */,
 				4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */,

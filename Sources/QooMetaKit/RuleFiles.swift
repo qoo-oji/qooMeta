@@ -130,7 +130,12 @@ public struct CompiledRules: Sendable {
 
         var compiler = RuleCompiler(source: sources.userChanges == nil ? "builtin" : "user", dictionaries: dictionaries)
         let series = compiler.series(seriesRoot!)
-        let formats = compiler.formats(formatsRoot!)
+        // `@volume` が巻数とみなせるかは、**規則の巻の読み手**が決める(語をコードに書かない。concept.md の原則 8)。
+        let isVolume = series.map { s -> VolumeTest in
+            let volumes = VolumeExtractor(s.volume, text: TextRules(s))
+            return VolumeTest { volumes.isWholeVolume($0) }
+        } ?? .none
+        let formats = compiler.formats(formatsRoot!, isVolume: isVolume)
         issues += compiler.issues
         let errors = issues.filter { !$0.isWarning }
         guard errors.isEmpty, let series, let formats else {
@@ -309,7 +314,7 @@ struct RuleCompiler {
     ///
     /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の順に**内側が勝つ**。区切りは書いた所で丸ごと置き換わり、
     /// 既定の欄は欄ごとに置き換わる。ここでファイル全体とプリセットを重ね、型の分は型に持たせる(読むときに重ねる)。
-    mutating func formats(_ root: JSONValue) -> FormatPresets? {
+    mutating func formats(_ root: JSONValue, isVolume: VolumeTest = .none) -> FormatPresets? {
         func separators(_ v: JSONValue?) -> [String]? { v?.arrayValue?.compactMap(\.stringValue).filter { !$0.isEmpty } }
         func defaults(_ v: JSONValue?) -> [BookMetadata.Field: [String]] {
             var result: [BookMetadata.Field: [String]] = [:]
@@ -322,9 +327,6 @@ struct RuleCompiler {
         func plain(_ v: JSONValue?) -> PlainText {
             PlainText(words: separators(v?["words"]) ?? [], patterns: separators(v?["patterns"]) ?? [])
         }
-        let filePlain = plain(root["plain"])
-        let fileSeparators = separators(root["separators"]) ?? FilenameFormats.defaultSeparators
-        let fileDefaults = defaults(root["defaults"])
         var presets: [String: FilenameFormats] = [:]
         for (name, preset) in root["presets"]?.objectValue ?? [:] {
             var compiled: [FilenameFormat] = []
@@ -338,10 +340,10 @@ struct RuleCompiler {
                 }
             }
             presets[name] = FilenameFormats(formats: compiled,
-                                            separators: separators(preset["separators"]) ?? fileSeparators,
-                                            defaults: fileDefaults.merging(defaults(preset["defaults"])) { _, inner in inner },
+                                            separators: separators(preset["separators"]) ?? FilenameFormats.defaultSeparators,
+                                            defaults: defaults(preset["defaults"]),
                                             label: preset["label"]?.stringValue, note: preset["note"]?.stringValue,
-                                            plain: filePlain.adding(plain(preset["plain"])))
+                                            plain: plain(preset["plain"]), isVolume: isVolume)
         }
         let defaultName = root["defaultPreset"]?.stringValue ?? "commercial"
         if presets[defaultName] == nil { report(.invalidValue, "defaultPreset", "そのプリセットが無い: \(defaultName)") }

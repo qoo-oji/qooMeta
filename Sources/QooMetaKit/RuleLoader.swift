@@ -24,8 +24,6 @@ struct RuleLoader {
     var issues: [RulesIssue] = []
     /// 差分が変えた値の道筋(`rules show` で、どちらの値が効いているかを示す)。
     var changedPaths: [String] = []
-    /// 差分でプリセットに区切りを初めて書くときの土台(ファイル全体の区切り。重ねた後の値)。
-    var inheritedSeparators: JSONValue = .array([])
     /// 既定値の `retiredIDs`・`aliases`(差分を読むときに使う)。
     var retiredIDs: Set<String> = []
     var aliases: [String: String] = [:]
@@ -61,8 +59,8 @@ struct RuleLoader {
         case nil: report(.missingKey, "kind")
         case let v?: report(.invalidValue, "kind", "文字列であるべきところが\(v.kindName)")
         }
-        // 形式の版はファイルごと(filename-formats は第 5 版、ほかは第 2 版)。
-        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 5.0 : 2.0
+        // 形式の版はファイルごと(filename-formats は第 6 版、ほかは第 2 版)。
+        let expectedVersion = (kind ?? .seriesRules) == .filenameFormats ? 6.0 : 2.0
         switch o["schemaVersion"] {
         case .number(let v)? where v == expectedVersion: break
         case .number(let v)?: report(.unsupportedSchemaVersion, "schemaVersion", JSONValue.number(v).rendered())
@@ -463,9 +461,7 @@ struct RuleLoader {
                 skipUnknown(key, diff[key]!, "", candidates: allowed)
             }
         }
-        // 書いた順に重ねる(`separators` を `presets` より先に。プリセットに初めて区切りを書くときの土台になる)。
         for field in RuleSchema.formatStages.fields {
-            if field.name == "presets" { inheritedSeparators = merged["separators"] ?? .array([]) }
             if let d = diff[field.name], let b = merged[field.name] ?? missingBase(field) {
                 merged[field.name] = apply(d, to: b, field.shape, field.name)
             }
@@ -479,7 +475,7 @@ struct RuleLoader {
         guard field.optional else { return nil }
         switch field.shape {
         case .string: return .null
-        case .separators: return inheritedSeparators
+        case .separators: return .array(FilenameFormats.defaultSeparators.map(JSONValue.string))
         case .presetDefaults, .object: return .object([:])
         case .strings, .patterns: return .array([])
         default: return nil

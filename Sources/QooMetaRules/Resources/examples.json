@@ -52,17 +52,17 @@
       ],
       "expect": [
         {
-          "title": "月の庭",
+          "title": "月の庭 (101)",
           "volume": "101",
           "source": null
         },
         {
-          "title": "月の庭",
+          "title": "月の庭 (12)",
           "volume": "12",
           "series": "月の庭"
         },
         {
-          "title": "月の庭",
+          "title": "月の庭 (13)",
           "volume": "13",
           "series": "月の庭"
         }
@@ -77,12 +77,12 @@
       ],
       "expect": [
         {
-          "title": "月の庭",
+          "title": "月の庭 (12)",
           "volume": "12",
           "series": "月の庭"
         },
         {
-          "title": "月の庭",
+          "title": "月の庭 (13)",
           "volume": "13",
           "series": "月の庭"
         }
@@ -2347,7 +2347,7 @@
       ],
       "expect": [
         {
-          "title": "星の海",
+          "title": "星の海 (12)",
           "volume": "12"
         },
         {

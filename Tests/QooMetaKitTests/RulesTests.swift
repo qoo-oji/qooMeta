@@ -16,8 +16,8 @@ import QooMetaRules
     }
 
     static func diff(_ body: String, kind: String = "qoometa.series-rules") -> String {
-        // 形式の版はファイルごと(filename-formats は第 5 版)。
-        let version = kind == "qoometa.filename-formats" ? 5 : 2
+        // 形式の版はファイルごと(filename-formats は第 6 版)。
+        let version = kind == "qoometa.filename-formats" ? 6 : 2
         return #"{ "kind": "\#(kind)", "schemaVersion": \#(version), "base": "builtin", "# + body + " }"
     }
 
@@ -303,26 +303,26 @@ import QooMetaRules
         { "kind": "qoometa.rules-bundle", "schemaVersion": 2, "base": "builtin",
           "seriesRules": { "grouping": { "sharedPrefix": { "minPrefix": 5 } } },
           "filenameFormats": {
-            "presets": { "commercial": { "formats": { "$add": ["@title - @author"], "at": "end" } } },
-            "separators": { "$add": ["・"] }
+            "presets": { "commercial": { "formats": { "$add": ["@title - @author"], "at": "end" },
+                                         "separators": { "$add": ["・"] } } }
           } }
         """)
         let rules = try #require(c.rules, "\(c.errors)")
         #expect(rules.series.grouping.minPrefix == 5)
         #expect(rules.formats["commercial"].formats.last?.text == "@title - @author")
-        #expect(rules.formats[nil].separators.contains("・"))
+        #expect(rules.formats["commercial"].separators.contains("・"))
     }
 
-    /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の順に、内側に書いたものが勝つ。
+    /// 区切りと既定の欄は **ルールセット → 型** の順に、内側に書いたものが勝つ
+    /// (ファイル全体の段は持たない。2026-09-21、利用者の指示)。
     @Test func innerSeparatorsAndDefaultsWin() throws {
         let c = Self.compile(Self.diff(#"""
-        "separators": { "$add": ["/"] },
-        "defaults": { "info": "架空の付記" },
         "presets": {
-          "commercial": { "separators": { "$add": ["×"] }, "defaults": { "genre": "架空の分類甲" } },
+          "commercial": { "separators": { "$add": ["×"] }, "defaults": { "genre": "架空の分類甲", "info": "架空の付記" } },
           "my-shelf": {
             "label": "自分の棚",
             "separators": ["&"],
+            "defaults": { "info": "架空の付記" },
             "formats": [
               { "format": "@title (@volume) - @author", "separators": ["×"], "defaults": { "genre": "架空の分類乙" } },
               "[@author] @title"
@@ -331,10 +331,9 @@ import QooMetaRules
         }
         """#, kind: "qoometa.filename-formats"))
         let rules = try #require(c.rules, "\(c.errors)")
-        // ファイル全体の区切りは、区切りを書いていないプリセットに効く。
-        #expect(Set(rules.formats["doujinshi"].separators) == [",", "，", "、", "/"])
-        // プリセットに初めて書く `$add` は、ファイル全体の区切りに足したものになる。
-        #expect(Set(rules.formats["commercial"].separators) == [",", "，", "、", "/", "×"])
+        // 区切りを書いていないルールセットは、同梱のまま。
+        #expect(Set(rules.formats["doujinshi"].separators) == [",", "，", "、"])
+        #expect(Set(rules.formats["commercial"].separators) == [",", "，", "、", "×"])
         #expect(rules.formats["commercial"].defaults == [.info: ["架空の付記"], .genre: ["架空の分類甲"]])
         // 同梱に無い名前は、利用者の新しいプリセット。区切りは書いた所で丸ごと置き換わる。
         let mine = rules.formats["my-shelf"]
@@ -347,14 +346,14 @@ import QooMetaRules
         #expect(rules.changedPaths.contains("presets.my-shelf"))
     }
 
-    /// `plain`(型として読まない文字列)は ファイル全体 → プリセット → 型 と足し合わさる。同梱は、丸括弧の中の西暦。
+    /// `plain`(型として読まない文字列)は **ルールセット → 型** と足し合わさる。同梱は、丸括弧の中の西暦。
     @Test func plainTextAddsUpAcrossTheLevels() throws {
         let builtin = try #require(Self.compile(nil).rules)
         #expect(builtin.formats["doujinshi"].read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
         #expect(builtin.formats["commercial"].read("[架空工房] 月の庭 (2026)").metadata.volume.isEmpty)
         let c = Self.compile(Self.diff(#"""
-        "plain": { "words": { "$add": ["(仮)"] } },
-        "presets": { "doujinshi": { "plain": { "patterns": { "$add": ["[(（]第\\d+版[)）]"] } } } }
+        "presets": { "doujinshi": { "plain": { "words": { "$add": ["(仮)"] },
+                                               "patterns": { "$add": ["[(（]第\\d+版[)）]"] } } } }
         """#, kind: "qoometa.filename-formats"))
         let rules = try #require(c.rules, "\(c.errors)")
         let doujinshi = rules.formats["doujinshi"]
@@ -364,7 +363,8 @@ import QooMetaRules
         // プリセットに足した分は、ほかのプリセットには効かない。
         #expect(rules.formats["doujinshi-event"].read("[架空工房] 月の庭 (第2版)").metadata.source == "第2版")
         // 危ない正規表現は、ほかの規則と同じく誤り。
-        let bad = Self.compile(Self.diff(#""plain": { "patterns": { "$add": ["(a+)+"] } }"#, kind: "qoometa.filename-formats"))
+        let bad = Self.compile(Self.diff(#""presets": { "doujinshi": { "plain": { "patterns": { "$add": ["(a+)+"] } } } }"#,
+                                         kind: "qoometa.filename-formats"))
         #expect(bad.errors.map(\.code) == [.unsafePattern])
     }
 

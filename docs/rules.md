@@ -376,8 +376,8 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 **フォーマットを足す**(利用者の形を先に試す。この型だけ `×` でも著者を分ける):
 
 ```json
-{ "kind": "qoometa.filename-formats", "schemaVersion": 5, "base": "builtin",
+{ "kind": "qoometa.filename-formats", "schemaVersion": 6, "base": "builtin",
   "presets": { "commercial": { "formats": { "$add": [
-    { "format": "@title 第@volume巻 - @author", "separators": [",", "×"] }
+    { "format": "@series 第@volume巻 - @author", "separators": [",", "×"] }
   ] } } } }
 ```

@@ -56,14 +56,6 @@ public struct PresetCatalog: Sendable, Hashable {
     public let entries: [Entry]
     public let defaultPreset: String
     public let builtInDefaultPreset: String
-    /// ファイル全体の著者の区切り(プリセットも型も書いていないときに使う)。
-    public let separators: [String]
-    public let builtInSeparators: [String]
-    /// ファイル全体の既定の欄(画面からは変えないが、試し読みに要る)。
-    public let defaults: [String: String]
-    /// ファイル全体の「型として読まない文字列」(どのプリセットにも効く)。
-    public let plain: PlainText
-    public let builtInPlain: PlainText
 
     /// 既定を書ける欄(ジャンル・イベント・原作・情報)。
     public static var defaultFields: [String] { RuleSchema.presetDefaultFields }
@@ -94,11 +86,7 @@ extension CompiledRules {
         return PresetCatalog(
             entries: names.map { name in PresetCatalog.Entry(preset: preset(name, now[name]!), original: before[name].map { preset(name, $0) }) },
             defaultPreset: mergedFilenameFormats["defaultPreset"]?.stringValue ?? "",
-            builtInDefaultPreset: defaultFilenameFormats["defaultPreset"]?.stringValue ?? "",
-            separators: strings(mergedFilenameFormats["separators"]) ?? [],
-            builtInSeparators: strings(defaultFilenameFormats["separators"]) ?? [],
-            defaults: defaults(mergedFilenameFormats["defaults"]),
-            plain: plain(mergedFilenameFormats["plain"]), builtInPlain: plain(defaultFilenameFormats["plain"]))
+            builtInDefaultPreset: defaultFilenameFormats["defaultPreset"]?.stringValue ?? "")
     }
 }
 
@@ -161,14 +149,4 @@ extension RuleChanges {
                  "patterns": .object(["$replace": .array(plain.patterns.map(JSONValue.string))])])
     }
 
-    /// ファイル全体の「型として読まない文字列」。
-    public mutating func setPlain(_ plain: PlainText, builtIn: PlainText) {
-        if plain == builtIn { Self.remove(&formats, ["plain"]) } else { Self.set(&formats, ["plain"], Self.replacing(plain)) }
-    }
-
-    /// ファイル全体の著者の区切り。
-    public mutating func setSeparators(_ separators: [String], builtIn: [String]) {
-        if separators == builtIn { Self.remove(&formats, ["separators"]) }
-        else { Self.set(&formats, ["separators"], .object(["$replace": .array(separators.map(JSONValue.string))])) }
-    }
 }

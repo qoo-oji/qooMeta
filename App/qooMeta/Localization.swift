@@ -83,3 +83,8 @@ extension Text {
     /// 変数に入った鍵(英語)から作る。`Text(String)` は訳さないので、鍵を変数で持つ所(`RuleLabels`)はこの口を通す。
     init(key: String) { self.init(LocalizedStringKey(key)) }
 }
+
+extension Label where Title == Text, Icon == Image {
+    /// 変数に入った鍵(英語)から作る見出し。
+    init(key: String, systemImage: String) { self.init { Text(key: key) } icon: { Image(systemName: systemImage) } }
+}

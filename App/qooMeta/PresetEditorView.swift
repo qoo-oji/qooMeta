@@ -11,6 +11,8 @@ import SwiftUI
 struct FormatsPane: View {
     var editing: RulesEditing
     var catalog: PresetCatalog
+    /// 巻数とみなせるかの判定(規則の側が決めたもの)。`@volume` の型を試し読み・一覧で本物どおりに当てるために要る。
+    var isVolume: VolumeTest
 
     @State private var selection: String?
     @State private var draft = PresetDraft()
@@ -20,8 +22,6 @@ struct FormatsPane: View {
     @State private var showsSaveAs = false
     @State private var confirmsReset = false
     @State private var confirmsDelete = false
-    @State private var showsSeparators = false
-    @State private var showsPlain = false
 
     private var isDirty: Bool { draft.preset != saved.preset }
 
@@ -31,65 +31,30 @@ struct FormatsPane: View {
             VStack(alignment: .leading, spacing: 0) {
                 List(selection: Binding(get: { selection }, set: { select($0) })) {
                     Section("Bundled rule sets") {
-                        ForEach(catalog.entries.filter(\.isBuiltIn)) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
+                        ForEach(catalog.entries.filter(\.isBuiltIn)) { PresetRow(entry: $0).tag($0.id) }
                     }
                     let mine = catalog.entries.filter { !$0.isBuiltIn }
                     Section("Your rule sets") {
                         if mine.isEmpty {
                             Text("Change a rule set and choose “Save As…” and it appears here.").font(.caption).foregroundStyle(.secondary)
                         }
-                        ForEach(mine) { PresetRow(entry: $0, isDefault: $0.id == catalog.defaultPreset).tag($0.id) }
+                        ForEach(mine) { PresetRow(entry: $0).tag($0.id) }
                     }
                 }
-                Divider()
-                Form {
-                    Picker("Default rule set", selection: Binding(get: { catalog.defaultPreset }, set: { name in
-                        editing.change { $0.setDefaultPreset(name, builtIn: catalog.builtInDefaultPreset) }
-                    })) {
-                        ForEach(catalog.entries) { Text(verbatim: $0.preset.displayName).tag($0.id) }
-                    }
-                    .help("Books in folders with no rule set assigned are read with this one")
-                    LabeledContent("Author separators") {
-                        HStack(spacing: 8) {
-                            ValueChips(items: catalog.separators.map(RuleLabels.visible))
-                            Button("Edit…") { showsSeparators = true }
-                        }
-                        .popover(isPresented: $showsSeparators, arrowEdge: .trailing) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("The characters that split the authors, shared by every rule set").font(.headline)
-                                    Text("Write separators on a rule set or a format and those win outright there.").font(.caption).foregroundStyle(.secondary)
-                                    InlineArrayEditor(items: catalog.separators, placeholder: "Separator") { items in
-                                        editing.change { $0.setSeparators(items, builtIn: catalog.builtInSeparators) }
-                                    }
-                                    Button("Reset to the default") { editing.change { $0.setSeparators(catalog.builtInSeparators, builtIn: catalog.builtInSeparators) } }
-                                        .disabled(catalog.separators == catalog.builtInSeparators)
-                                }
-                                .padding(14).frame(width: 360)
-                            }
-                    }
-                    LabeledContent("Text excluded while parsing") {
-                        Button(catalog.plain.isEmpty ? "None".ui : "%lld items".ui(catalog.plain.words.count + catalog.plain.patterns.count)) { showsPlain = true }
-                            .popover(isPresented: $showsPlain, arrowEdge: .trailing) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Text excluded while parsing (every rule set)").font(.headline)
-                                    PlainTextEditor(plain: Binding(get: { catalog.plain }, set: { plain in
-                                        editing.change { $0.setPlain(plain, builtIn: catalog.builtInPlain) }
-                                    }))
-                                    Button("Reset to the default") { editing.change { $0.setPlain(catalog.builtInPlain, builtIn: catalog.builtInPlain) } }
-                                        .disabled(catalog.plain == catalog.builtInPlain)
-                                }
-                                .padding(14).frame(width: 420)
-                            }
-                    }
-                }
-                .formStyle(.columns).padding(10)
             }
-            .frame(minWidth: 270, idealWidth: 300)
+            .frame(minWidth: 240, idealWidth: 280)
 
             Group {
                 if let entry {
                     VStack(spacing: 0) {
-                        PresetDraftEditor(draft: $draft, catalog: catalog)
+                        // 下半分は、直したものを**実際に選んだ名前へ当てた結果**(2026-09-21、利用者の指示)。
+                        // 直しながら効果が見えるように、編集の場と同じ画面に置く。
+                        VSplitView {
+                            PresetDraftEditor(draft: $draft, catalog: catalog, isVolume: isVolume)
+                                .frame(minHeight: 200, idealHeight: 380)
+                            NameCheckPane(draft: draft, saved: saved, isVolume: isVolume)
+                                .frame(minHeight: 150, idealHeight: 260)
+                        }
                         Divider()
                         actions(entry)
                     }
@@ -177,7 +142,6 @@ struct FormatsPane: View {
 
 private struct PresetRow: View {
     var entry: PresetCatalog.Entry
-    var isDefault: Bool
 
     var body: some View {
         HStack {
@@ -186,7 +150,6 @@ private struct PresetRow: View {
                 Text("%1$@ · %2$lld formats".ui(entry.preset.name, entry.preset.formats.count)).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            if isDefault { Image(systemName: "star.fill").foregroundStyle(.yellow).help("Default rule set") }
             ModifiedDot(isModified: entry.isModified)
         }
     }
@@ -225,6 +188,41 @@ struct PresetDraft {
                              formats: rows.map(\.format))
     }
 
+    /// 下書きの型の並びを、いま読める形にしたもの。**書きかけで読めない型は飛ばす**(1 文字打つたびに読めなくなるため)。
+    /// `lines` は、残った型が下書きの何行目かの並び(画面に出す番号は、下書きの行の番号のまま)。
+    ///
+    /// 巻数とみなせるかの判定(`isVolume`)は規則の側が決めるので、外から渡す ―― 渡さないと `@volume` の型が
+    /// どの名前にも当たらず、試し読みと一覧が本物と食い違う。
+    func usable(isVolume: VolumeTest) -> Usable {
+        func fields(_ values: [String: String]) -> [BookMetadata.Field: [String]] {
+            Dictionary(uniqueKeysWithValues: values.compactMap { key, value in
+                BookMetadata.Field(rawValue: key).map { ($0, [value]) } })
+        }
+        var compiled: [FilenameFormat] = []
+        var lines: [Int] = []
+        var texts: [String] = []
+        for (index, row) in rows.enumerated() {
+            guard let format = try? FilenameFormat(row.format.text, separators: row.format.separators,
+                                                   defaults: fields(row.format.defaults), plain: row.format.plain) else { continue }
+            compiled.append(format)
+            lines.append(index)
+            texts.append(row.format.text)
+        }
+        return Usable(formats: FilenameFormats(formats: compiled, separators: separators ?? FilenameFormats.defaultSeparators,
+                                               defaults: fields(defaults), plain: plain, isVolume: isVolume),
+                      lines: lines, texts: texts)
+    }
+
+    struct Usable {
+        var formats: FilenameFormats
+        var lines: [Int]
+        var texts: [String]
+
+        /// 型の番号(読めた並びの中)→ 画面に出す行の番号(1 から)。
+        func line(_ index: Int?) -> Int { index.map { lines.indices.contains($0) ? lines[$0] + 1 : $0 + 1 } ?? 0 }
+        func text(_ index: Int?) -> String { index.flatMap { texts.indices.contains($0) ? texts[$0] : nil } ?? "" }
+    }
+
     /// 型の書き方の誤り(行の番号つき)。あれば保存できない。
     func problem(of row: Row) -> String? {
         do { _ = try FilenameFormat(row.format.text); return nil } catch { return error.description }
@@ -244,6 +242,7 @@ struct PresetDraft {
 private struct PresetDraftEditor: View {
     @Binding var draft: PresetDraft
     var catalog: PresetCatalog
+    var isVolume: VolumeTest
     @State private var sample = ""
 
     var body: some View {
@@ -279,15 +278,10 @@ private struct PresetDraftEditor: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Author separators").font(.headline)
-                    Toggle("Set separators for this rule set alone", isOn: Binding(get: { draft.separators != nil },
-                                                                 set: { draft.separators = $0 ? catalog.separators : nil }))
-                    if let separators = draft.separators {
-                        InlineArrayEditor(items: separators, placeholder: "Separator") { draft.separators = $0 }
-                    } else {
-                        Text("Split with the default that every rule set shares:")
-                            .font(.caption).foregroundStyle(.secondary)
-                        ValueChips(items: catalog.separators.map(RuleLabels.visible))
-                    }
+                    Text("The characters that split the authors read from a name. A format can set its own instead.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    InlineArrayEditor(items: draft.separators ?? FilenameFormats.defaultSeparators,
+                                      placeholder: "Separator") { draft.separators = $0 }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -297,16 +291,11 @@ private struct PresetDraftEditor: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Text excluded while parsing (added by this rule set)").font(.headline)
+                    Text("Text excluded while parsing").font(.headline)
                     PlainTextEditor(plain: $draft.plain)
-                    if !catalog.plain.isEmpty {
-                        Text("Added to what every rule set shares:")
-                            .font(.caption).foregroundStyle(.secondary)
-                        ValueChips(items: catalog.plain.words + catalog.plain.patterns)
-                    }
                 }
 
-                SampleReading(sample: $sample, draft: draft, catalog: catalog)
+                SampleReading(sample: $sample, draft: draft, catalog: catalog, isVolume: isVolume)
             }
             .padding(16)
         }
@@ -352,7 +341,7 @@ private struct FormatRowView: View {
                 .popover(isPresented: $showsOptions, arrowEdge: .trailing) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Acts only on books read with this format").font(.headline)
-                        Text("Format beats rule set, and rule set beats what they all share: the innermost one wins.").font(.caption).foregroundStyle(.secondary)
+                        Text("What a format sets beats what the rule set sets.").font(.caption).foregroundStyle(.secondary)
                         Toggle("Set separators for this format alone", isOn: Binding(get: { row.format.separators != nil },
                                                                  set: { row.format.separators = $0 ? [","] : nil }))
                         if let separators = row.format.separators {
@@ -377,6 +366,7 @@ private struct SampleReading: View {
     @Binding var sample: String
     var draft: PresetDraft
     var catalog: PresetCatalog
+    var isVolume: VolumeTest
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -385,28 +375,16 @@ private struct SampleReading: View {
                 .textFieldStyle(.roundedBorder)
             let name = sample.trimmingCharacters(in: .whitespaces)
             if !name.isEmpty {
-                // 書きかけで読めない型は飛ばして試す(番号は下書きの行の番号のまま)。
-                let usable = draft.rows.enumerated().compactMap { index, row -> (Int, FilenameFormat)? in
-                    let defaults = Dictionary(uniqueKeysWithValues: row.format.defaults.compactMap { key, value in
-                        BookMetadata.Field(rawValue: key).map { ($0, [value]) } })
-                    return (try? FilenameFormat(row.format.text, separators: row.format.separators, defaults: defaults,
-                                                plain: row.format.plain)).map { (index, $0) }
-                }
-                let fileDefaults = catalog.defaults.merging(draft.defaults) { _, inner in inner }
-                let formats = FilenameFormats(
-                    formats: usable.map(\.1), separators: draft.separators ?? catalog.separators,
-                    defaults: Dictionary(uniqueKeysWithValues: fileDefaults.compactMap { key, value in
-                        BookMetadata.Field(rawValue: key).map { ($0, [value]) } }),
-                    plain: catalog.plain.adding(draft.plain))
-                let reading = formats.read(name)
+                let usable = draft.usable(isVolume: isVolume)
+                let reading = usable.formats.read(name)
                 if let matched = reading.formatIndex {
-                    Label("Read with the format on line %1$lld: %2$@".ui(usable[matched].0 + 1, usable[matched].1.text), systemImage: "checkmark.circle.fill")
+                    Label("Read with the format on line %1$lld: %2$@".ui(usable.line(matched), usable.text(matched)), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green).font(.callout)
                 } else {
                     Label("Matches no format; the whole name becomes a provisional title", systemImage: "xmark.circle.fill")
                         .foregroundStyle(.orange).font(.callout)
                     if let nearest = reading.nearest {
-                        Text("The closest is the format on line %1$lld, which matched the first %2$lld characters.".ui(usable[nearest.formatIndex].0 + 1, nearest.matchedCharacters))
+                        Text("The closest is the format on line %1$lld, which matched the first %2$lld characters.".ui(usable.line(nearest.formatIndex), nearest.matchedCharacters))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

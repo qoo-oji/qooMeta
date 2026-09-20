@@ -5,6 +5,13 @@ import Testing
 // ファイル名フォーマット(docs/filename-format.md の 1・2・5)。名前はすべて架空のもの。
 
 @Suite struct FilenameFormatTests {
+    /// 巻数とみなせるかは `series-rules` の巻の読み手が決めるので、巻を見るテストは組み立て済みの規則から取る。
+    static func compiled(_ name: String, formats: [String]? = nil) -> FilenameFormats {
+        var set = CompiledRules.builtin.formats[name]
+        if let formats { set.formats = formats.map { try! FilenameFormat($0) } }
+        return set
+    }
+
     static func read(_ name: String, _ formats: [String]? = nil) -> FormatReading {
         let set = formats.map { FilenameFormats(formats: $0.map { try! FilenameFormat($0) }) } ?? .doujinshiPreset
         return set.read(name)
@@ -82,33 +89,34 @@ import Testing
     /// 「シリーズ名 (巻数) - 著者」の形(商業誌用と既定の並び)。数字だけの丸括弧のすぐ後ろの ` - ` でだけ分ける。
     /// 丸括弧の前はシリーズ名として読み、`@title` の無い型なのでタイトルは型のその部分(`@series (@volume)`)に値をはめる。
     @Test func trailingAuthorAfterTheVolume() {
-        let r = FilenameFormats.commercialPreset.read("月の庭（３） - 架空作家")
+        let commercial = Self.compiled("commercial")
+        let r = commercial.read("月の庭（３） - 架空作家")
         #expect(r.metadata.series == "月の庭")
         #expect(r.metadata.title == "月の庭 (3)")
         // じかに付いた文字までがタイトルに入る。巻数の無い型ならシリーズ名だけ。
-        #expect(try! FilenameFormats(formats: [FilenameFormat("[@author] @series 第@volume巻 [@info]")])
+        #expect(Self.compiled("commercial", formats: ["[@author] @series 第@volume巻 [@info]"])
             .read("[架空工房] 月の庭 第０３巻 [DL版]").metadata.title == "月の庭 第03巻")
-        #expect(try! FilenameFormats(formats: [FilenameFormat("@series - @author")]).read("月の庭 - 架空作家").metadata.title == "月の庭")
+        #expect(Self.compiled("commercial", formats: ["@series - @author"])
+            .read("月の庭 - 架空作家").metadata.title == "月の庭")
         #expect(r.metadata.volume == "3")
         #expect(r.spans.map(\.word) == [.series, .volume, .author])
         #expect(r.metadata.authors == ["架空作家"])
         // 末尾の角括弧は著者に入れない(情報の欄へ)。
-        let withInfo = FilenameFormats.commercialPreset.read("月の庭 (3) - 架空作家 [DL版]")
+        let withInfo = commercial.read("月の庭 (3) - 架空作家 [DL版]")
         #expect(withInfo.metadata.authors == ["架空作家"])
         #expect(withInfo.metadata.info == "DL版")
         // タイトルの中の ` - ` では分けない。巻数の無い「題名 - 副題」は、どの型にも合わないまま。
-        #expect(FilenameFormats.commercialPreset.read("月の庭 - 第二部 (3) - 架空作家").metadata.series == "月の庭 - 第二部")
-        #expect(FilenameFormats.commercialPreset.read("月の庭 - 第二部").formatIndex == nil)
+        #expect(commercial.read("月の庭 - 第二部 (3) - 架空作家").metadata.series == "月の庭 - 第二部")
+        #expect(commercial.read("月の庭 - 第二部").formatIndex == nil)
         // 角括弧で始まる名前は、これまでどおり角括弧の形で読む。
-        #expect(FilenameFormats.commercialPreset.read("[架空工房] 月の庭 (3)").metadata.authors == ["架空工房"])
+        #expect(commercial.read("[架空工房] 月の庭 (3)").metadata.authors == ["架空工房"])
     }
 
     /// 区切りは型ごとに決められる。書いた型では、プリセットの区切りを丸ごと置き換える(足し合わせない)。
     @Test func separatorsPerFormat() throws {
-        let set = FilenameFormats(formats: [
-            try FilenameFormat("[@author] @title"),
-            try FilenameFormat("@title (@volume) - @author", separators: ["×"]),
-        ])
+        var set = Self.compiled("commercial")
+        set.formats = [try FilenameFormat("[@author] @title"),
+                       try FilenameFormat("@title (@volume) - @author", separators: ["×"])]
         // 角括弧の形では「×」は名義の一部。
         #expect(set.read("[作画×原作, 協力] 月の庭").metadata.authors == ["作画×原作", "協力"])
         // 末尾の著者の形では「×」で分け、プリセットの「,」では分けない。
@@ -132,8 +140,8 @@ import Testing
     @Test func plainTextIsNotReadAsAField() throws {
         let year = PlainText(patterns: ["[(（](?:19|20)\\d{2}年?[)）]"])
         let formats = try ["[@author] @title (@volume)", "[@author] @title (@source)", "[@author] @title"].map { try FilenameFormat($0) }
-        let without = FilenameFormats(formats: formats)
-        let with = FilenameFormats(formats: formats, plain: year)
+        var without = Self.compiled("commercial"); without.formats = formats; without.plain = .none
+        var with = without; with.plain = year
         // 末尾の「(2026)」は、そのままだと巻数として読まれる。型として読まなければ、タイトルの一部として残る。
         #expect(without.read("[架空工房] 月の庭 (2026)").metadata.volume == "2026")
         let kept = with.read("[架空工房] 月の庭 (2026)")
@@ -145,8 +153,10 @@ import Testing
         // 年ではない数字は、これまでどおり巻数。
         #expect(with.read("[架空工房] 月の庭 (12)").metadata.volume == "12")
         // 語でも書ける。型が自分の分を足すと、その型で照合するときにだけ効く(外側の分に足される)。
-        let own = FilenameFormats(formats: [try FilenameFormat("[@author] @title (@source)", plain: PlainText(words: ["(仮)"])),
-                                            try FilenameFormat("[@author] @title")], plain: year)
+        var own = without
+        own.formats = [try FilenameFormat("[@author] @title (@source)", plain: PlainText(words: ["(仮)"])),
+                       try FilenameFormat("[@author] @title")]
+        own.plain = year
         #expect(own.read("[架空工房] 月の庭 (仮)").metadata.title == "月の庭 (仮)")
         #expect(own.read("[架空工房] 月の庭 (2026)").metadata.title == "月の庭 (2026)")
     }
@@ -204,7 +214,7 @@ import Testing
         #expect(FilenameFormats.commercialPresetTexts.count == 10)
         #expect(FilenameFormats.commercialPresetTexts.last == "@series (@volume) - @author")
         #expect(!FilenameFormats.doujinshiPresetTexts.contains("@series (@volume) - @author"))
-        #expect(FilenameFormats.commercialPresetTexts.first == "(@genre) [@author] @title (@volume) [@info]")
+        #expect(FilenameFormats.commercialPresetTexts.first == "(@genre) [@author] @series (@volume) [@info]")
         #expect(FilenameFormats.commercialPresetTexts.allSatisfy { !$0.contains("@source") })
     }
 
@@ -232,13 +242,52 @@ import Testing
         #expect(withGenre.read("[架空工房] 月の庭 (架空の原作)").metadata.source == "架空の原作")
     }
 
-    /// 末尾の数字だけの丸括弧は、商業誌用では巻数、同人誌用では原作。プリセットで読み方が分かれる。
+    /// 末尾の数字だけの丸括弧は、商業誌用では巻数、同人誌用では原作。ルールセットで読み方が分かれる。
+    /// 巻数を読む型は手前を `@series` で読むので、タイトルは「シリーズ名 (巻数)」になる。
     @Test func numericTrailingParenIsTheVolume() {
-        let r = FilenameFormats.commercialPreset.read("[架空工房] 月の庭（１２）")
+        let r = Self.compiled("commercial").read("[架空工房] 月の庭（１２）")
         #expect(r.metadata.volume == "12")  // 全角の数字は半角に畳む
-        #expect(r.metadata.title == "月の庭")
+        #expect(r.metadata.series == "月の庭")
+        #expect(r.metadata.title == "月の庭 (12)")
         #expect(Self.read("[架空工房] 月の庭 (架空の原作)").metadata.source == "架空の原作")
         #expect(Self.read("[架空工房] 月の庭（１２）").metadata.source == "１２")
+    }
+
+    /// 読めぐあいの判定(`check`)。画面は、どの名前が読めていないか・どこが問題かをこれで出す。
+    @Test func checkTellsWhereTheNameBroke() {
+        let commercial = Self.compiled("commercial")
+        // 読み切れた名前。
+        let read = commercial.check("[架空工房] 月の庭 (12)")
+        #expect(read.outcome == .read)
+        #expect(read.problems.isEmpty)
+        #expect(!read.spans.isEmpty)
+
+        // 型には合ったが、どの欄にもならない括弧が題に残った名前。印はその括弧の位置。
+        let leftover = commercial.check("[架空工房] 月の庭 (架空の原作)")
+        #expect(leftover.outcome == .leftover)
+        let name = Array("[架空工房] 月の庭 (架空の原作)")
+        #expect(leftover.problems.map { String(name[$0]) } == ["(架空の原作)"])
+
+        // どの型にも合わない名前。印は、いちばん近い型が外れたところから後ろ。
+        let unread = commercial.check("[架空工房 月の庭")
+        #expect(unread.outcome == .unread)
+        #expect(unread.spans.isEmpty)
+        #expect(unread.problems.count == 1)
+        #expect(unread.problems[0].upperBound == Array("[架空工房 月の庭").count)
+
+        // 型として読まない語は、残って当たり前なので問題にしない。
+        var withPlain = commercial
+        withPlain.plain = PlainText(words: ["(2026)"])
+        #expect(withPlain.check("[架空工房] 月の庭 (2026)").outcome == .read)
+    }
+
+    /// `@title` の無い型(`@series (@volume) - @author`)のタイトルは型から組み立てたもの。
+    /// その「(3)」を読み残しと数えない(数えると、この型の蔵書が丸ごと「読み切れていない」になる)。
+    @Test func assembledTitleIsNotALeftover() {
+        let commercial = Self.compiled("commercial")
+        let check = commercial.check("月の庭 (3) - 架空作家")
+        #expect(check.outcome == .read)
+        #expect(check.problems.isEmpty)
     }
 
     @Test func longNamesFinishQuickly() {

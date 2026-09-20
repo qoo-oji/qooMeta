@@ -81,13 +81,16 @@ final class AppModel {
         var kinds: [(name: String, count: Int)]
     }
 
-    /// 段 2 に出す、プリセットごとの当たり具合。
+    /// 段 2 に出す、ルールセットごとの当たり具合。
     struct PresetFit: Identifiable {
         var id: String
         var title: String
         /// 説明の鍵。
         var note: String
-        var matched: Int
+        /// 読み切れた冊数(型に合い、括弧の読み残しも無い)。
+        var read: Int
+        /// 型には合ったが、括弧がどの欄にもならず値に残った冊数。
+        var leftover: Int
     }
 
     var step: Step = .choose
@@ -125,6 +128,7 @@ final class AppModel {
         }
         picked = Picked(root: URL(fileURLWithPath: root), files: files,
                         kinds: [(name: "CBZ", count: files.count)])
+        PickedNames.shared.set(files.map(\.baseName))
         go(to: .parse)
     }
 
@@ -180,6 +184,8 @@ final class AppModel {
             picked = Picked(root: found.root, files: found.files,
                             kinds: counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
                                 .map { (name: $0.key, count: $0.value) })
+            // 選んだ名前は、ファイル名解析の窓でも使う(直した効果を、その蔵書の名前で見せるため)。
+            PickedNames.shared.set(found.files.map(\.baseName))
             // 選び直したら、前の結果は捨てる(古い一覧が残っていると、どの蔵書の話か分からなくなる)。
             workspace = nil
             presetFits = []
@@ -198,27 +204,35 @@ final class AppModel {
         let entries = settings.rules.presetCatalog.entries
         let names = picked.files.map(\.baseName)
         let formats = settings.rules.formats
-        let counts = await Task.detached { () -> [String: Int] in
-            // プリセットごとに数えるので、並べて走らせる(蔵書が大きいと 1 本では待たされる)。
-            await withTaskGroup(of: (String, Int).self) { group in
+        let counts = await Task.detached { () -> [String: (read: Int, leftover: Int)] in
+            // ルールセットごとに数えるので、並べて走らせる(蔵書が大きいと 1 本では待たされる)。
+            await withTaskGroup(of: (String, Int, Int).self) { group in
                 for id in entries.map(\.id) {
                     group.addTask {
                         let set = formats[id]
-                        return (id, names.reduce(0) { $0 + (set.read($1).formatIndex != nil ? 1 : 0) })
+                        var read = 0, leftover = 0
+                        for name in names {
+                            switch set.check(name).outcome {
+                            case .read: read += 1
+                            case .leftover: leftover += 1
+                            case .unread: break
+                            }
+                        }
+                        return (id, read, leftover)
                     }
                 }
-                return await group.reduce(into: [:]) { $0[$1.0] = $1.1 }
+                return await group.reduce(into: [:]) { $0[$1.0] = (read: $1.1, leftover: $1.2) }
             }
         }.value
         presetFits = entries.map {
             PresetFit(id: $0.id, title: $0.preset.displayName, note: RuleLabels.preset($0.id).help,
-                      matched: counts[$0.id] ?? 0)
+                      read: counts[$0.id]?.read ?? 0, leftover: counts[$0.id]?.leftover ?? 0)
         }
         // 選び直しでなければ、**この蔵書でいちばん読めたもの**を選んでおく(既定を黙って当てない)。
         // 同じ数なら、同梱の並びで先のものを採る。
         if chosenPreset == nil || counts[chosenPreset!] == nil {
             chosenPreset = presetFits.reduce(into: nil as PresetFit?) { best, fit in
-                if best == nil || fit.matched > best!.matched { best = fit }
+                if best == nil || fit.read > best!.read { best = fit }
             }?.id ?? settings.rules.formats.defaultName
         }
     }
@@ -258,6 +272,7 @@ final class AppModel {
                 let workspace = await Workspace.open(file, rules: settings.rules)
                 workspace.markSaved(to: url)
                 self.workspace = workspace
+                PickedNames.shared.set(file.books.map(\.name))
                 picked = nil                 // 作業ファイルは、対象と解析方法を自分で持っている
                 step = .review
             } catch {

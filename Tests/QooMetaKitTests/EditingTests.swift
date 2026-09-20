@@ -259,6 +259,11 @@ import QooMetaRules
         #expect(rules.catalog.entries.filter { $0.stage == "volume.readers" }.first?.id == "ordinal")
     }
 
+    /// 商業誌のルールセットの区切り(ファイル全体の段は無いので、ルールセットから読む)。
+    static func commercialSeparators(_ catalog: PresetCatalog) -> [String]? {
+        catalog.entries.first { $0.id == "commercial" }?.preset.separators
+    }
+
     /// プリセットの編集画面が行う操作: 同梱のプリセットを直す・初期化する、名前をつけて新しいプリセットにする、消す。
     @Test func thePresetEditorOperationsCompile() throws {
         func compile(_ changes: RuleChanges) throws -> CompiledRules {
@@ -268,7 +273,8 @@ import QooMetaRules
         let start = CompiledRules.builtin.presetCatalog
         #expect(start.entries.map(\.preset.name) == ["commercial", "doujinshi", "doujinshi-event"])
         #expect(start.entries.allSatisfy { $0.isBuiltIn && !$0.isModified })
-        #expect(start.defaultPreset == "commercial" && start.separators == [",", "，", "、"])
+        #expect(start.defaultPreset == "commercial")
+        #expect(Self.commercialSeparators(start) == [",", "，", "、"])
         let commercial = try #require(start.entries.first { $0.id == "commercial" })
         #expect(commercial.preset.label.isEmpty && commercial.preset.formats.count == 10)
 
@@ -284,16 +290,15 @@ import QooMetaRules
         let read = rules.formats["commercial"].read("月の庭 第3巻 - 甲×乙")
         #expect(read.metadata.authors == ["甲", "乙"] && read.metadata.genre == "架空の分類甲" && read.metadata.title == "月の庭 第3巻")
 
-        // 型として読まない文字列を、同梱のプリセットと型に足す。ファイル全体の分も変えられる。
-        edited.plain = PlainText(words: ["(仮)"])
+        // 型として読まない文字列は、**ルールセットごと**の設定(ファイル全体の段は持たない。2026-09-21)。
+        edited.plain = PlainText(words: ["(仮)"], patterns: commercial.preset.plain.patterns)
         edited.formats[1].plain = PlainText(patterns: ["[(（]第\\d+版[)）]"])
         changes.setPreset(edited, original: commercial.original)
-        changes.setPlain(PlainText(words: ["(再録)"], patterns: start.builtInPlain.patterns), builtIn: start.builtInPlain)
         rules = try compile(changes)
         #expect(rules.presetCatalog.entries.first { $0.id == "commercial" }?.preset == edited)
-        #expect(rules.presetCatalog.plain.words == ["(再録)"])
-        #expect(rules.formats["commercial"].read("[架空工房] 月の庭 (再録)").metadata.title == "月の庭 (再録)")
-        changes.setPlain(start.builtInPlain, builtIn: start.builtInPlain)
+        #expect(rules.formats["commercial"].read("[架空工房] 月の庭 (仮)").metadata.title == "月の庭 (仮)")
+        // ほかのルールセットには効かない。
+        #expect(rules.formats["doujinshi"].read("[架空工房] 月の庭 (仮)").metadata.source == "仮")
 
         // 名前をつけて保存: 新しいプリセットは全体が差分に入る。既定のプリセットにも選べる。
         var mine = edited
@@ -302,12 +307,11 @@ import QooMetaRules
         mine.separators = ["&"]
         changes.setPreset(mine, original: nil)
         changes.setDefaultPreset("自分の棚", builtIn: start.builtInDefaultPreset)
-        changes.setSeparators([",", "、"], builtIn: start.builtInSeparators)
         rules = try compile(changes)
         let catalog = rules.presetCatalog
         #expect(catalog.entries.map(\.preset.name) == ["commercial", "doujinshi", "doujinshi-event", "自分の棚"])
         #expect(catalog.entries.last?.isBuiltIn == false && catalog.entries.last?.preset == mine)
-        #expect(catalog.defaultPreset == "自分の棚" && catalog.separators == [",", "、"])
+        #expect(catalog.defaultPreset == "自分の棚")
         #expect(rules.formats[nil].label == "自分の棚(著者は末尾)")
 
         // 初期化: 同梱のプリセットは既定値に戻る(同じ中身を保存し直しても、差分から消える)。
@@ -320,7 +324,6 @@ import QooMetaRules
 
         // 削除: 利用者のプリセットは消え、既定のプリセットの指定も同梱のものに戻る。
         changes.removePreset("自分の棚")
-        changes.setSeparators(start.builtInSeparators, builtIn: start.builtInSeparators)
         #expect(changes.isEmpty)
     }
 

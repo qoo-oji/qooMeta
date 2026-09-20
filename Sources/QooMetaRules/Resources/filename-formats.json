@@ -1,29 +1,29 @@
 {
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
   "kind": "qoometa.filename-formats",
-  "schemaVersion": 5,
-  "revision": "2026.09.21",
+  "schemaVersion": 6,
+  "revision": "2026.09.21.3",
   "defaultPreset": "commercial",
-  "separators": [
-    ",",
-    "，",
-    "、"
-  ],
-  "plain": {
-    "words": [],
-    "patterns": [
-      "[(（](?:19|20)\\d{2}年?[)）]"
-    ]
-  },
   "presets": {
     "commercial": {
+      "separators": [
+        ",",
+        "，",
+        "、"
+      ],
+      "plain": {
+        "words": [],
+        "patterns": [
+          "[(（](?:19|20)\\d{2}年?[)）]"
+        ]
+      },
       "formats": [
-        "(@genre) [@author] @title (@volume) [@info]",
-        "(@genre) [@author] @title (@volume)",
+        "(@genre) [@author] @series (@volume) [@info]",
+        "(@genre) [@author] @series (@volume)",
         "(@genre) [@author] @title [@info]",
         "(@genre) [@author] @title",
-        "[@author] @title (@volume) [@info]",
-        "[@author] @title (@volume)",
+        "[@author] @series (@volume) [@info]",
+        "[@author] @series (@volume)",
         "[@author] @title [@info]",
         "[@author] @title",
         "@series (@volume) - @author [@info]",
@@ -31,6 +31,17 @@
       ]
     },
     "doujinshi": {
+      "separators": [
+        ",",
+        "，",
+        "、"
+      ],
+      "plain": {
+        "words": [],
+        "patterns": [
+          "[(（](?:19|20)\\d{2}年?[)）]"
+        ]
+      },
       "formats": [
         "(@genre) [@author (@author)] @title (@source) [@info]",
         "(@genre) [@author (@author)] @title (@source)",
@@ -51,6 +62,17 @@
       ]
     },
     "doujinshi-event": {
+      "separators": [
+        ",",
+        "，",
+        "、"
+      ],
+      "plain": {
+        "words": [],
+        "patterns": [
+          "[(（](?:19|20)\\d{2}年?[)）]"
+        ]
+      },
       "defaults": {
         "genre": "同人誌"
       },

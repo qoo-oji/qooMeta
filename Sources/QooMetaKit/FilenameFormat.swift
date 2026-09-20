@@ -38,8 +38,8 @@ public enum FormatWord: String, Sendable, Hashable, CaseIterable, Codable {
 }
 
 extension FormatWord {
-    /// 値に当てはまる形。`@volume` は数字だけ(全角も含む)。ほかは何でもよい。
-    var onlyDigits: Bool { self == .volume }
+    /// 値の形が決まっている欄か。`@volume` は**巻数とみなせる形**だけを受ける。ほかの欄は何でもよい。
+    var isVolume: Bool { self == .volume }
 }
 
 /// 型の書き方の誤り。
@@ -62,6 +62,22 @@ public enum FormatError: Error, Sendable, Hashable, CustomStringConvertible {
         case .adjacent(let a, let b): "\(a.spelling) と \(b.spelling) のあいだに区切りの文字が要る"
         }
     }
+}
+
+/// 巻数とみなせるかを決めるもの。**語はコードに書かない**(concept.md の原則 8): 判定は `series-rules.json` の
+/// 巻の読み手(`volume.readers` の語の一覧)に任せる ―― 巻数に変換する文字列の設定があるのだから、そこに登録された
+/// ものだけを通すべき(2026-09-21、利用者の指摘)。
+///
+/// 規則を読み込む前(同梱の並びをコードから使うとき)は、誰も決めていないので**すべて断る**。
+public struct VolumeTest: Sendable {
+    let test: @Sendable (String) -> Bool
+
+    public init(_ test: @escaping @Sendable (String) -> Bool) { self.test = test }
+
+    /// 規則がまだ無いときの値。巻数を読む型には当たらない(黙って何でも通すより、当たらないほうが分かる)。
+    public static let none = VolumeTest { _ in false }
+
+    func callAsFunction(_ s: some Sequence<Character>) -> Bool { test(String(s)) }
 }
 
 /// 型として読まない文字列(filename-formats.json の `plain`)。名前の中のこの部分は、**型の照合のあいだだけ、ただの文字として扱う**:
@@ -95,6 +111,14 @@ public struct PlainText: Sendable, Hashable {
 
     public static func == (a: PlainText, b: PlainText) -> Bool { a.words == b.words && a.patterns == b.patterns }
     public func hash(into hasher: inout Hasher) { hasher.combine(words); hasher.combine(patterns) }
+
+    /// この文字列の**全体**が、型として読まない語そのものか(「(2026)」など)。読み残しを数えるときに使う。
+    public func covers(_ text: String) -> Bool {
+        guard let regex else { return false }
+        let whole = NSRange(location: 0, length: (text as NSString).length)
+        return (BudgetedRegex.matches(regex, in: text, budget: BudgetedRegex.defaultBudget) ?? [])
+            .contains { $0.range == whole }
+    }
 
     /// 名前の中の、型として読まない文字(文字 = Character の番号ごと)。1 つも無ければ nil(ふつうの名前は、ここで終わる)。
     /// 正規表現は利用者が書き足せるので、照合に時間の上限を設ける(越えたら、無いものとして扱う)。
@@ -160,7 +184,7 @@ public struct FilenameFormat: Sendable, Hashable {
 
     /// 欄の値を、欄ごとの形に畳む(巻数の全角の数字は半角に)。
     static func foldValue(_ word: FormatWord, _ value: String) -> String {
-        word.onlyDigits ? String(value.map(fold)) : value
+        word.isVolume ? String(value.map(fold)) : value
     }
 
     static let pairs: [Character: Character] = ["(": ")", "[": "]"]
@@ -267,7 +291,7 @@ public struct FilenameFormat: Sendable, Hashable {
     ///
     /// `plain` は、型として読まない文字(`PlainText.mask`)。その文字は型の文字(括弧など)には当たらず、欄の値を括弧で
     /// 止めることもない。数字だけの欄(`@volume`)には入らない。
-    func match(_ name: [Character], plain: [Bool]? = nil) -> (match: Match?, progress: Progress) {
+    func match(_ name: [Character], isVolume: VolumeTest = .none, plain: [Bool]? = nil) -> (match: Match?, progress: Progress) {
         let folded = name.map(Self.fold)
         func isPlain(_ p: Int) -> Bool { plain?[p] ?? false }
         var failed = Set<Int>()
@@ -289,13 +313,15 @@ public struct FilenameFormat: Sendable, Hashable {
             case .field(let word, let excluded):
                 var end = p
                 while end < folded.count, isPlain(end) || !excluded.contains(folded[end]) {
-                    // 数字だけの欄(`@volume`)は、数字と空白のあいだで止める。
-                    if word.onlyDigits, isPlain(end) || (!folded[end].isNumber && !Self.isSpace(folded[end])) { break }
+                    // 型として読まない文字は、巻数にもしない。
+                    if word.isVolume, isPlain(end) { break }
                     end += 1
                 }
                 for e in stride(from: end, to: p, by: -1) {
                     // 空白だけの値は欄にしない。
                     guard folded[p..<e].contains(where: { !Self.isSpace($0) }) else { continue }
+                    // 巻数の欄は、規則の巻の読み手が「巻数だけ」と認めた値でなければ当たらない。
+                    if word.isVolume, !isVolume(folded[p..<e]) { continue }
                     fields.append((word, p..<e))
                     if step(t + 1, e) { return true }
                     fields.removeLast()
@@ -314,6 +340,16 @@ public struct FilenameFormat: Sendable, Hashable {
 /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の 3 か所に書け、**内側に書いたものが勝つ**
 /// (docs/filename-format.md の 4)。ここが持つのは、ファイル全体とプリセットを重ねた後の値。型の分は型が持つ。
 public struct FilenameFormats: Sendable, Hashable {
+    public static func == (a: FilenameFormats, b: FilenameFormats) -> Bool {
+        (a.label, a.note, a.formats, a.separators, a.defaults, a.plain)
+            == (b.label, b.note, b.formats, b.separators, b.defaults, b.plain)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(label); hasher.combine(note); hasher.combine(formats)
+        hasher.combine(separators); hasher.combine(defaults); hasher.combine(plain)
+    }
+
     /// 画面に出す見出しと説明(無ければプリセットの名前を出す)。
     public var label: String?
     public var note: String?
@@ -326,18 +362,21 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 先頭の丸括弧を催しの名前にしている蔵書では、ジャンルがどの名前にも書かれない。そういう蔵書は丸ごと同人誌なので、
     /// プリセットの側でジャンルを決められるようにする(2026-09-20、利用者の判断)。値は JSON が持ち、コードには書かない。
     public var defaults: [BookMetadata.Field: [String]]
-    /// 型として読まない文字列(ファイル全体の分とプリセットの分を足したもの。型の分は型が持つ)。
+    /// 型として読まない文字列(このルールセットの分。型の分は型が持つ)。
     public var plain: PlainText
+    /// 巻数とみなせるかの判定(規則の巻の読み手。組み立てのときに渡る)。比べるときは見ない(規則の側で決まるため)。
+    public var isVolume: VolumeTest = .none
 
     public static let defaultSeparators = [",", "，", "、"]
 
     public init(formats: [FilenameFormat], separators: [String] = Self.defaultSeparators,
                 defaults: [BookMetadata.Field: [String]] = [:], label: String? = nil, note: String? = nil,
-                plain: PlainText = .none) {
+                plain: PlainText = .none, isVolume: VolumeTest = .none) {
         self.formats = formats
         self.separators = separators
         self.defaults = defaults
         self.plain = plain
+        self.isVolume = isVolume
         self.label = label
         self.note = note
     }
@@ -378,9 +417,12 @@ public struct FilenameFormats: Sendable, Hashable {
     public static let commercialPresetTexts: [String] = {
         var texts: [String] = []
         for genre in ["(@genre) ", ""] {
-            for tail in [" (@volume) [@info]", " (@volume)", " [@info]", ""] {
-                texts.append("\(genre)[@author] @title\(tail)")
-            }
+            // 名前が巻数を持つ形では、その手前は**シリーズ名**(`@series`)。`@title` にすると、読んだ巻数と、
+            // タイトルから導いた巻数が競合する(2026-09-21、利用者の指摘)。
+            texts.append("\(genre)[@author] @series (@volume) [@info]")
+            texts.append("\(genre)[@author] @series (@volume)")
+            texts.append("\(genre)[@author] @title [@info]")
+            texts.append("\(genre)[@author] @title")
         }
         return texts + trailingAuthorTexts
     }()
@@ -397,6 +439,40 @@ public struct FilenameFormats: Sendable, Hashable {
                                                              defaults: doujinshiEventDefaults)
     public static let commercialPreset = FilenameFormats(formats: commercialPresetTexts.map { try! FilenameFormat($0) })
 
+    /// **読み残し**の位置: タイトルに飲み込まれて、どの欄にもならなかった括弧の組(名前の中の文字の番号)。
+    ///
+    /// 緩い型(`[@author] @title`)は、末尾の丸括弧ごとタイトルに飲み込んでも「名前全体に合った」ことになる。
+    /// だから「型に合った冊数」だけでは、その並びが蔵書に合っているかが分からない(2026-09-21、利用者の指摘。
+    /// 同人誌だけのフォルダで、商業誌の並びが 100% と出ていた)。型として読まない語(`plain`)は、残って当たり前なので数えない。
+    ///
+    /// 見るのは**名前の中のタイトルの部分**で、欄の値ではない。`@title` の無い型(`@series (@volume) - @author`)の
+    /// タイトルは型から組み立てたもので、その「(3)」は読み残しではないため。
+    public func unreadBrackets(in reading: FormatReading, name: [Character]) -> [Range<Int>] {
+        guard let index = reading.formatIndex, formats.indices.contains(index) else { return [] }
+        let format = formats[index]
+        let groups = reading.spans.filter { $0.word == .title }
+            .flatMap { Self.bracketGroups(in: name, within: $0.range) }
+        guard let mask = (format.plain.isEmpty ? plain : plain.adding(format.plain)).mask(String(name), name) else { return groups }
+        return groups.filter { group in !group.allSatisfy { mask[$0] } }
+    }
+
+    /// 名前の中の括弧の組の位置(全角・半角の丸括弧と角括弧。入れ子は外側だけ)。
+    static func bracketGroups(in chars: [Character], within range: Range<Int>) -> [Range<Int>] {
+        let closing: [Character: Character] = [")": "(", "]": "[", "）": "（", "］": "［"]
+        var groups: [Range<Int>] = []
+        var open: [(Character, Int)] = []
+        for i in range {
+            let c = chars[i]
+            if "([（［".contains(c) {
+                open.append((c, i))
+            } else if let want = closing[c], let last = open.last, last.0 == want {
+                open.removeLast()
+                if open.isEmpty { groups.append(last.1..<(i + 1)) }
+            }
+        }
+        return groups
+    }
+
     /// 名前を読む。合わなければ、名前全体を仮のタイトルにし、最も近い型を添える。
     public func read(_ name: String) -> FormatReading {
         let chars = Array(name)
@@ -404,7 +480,8 @@ public struct FilenameFormats: Sendable, Hashable {
         let mask = plain.mask(name, chars)
         for (index, format) in formats.enumerated() {
             // 型が自分の分を足していれば、その型のときだけ足した形で見る。
-            let (match, progress) = format.match(chars, plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(name, chars))
+            let (match, progress) = format.match(chars, isVolume: isVolume,
+                                                 plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(name, chars))
             if let match { return reading(chars, match, format: format, formatIndex: index) }
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。
             if progress.tokens > format.leadingFreeTokens, nearest == nil || nearest!.progress < progress { nearest = (index, progress) }
@@ -461,6 +538,51 @@ public struct FilenameFormats: Sendable, Hashable {
             parts = parts.flatMap { $0.components(separatedBy: separator) }
         }
         return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
+/// 名前 1 つの**読めぐあい**。良いほうから並ぶ(番号の小さいほうが良い)。
+public enum FormatOutcome: Int, Sendable, Hashable, CaseIterable, Comparable, Codable {
+    /// 型に合って、読み残しも無い。
+    case read
+    /// 型には合ったが、どの欄にもならない括弧がタイトルに残った。
+    case leftover
+    /// どの型にも合わなかった(名前ぜんぶが仮のタイトル)。
+    case unread
+
+    public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+}
+
+/// 名前 1 つを読んでみた結果と、**どこが問題か**。
+///
+/// 型の並びを直すとき、どの名前がまだ読めていないのか、直して何が良くなったのかを見せるために使う
+/// (2026-09-21、利用者の指示)。段 2 の指標も同じ判定を使う ―― 画面によって数え方が違うと、比べられなくなる。
+public struct FormatCheck: Sendable, Hashable {
+    public var outcome: FormatOutcome
+    /// 合った型の番号。合わなかったときは、最も近い型(それも無ければ nil)。
+    public var formatIndex: Int?
+    /// 直すところ(名前の中の文字の番号)。合わなかった名前は**外れた場所から後ろ**、読み残しは残った括弧の組。
+    public var problems: [Range<Int>]
+    /// 名前のどこがどの欄になったか(合ったときだけ。色分け用)。
+    public var spans: [FormatReading.Span]
+
+    public var isRead: Bool { outcome == .read }
+}
+
+extension FilenameFormats {
+    /// 名前を読んで、読めぐあいと問題の場所まで返す。
+    public func check(_ name: String) -> FormatCheck {
+        let chars = Array(name)
+        let reading = read(name)
+        guard reading.formatIndex != nil else {
+            // どこで外れたかは、最も近い型がそこまで読めた文字数で分かる(近い型が無ければ、名前ぜんぶが問題)。
+            let from = min(reading.nearest?.matchedCharacters ?? 0, max(chars.count - 1, 0))
+            return FormatCheck(outcome: .unread, formatIndex: reading.nearest?.formatIndex,
+                               problems: chars.isEmpty ? [] : [from..<chars.count], spans: [])
+        }
+        let leftover = unreadBrackets(in: reading, name: chars)
+        return FormatCheck(outcome: leftover.isEmpty ? .read : .leftover, formatIndex: reading.formatIndex,
+                           problems: leftover, spans: reading.spans)
     }
 }
 

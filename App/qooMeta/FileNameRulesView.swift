@@ -43,7 +43,8 @@ struct FileNameRulesView: View {
             Divider()
             Group {
                 switch pane {
-                case .presets: FormatsPane(editing: editing, catalog: settings.rules.presetCatalog)
+                case .presets: FormatsPane(editing: editing, catalog: settings.rules.presetCatalog,
+                                           isVolume: settings.rules.formats[nil].isVolume)
                 case .json: DiffPane(editing: editing, half: .fileNames)
                 }
             }
