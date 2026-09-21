@@ -224,6 +224,10 @@ final class VolumeExtractor: Sendable {
     private static let wholeOrdinal = try! NSRegularExpression(
         pattern: #"^第\s*(?:\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒捌玖拾佰仟]+)(?:[-‐]\d+)?\s*\p{Han}?$"#)
 
+    /// 巻の後ろの括弧書き(`isWholeVolume` が除く)と、数の範囲。呼ぶたびに組み立てない。
+    private static let trailingBracket = try! NSRegularExpression(pattern: #"\s*[\[(【][^\[\]()【】]*[\])】]\s*$"#)
+    private static let numberRange = try! NSRegularExpression(pattern: #"(\d+)[-‐~〜](\d+)"#)
+
     static func romanNumber(_ s: String) -> Int? {
         guard !s.isEmpty else { return nil }
         let values: [Character: Int] = ["I": 1, "V": 5, "X": 10]
@@ -240,8 +244,11 @@ final class VolumeExtractor: Sendable {
     func isWholeVolume(_ remainder: String) -> Bool {
         // 巻の後ろの括弧書き(「Vol.01 [注記]」「3 (完)」)は除いて見る。
         var t = remainder.precomposedNFKC
-        while let r = t.range(of: #"\s*[\[(【][^\[\]()【】]*[\])】]\s*$"#, options: .regularExpression), r.lowerBound > t.startIndex {
-            t = String(t[..<r.lowerBound])
+        // 閉じ括弧が無ければ、括弧書きは無い(正規表現を回さない。この判定は、1 つのタイトルに切れ目の数だけ呼ばれる)。
+        while t.contains(where: { $0 == "]" || $0 == ")" || $0 == "】" }),
+              let m = Self.trailingBracket.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)),
+              m.range.location > 0 {
+            t = (t as NSString).substring(to: m.range.location)
         }
         let s = t.trimmingCharacters(in: leadingSeparators)
         guard !s.isEmpty else { return false }
@@ -254,7 +261,7 @@ final class VolumeExtractor: Sendable {
         if rules.reads(.ordinal), Self.wholeOrdinal.firstMatch(in: s, range: range) != nil { return true }
         if wholeVolume.firstMatch(in: s, range: range) != nil {
             // 範囲(「36-37」)は合併号として読めるときだけ。「2021-01」は範囲ではない(年と月)。
-            if let r = s.range(of: #"(\d+)[-‐~〜](\d+)"#, options: .regularExpression) {
+            if let m = Self.numberRange.firstMatch(in: s, range: range), let r = Range(m.range, in: s) {
                 let parts = s[r].split(whereSeparator: { "-‐~〜".contains($0) })
                 return isMergedIssue(Double(parts[0]), Int(parts[1]))
             }

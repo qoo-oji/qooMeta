@@ -10,6 +10,8 @@ import Foundation
 /// 比較用の形で求めた共通部分の長さを、元の表記のシリーズ名へ戻すのに使う。
 struct ComparableText: Sendable, Equatable {
     let original: String
+    /// 元の表記を文字に分けたもの。切れ目を見るたびに作り直さない(`isCleanCut` は 1 つのタイトルに何十回も呼ばれる)。
+    let originalCharacters: [Character]
     let key: [Character]
     /// key[i] の元になった文字の、original での終わりの位置(Character 単位のオフセット)。
     let originalEnd: [Int]
@@ -23,9 +25,20 @@ struct ComparableText: Sendable, Equatable {
     init(_ original: String, rules: TextRules) {
         self.original = original
         self.rules = rules
+        let characters = Array(original)
         var key: [Character] = []
         var ends: [Int] = []
-        for (offset, ch) in original.enumerated() {
+        key.reserveCapacity(characters.count)
+        ends.reserveCapacity(characters.count)
+        for (offset, ch) in characters.enumerated() {
+            if let same = Self.alreadyFolded(ch), let scalar = same.unicodeScalars.first?.value {
+                // 1 つの符号でできた文字は、符号の番号で引く(文字のままだと、1 文字ごとに文字列としてハッシュを取る)。
+                if !rules.ignoredScalars.contains(scalar) {
+                    key.append(rules.variantScalars.isEmpty ? same : rules.variantScalars[scalar] ?? same)
+                    ends.append(offset + 1)
+                }
+                continue
+            }
             let folded = String(ch).precomposedNFKC.lowercased()
             for f in folded where !rules.isIgnoredInComparison(f) {
                 let f = rules.variantFolding[f] ?? f
@@ -33,8 +46,25 @@ struct ComparableText: Sendable, Equatable {
                 ends.append(offset + 1)
             }
         }
+        originalCharacters = characters
         self.key = key
         self.originalEnd = ends
+    }
+
+    /// 揃えても変わらないと分かっている文字は、そのまま(英字は小文字に)返す。それ以外は nil(ふつうの道で揃える)。
+    ///
+    /// 揃える道は 1 文字ごとに Foundation を往復するので、名前の比べる形を作るのが計算の 3 割を占めていた
+    /// (2026-09-21 の計測)。題名の文字のほとんどは、揃えても変わらない: ASCII、ひらがな・カタカナ(合成済みの 1 字)、漢字。
+    /// **変わりうる字は入れない**(半角カナ・全角英数・互換漢字・濁点の結合文字・「ヿ」「゛」など)。
+    static func alreadyFolded(_ ch: Character) -> Character? {
+        let scalars = ch.unicodeScalars
+        guard let first = scalars.first, scalars.index(after: scalars.startIndex) == scalars.endIndex else { return nil }
+        switch first.value {
+        case 0x41...0x5A: return Character(UnicodeScalar(UInt8(first.value) + 0x20))
+        case 0x20...0x40, 0x5B...0x7E: return ch
+        case 0x3041...0x3096, 0x309D...0x309E, 0x30A1...0x30FA, 0x30FC...0x30FE, 0x4E00...0x9FFF: return ch
+        default: return nil
+        }
     }
 
     /// 比較用の先頭 `length` 文字に当たる元の文字列。
@@ -44,7 +74,7 @@ struct ComparableText: Sendable, Equatable {
     func originalPrefix(keyLength length: Int) -> String {
         guard length > 0 else { return "" }
         let end = originalEnd[min(length, originalEnd.count) - 1]
-        let chars = Array(original)
+        let chars = originalCharacters
         var prefix = Array(chars[..<end])
         var i = end
         while i < chars.count, let open = rules.closingToOpening[chars[i]],
@@ -65,7 +95,8 @@ struct ComparableText: Sendable, Equatable {
     func originalRemainder(afterKeyLength length: Int) -> String {
         guard length > 0 else { return original }
         let end = originalEnd[min(length, originalEnd.count) - 1]
-        return String(original.dropFirst(end))
+        // 分けてある文字から作る(文字列を頭から数え直さない。1 つのタイトルに、切れ目の数だけ呼ばれる)。
+        return String(originalCharacters[end...])
     }
 }
 
@@ -76,6 +107,9 @@ final class TextRules: Sendable {
     /// 比較のときに同じ字とみなす異体字(左 → 右)。NFKC では揃わない。表記ゆれでシリーズが割れた実例
     /// (1 巻だけ異体字)から始めた。書き出す名前の表記は変えない(比較用の形にだけ使う)。compare.variants。
     let variantFolding: [Character: Character]
+    /// 上の 2 つのうち、1 つの符号でできた文字の分(符号の番号で引く。`ComparableText.init` の速い道が使う)。
+    let ignoredScalars: Set<UInt32>
+    let variantScalars: [UInt32: Character]
     /// 閉じ括弧 → 開き括弧。naming.includeClosingBrackets(止めていれば空)。
     let closingToOpening: [Character: Character]
     /// シリーズ名の末尾に残ると不自然な文字(区切りの途中で切れたときに落とす)。naming.trimTrailing。
@@ -99,6 +133,10 @@ final class TextRules: Sendable {
         }
         ignoredInComparison = Set(rules.compare.ignoredCharacters)
         variantFolding = pairs(rules.compare.variantKanji)
+        ignoredScalars = Set(ignoredInComparison.compactMap { $0.unicodeScalars.count == 1 ? $0.unicodeScalars.first?.value : nil })
+        variantScalars = Dictionary(variantFolding.compactMap { key, value in
+            key.unicodeScalars.count == 1 ? key.unicodeScalars.first.map { ($0.value, value) } : nil
+        }, uniquingKeysWith: { a, _ in a })
         closingToOpening = pairs(rules.naming.brackets)
         var trim = CharacterSet.whitespaces
         trim.insert(charactersIn: rules.naming.trimTrailing)
@@ -109,8 +147,16 @@ final class TextRules: Sendable {
         labelIntroducers = Set(rules.naming.labelIntroducers.map { $0.lowercased() })
     }
 
-    /// 比べるための形。
-    func comparable(_ s: String) -> ComparableText { ComparableText(s, rules: self) }
+    /// 比べるための形。**同じ計算の中では、同じ文字列から 1 度だけ作る**(`ComputationCache`)。
+    func comparable(_ s: String) -> ComparableText {
+        guard let cache = ComputationCache.current, cache.owner == ObjectIdentifier(self) else {
+            return ComparableText(s, rules: self)
+        }
+        if let made = cache.comparable[s] { return made }
+        let made = ComparableText(s, rules: self)
+        if cache.comparable.count < ComputationCache.limit { cache.comparable[s] = made }
+        return made
+    }
 
     /// 比べるための形の文字列(キー)。
     func key(_ s: String) -> String { String(comparable(s).key) }
@@ -122,6 +168,11 @@ final class TextRules: Sendable {
 
     /// 語の区切りとみなす文字(この直前で切れた共通部分は「きれいな切れ目」)。
     func isBoundary(_ ch: Character) -> Bool {
+        // ASCII は表を引かずに決める(文字の性質を引くのは重く、切れ目の判定は 1 冊に何十回も走る)。
+        if let ascii = ch.asciiValue {
+            if ascii == 0x20 || (0x09...0x0D).contains(ascii) || (0x30...0x39).contains(ascii) { return true }
+            return boundaryCharacters.contains(ch)
+        }
         if ch.isWhitespace || ch.isNumber { return true }
         return boundaryCharacters.contains(ch)
     }
@@ -129,7 +180,7 @@ final class TextRules: Sendable {
     /// 表示用の整え方。**元の表記(全角・半角)は変えない**(書き出す値は利用者のファイル名の表記に従う)。
     /// 空白の連続を 1 つにし、前後の空白を落とし、合成済みの形(NFC)に揃えるだけ。規則には依らない。
     static func normalizeDisplay(_ s: String) -> String {
-        let n = s.precomposedStringWithCanonicalMapping
+        let n = s.precomposedNFC
         let collapsed = n.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         return collapsed.trimmingCharacters(in: .whitespaces)
     }
@@ -151,5 +202,23 @@ final class TextRules: Sendable {
 }
 
 extension String {
-    var precomposedNFKC: String { precomposedStringWithCompatibilityMapping }
+    /// 揃えた形(NFKC)。**揃えても変わらないと分かっている文字だけの文字列は、そのまま返す**
+    /// ―― 揃えるには Foundation を往復する。巻の読み手は、1 つのタイトルの切れ目ごとにこれを呼ぶ。
+    var precomposedNFKC: String { isAlreadyNormalized ? self : precomposedStringWithCompatibilityMapping }
+
+    /// 合成済みの形(NFC)。同じ近道。
+    var precomposedNFC: String { isAlreadyNormalized ? self : precomposedStringWithCanonicalMapping }
+
+    /// どの符号も、揃えても(NFC でも NFKC でも)変わらず、隣と合成もしないと分かっている範囲にあるか。
+    /// ASCII、ひらがな・カタカナ(合成済みの 1 字)、長音符、漢字。**結合文字(濁点の U+3099 など)・全角英数・半角カナ・
+    /// 互換漢字・全角の空白は範囲の外**なので、1 つでもあれば、ふつうの道で揃える。
+    var isAlreadyNormalized: Bool {
+        for scalar in unicodeScalars {
+            switch scalar.value {
+            case 0x00...0x7E, 0x3041...0x3096, 0x309D...0x309E, 0x30A1...0x30FA, 0x30FC...0x30FE, 0x4E00...0x9FFF: continue
+            default: return false
+            }
+        }
+        return true
+    }
 }

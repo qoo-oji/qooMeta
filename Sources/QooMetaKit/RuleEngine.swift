@@ -12,11 +12,14 @@ struct RuleEngine: Sendable {
     let markers: EditionMarkers
     let compilation: Compilation
     let english: EnglishWords
+    /// 語の規則(印・総集編・巻の読み手が同じものを使う)。
+    let words: WordRules
 
     init(rules: CompiledRules, dictionaries: [String: WordSet]) {
         self.rules = rules
         text = TextRules(rules.series)
         let words = WordRules(rules.series.editions.wordRules)
+        self.words = words
         volumes = VolumeExtractor(rules.series.volume, text: text, words: words)
         markers = EditionMarkers(rules.series.editions, words: words)
         compilation = Compilation(words: words, text: text)

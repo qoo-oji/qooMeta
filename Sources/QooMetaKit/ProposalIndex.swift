@@ -141,7 +141,7 @@ public actor ProposalIndex {
             changed: changed,
             removedBooks: removedBooks,
             removedSeries: oldSeries.keys.filter { newSeries[$0] == nil }.sorted(),
-            changedSeries: newSeries.values.filter { oldSeries[$0.id] != $0 }.sorted(by: RuleEngine.seriesOrder))
+            changedSeries: RuleEngine.inSeriesOrder(newSeries.values.filter { oldSeries[$0.id] != $0 }))
         return (s, delta)
     }
 }

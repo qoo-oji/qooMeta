@@ -29,7 +29,10 @@ final class WordRules: Sendable {
         var whole: NSRange
     }
 
-    private let rules: [(treat: SeriesRules.WordRule.Treatment, pattern: NSRegularExpression)]
+    /// `firstScalars` は、その規則の語の頭の符号(正規表現を持つ規則は nil = 絞れない)。タイトルにどれも無ければ、
+    /// その規則の語は入りえないので、正規表現をかけない。語の規則は 1 冊に何度もかかり、ほとんどのタイトルは
+    /// どの語も持たない(2026-09-21 の計測で、計算の 15% が空振りの正規表現だった)。
+    private let rules: [(treat: SeriesRules.WordRule.Treatment, pattern: NSRegularExpression, firstScalars: Set<UInt32>?)]
 
     init(_ rules: [SeriesRules.WordRule]) {
         self.rules = rules.compactMap { rule in
@@ -39,7 +42,9 @@ final class WordRules: Sendable {
             guard !all.isEmpty else { return nil }
             // 印は前後の括弧ごと外すので、括弧と空白も一緒に読む(「DL版」は全角の「ＤＬ版」も規則の正規表現が受け付ける)。
             let source = #"\s*[\[［【(（]?\s*(?<word>"# + all.joined(separator: "|") + #")\s*[\]］】)）]?"#
-            return (try? NSRegularExpression(pattern: source)).map { (rule.treat, $0) }
+            let firsts: Set<UInt32>? = rule.patterns.isEmpty
+                ? Set(rule.words.compactMap { $0.unicodeScalars.first?.value }) : nil
+            return (try? NSRegularExpression(pattern: source)).map { (rule.treat, $0, firsts) }
         }
     }
 
@@ -48,7 +53,8 @@ final class WordRules: Sendable {
 
     /// 「そのまま読む語」の位置だけ(巻の読み手が使う。巻の読み手は語の規則より後ろの段階なので、並びの中の位置は問わない)。
     func keptRanges(in text: String) -> [NSRange] {
-        rules.filter { $0.treat == .keep }.flatMap { rule in
+        let present = Set(text.unicodeScalars.lazy.map(\.value))
+        return rules.filter { $0.treat == .keep && !($0.firstScalars?.isDisjoint(with: present) ?? false) }.flatMap { rule in
             (BudgetedRegex.matches(rule.pattern, in: text, budget: BudgetedRegex.defaultBudget) ?? [])
                 .map { $0.range(withName: "word") }.filter { $0.location != NSNotFound }
         }
@@ -57,8 +63,25 @@ final class WordRules: Sendable {
     /// タイトルの中で規則が取った語(位置の順)。正規表現は利用者が書き足せるので、照合に時間の上限を設ける
     /// (越えた規則は、語が無いものとして扱う)。
     func claims(in title: String) -> [Claim] {
+        // 同じ計算の中では、同じ文字列に 1 度だけ正規表現をかける(`ComputationCache`)。語の規則は `TextRules` と
+        // 同じ規則から作るので、持ち主の見分けは要らない(計算の入口で、規則ごとに別の作り置きになる)。
+        if let cache = ComputationCache.current {
+            if let found = cache.claims[title] { return found }
+            let found = uncachedClaims(in: title)
+            if cache.claims.count < ComputationCache.limit { cache.claims[title] = found }
+            return found
+        }
+        return uncachedClaims(in: title)
+    }
+
+    private func uncachedClaims(in title: String) -> [Claim] {
         var claims: [Claim] = []
+        var present: Set<UInt32>?
         for rule in rules {
+            if let firsts = rule.firstScalars {
+                if present == nil { present = Set(title.unicodeScalars.lazy.map(\.value)) }
+                if firsts.isDisjoint(with: present!) { continue }
+            }
             guard let matches = BudgetedRegex.matches(rule.pattern, in: title, budget: BudgetedRegex.defaultBudget) else { continue }
             for m in matches {
                 let word = m.range(withName: "word")

@@ -86,7 +86,7 @@ struct SeriesGrouper: Sendable {
     /// その位置で切ると、元の表記で数字の途中になるか(「2022-01」の「-」は比較用の形では消えるので、元の表記で見る)。
     static func splitsANumber(_ text: ComparableText, at length: Int) -> Bool {
         guard length > 0, length < text.key.count else { return false }
-        let chars = Array(text.original)
+        let chars = text.originalCharacters
         let end = text.originalEnd[length - 1]
         return end < chars.count && isDigit(chars[end]) && isDigit(chars[end - 1])
     }
@@ -609,7 +609,7 @@ struct SeriesGrouper: Sendable {
         if length >= text.key.count { return true }
         // 比較用の形で飛ばした記号・空白が挟まっていれば切れ目。
         let end = text.originalEnd[length - 1]
-        let chars = Array(text.original)
+        let chars = text.originalCharacters
         if end < chars.count, text.rules.isBoundary(chars[end]) { return true }
         // 漢字・かなの直後に英字が続くなら切れ目(「Xex」「X DX」の空白なし)。
         if end < chars.count, end > 0, chars[end].isASCII, chars[end].isLetter, !chars[end - 1].isASCII,

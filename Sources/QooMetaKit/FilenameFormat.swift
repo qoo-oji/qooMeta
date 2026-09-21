@@ -108,7 +108,8 @@ public struct PlainText: Sendable, Hashable {
     /// 照合に使う形。**文字(Character)ごとに**合成するので、文字の数も並びも変わらない ―― 名前の中の位置を
     /// そのまま使える(文字列ごと合成すると、結合文字の分だけ位置がずれることがある)。
     static func canonical(_ chars: [Character]) -> [String] {
-        chars.map { String($0).precomposedStringWithCanonicalMapping }
+        // 合成しても変わらないと分かっている文字(ASCII・かな・漢字の 1 字)は、Foundation へ渡さない。
+        chars.map { ComparableText.alreadyFolded($0) != nil ? String($0) : String($0).precomposedStringWithCanonicalMapping }
     }
 
     public var isEmpty: Bool { regex == nil }
@@ -166,6 +167,8 @@ public struct FilenameFormat: Sendable, Hashable {
     /// 書いたとおりの型。
     public let text: String
     let tokens: [Token]
+    /// tokens[0..<t] にある「型に書いた文字」の数(近さの測り方は `Progress`)。型ごとに 1 度だけ数える。
+    let literalsBefore: [Int]
     /// この型だけの著者の区切り。nil ならプリセットの区切りで分ける(**書いたら丸ごと置き換える**。足し合わせない)。
     ///
     /// 同じ「×」でも、角括弧の中では 1 つの名義の一部で、` - @author` の形の商業の本では連名の区切り、ということがある。
@@ -183,11 +186,22 @@ public struct FilenameFormat: Sendable, Hashable {
         self.defaults = defaults
         self.plain = plain
         tokens = try Self.compile(text)
+        var counts = [Int](repeating: 0, count: tokens.count + 1)
+        for (i, token) in tokens.enumerated() {
+            if case .literal = token { counts[i + 1] = counts[i] + 1 } else { counts[i + 1] = counts[i] }
+        }
+        literalsBefore = counts
     }
 
     /// 全角の括弧を半角に畳む(名前の揺れで、意味は同じ)。全角の数字も畳む(`@volume` が「（１２）」にも当たるように)。
     static func fold(_ c: Character) -> Character {
-        switch c {
+        // 畳むのは全角の括弧と数字だけ。ほかの文字(名前のほとんど)は、比べずにそのまま返す
+        // ―― 文字どうしの比べは文字列の比べで、1 文字ずつ 6 通りと比べると型の照合の 1 割を占めていた。
+        if c.isASCII { return c }
+        let scalars = c.unicodeScalars
+        if scalars.index(after: scalars.startIndex) == scalars.endIndex, let v = scalars.first?.value,
+           !(0xFF08...0xFF3D).contains(v) { return c }
+        return switch c {
         case "（": "("
         case "）": ")"
         case "［": "["
@@ -204,7 +218,11 @@ public struct FilenameFormat: Sendable, Hashable {
 
     static let pairs: [Character: Character] = ["(": ")", "[": "]"]
 
-    static func isSpace(_ c: Character) -> Bool { c.isWhitespace }
+    static func isSpace(_ c: Character) -> Bool {
+        // ASCII は表を引かずに決める(照合は、名前の 1 文字ごとにこれを呼ぶ)。
+        if let ascii = c.asciiValue { return ascii == 0x20 || (0x09...0x0D).contains(ascii) }
+        return c.isWhitespace
+    }
 
     static func compile(_ text: String) throws(FormatError) -> [Token] {
         let chars = Array(text)
@@ -318,22 +336,22 @@ public struct FilenameFormat: Sendable, Hashable {
     ///
     /// `plain` は、型として読まない文字(`PlainText.mask`)。その文字は型の文字(括弧など)には当たらず、欄の値を括弧で
     /// 止めることもない。数字だけの欄(`@volume`)には入らない。
-    func match(_ name: [Character], isVolume: VolumeTest = .none, plain: [Bool]? = nil) -> (match: Match?, progress: Progress) {
-        let folded = name.map(Self.fold)
+    ///
+    /// `folded` は、名前を畳んだもの(`fold`)。型の並びを順に試すとき、名前を型の数だけ畳み直さないように、呼ぶ側が
+    /// 1 度だけ作って渡せる。
+    func match(_ name: [Character], folded given: [Character]? = nil, isVolume: VolumeTest = .none,
+               plain: [Bool]? = nil) -> (match: Match?, progress: Progress) {
+        let folded = given ?? name.map(Self.fold)
         func isPlain(_ p: Int) -> Bool { plain?[p] ?? false }
-        var failed = Set<Int>()
-        // tokens[0..<t] にある「型に書いた文字」の数(近さの測り方は `Progress`)。
-        var literalsBefore = [Int](repeating: 0, count: tokens.count + 1)
-        for (i, token) in tokens.enumerated() {
-            if case .literal = token { literalsBefore[i + 1] = literalsBefore[i] + 1 } else { literalsBefore[i + 1] = literalsBefore[i] }
-        }
+        // 失敗した (部品, 位置)。集合ではなく、部品 × 位置の表で持つ(1 つの名前に何百回も引く)。
+        var failed = [Bool](repeating: false, count: (tokens.count + 1) * (folded.count + 1))
         var best = Progress(literals: 0, tokens: 0, characters: 0)
         var fields: [(word: FormatWord, range: Range<Int>)] = []
         let width = folded.count + 1
 
         func step(_ t: Int, _ p: Int) -> Bool {
             if t == tokens.count { return p == folded.count }
-            if failed.contains(t * width + p) { return false }
+            if failed[t * width + p] { return false }
             switch tokens[t] {
             case .literal(let c):
                 if p < folded.count, folded[p] == c, !isPlain(p) {
@@ -362,7 +380,7 @@ public struct FilenameFormat: Sendable, Hashable {
                     fields.removeLast()
                 }
             }
-            failed.insert(t * width + p)
+            failed[t * width + p] = true
             return false
         }
 
@@ -524,11 +542,12 @@ public struct FilenameFormats: Sendable, Hashable {
     /// 名前を読む。合わなければ、名前全体を仮のタイトルにし、最も近い型を添える。
     public func read(_ name: String) -> FormatReading {
         let chars = Array(name)
+        let folded = chars.map(FilenameFormat.fold)
         var nearest: (index: Int, progress: FilenameFormat.Progress)?
         let mask = plain.mask(chars)
         for (index, format) in formats.enumerated() {
             // 型が自分の分を足していれば、その型のときだけ足した形で見る。
-            let (match, progress) = format.match(chars, isVolume: isVolume,
+            let (match, progress) = format.match(chars, folded: folded, isVolume: isVolume,
                                                  plain: format.plain.isEmpty ? mask : plain.adding(format.plain).mask(chars))
             if let match { return reading(chars, match, format: format, formatIndex: index) }
             // どの型も頭の部品から外れた名前(括弧の無い名前など)には、近い型は無いとする(先頭の型を示しても手がかりにならない)。

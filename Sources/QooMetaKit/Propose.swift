@@ -122,6 +122,16 @@ struct UnitResult: Sendable {
     var books: [String: Book]
     /// 単位の中のシリーズ(ID を付ける前)。
     var series: [UnitSeries]
+    /// シリーズの鍵 → 名前。本ごとに `series` を頭から探さない(書き手の読めない蔵書は 1 つの単位に何千ものシリーズを持つ)。
+    var seriesNames: [String: String]
+    var seriesKinds: [String: SeriesProposal.Kind]
+
+    init(books: [String: Book], series: [UnitSeries]) {
+        self.books = books
+        self.series = series
+        seriesNames = Dictionary(series.map { ($0.key, $0.name) }, uniquingKeysWith: { a, _ in a })
+        seriesKinds = Dictionary(series.map { ($0.key, $0.kind) }, uniquingKeysWith: { a, _ in a })
+    }
 }
 
 struct UnitSeries: Sendable {
@@ -166,6 +176,10 @@ extension RuleEngine {
 
     /// 名前を型で読み、確定した欄を重ねて、中核の入口に詰める。
     func prepareOne(_ input: BookInput, order: Int) -> PreparedBook {
+        scoped { prepareOneUnscoped(input, order: order) }
+    }
+
+    private func prepareOneUnscoped(_ input: BookInput, order: Int) -> PreparedBook {
         let reading = rules.formats[input.preset].read(Self.cleaned(input.name))
         let metadata = input.confirmation.fields.applied(to: reading.metadata)
         let compared = compareTitle(metadata.title)
@@ -189,7 +203,8 @@ extension RuleEngine {
                             source: metadata.source, hasEditionMarks: !compared.editions.isEmpty,
                             hasSourceMarks: !compared.sources.isEmpty, standsAlone: compared.standsAlone,
                             confirmation: confirmation,
-                            volumeHead: volumeHead(compareTitle: compareText))
+                            volumeHead: volumeHead(compareTitle: compareText),
+                            compareClaims: words.claims(in: compareText))
         return PreparedBook(input: input, core: core, reading: reading, metadata: metadata, unitKey: unitKey(core))
     }
 
@@ -222,6 +237,15 @@ extension RuleEngine {
 
     /// 1 つの単位の本(中核の入口の形)から、組・確定した内容・巻を決める。
     func computeUnit(_ members: [CoreBook], explain: Bool = false) -> UnitResult {
+        scoped { computeUnitUnscoped(members, explain: explain) }
+    }
+
+    private func computeUnitUnscoped(_ members: [CoreBook], explain: Bool) -> UnitResult {
+        if let cache = ComputationCache.current {
+            for book in members where cache.claims.count < ComputationCache.limit {
+                if let claims = book.compareClaims { cache.claims[book.compareTitle] = claims }
+            }
+        }
         let sorted = members.sorted { $0.order < $1.order }
         var doc = WorkingDocument(books: sorted.enumerated().map { i, book in
             WorkingBook(id: i + 1, inputID: book.id, title: book.title, compareTitle: book.compareTitle,
@@ -390,27 +414,34 @@ extension RuleEngine {
     }
 
     /// シリーズの決まった順(書き手 → 名前 → 最小の本の ID)。
-    static func seriesOrder(_ a: SeriesProposal, _ b: SeriesProposal) -> Bool {
-        let x = a.id.rawValue.components(separatedBy: "\u{1}")[0], y = b.id.rawValue.components(separatedBy: "\u{1}")[0]
-        let circleA = x.components(separatedBy: "\u{1E}")[0], circleB = y.components(separatedBy: "\u{1E}")[0]
-        return (circleA, a.name, a.memberIDs.min() ?? "", a.id) < (circleB, b.name, b.memberIDs.min() ?? "", b.id)
+    static func seriesOrder(_ a: SeriesProposal, _ b: SeriesProposal) -> Bool { orderKey(a) < orderKey(b) }
+
+    private static func orderKey(_ s: SeriesProposal) -> (String, String, String, SeriesID) {
+        let head = s.id.rawValue.components(separatedBy: "\u{1}")[0]
+        return (head.components(separatedBy: "\u{1E}")[0], s.name, s.memberIDs.min() ?? "", s.id)
+    }
+
+    /// 決まった順に並べる。**鍵は 1 つにつき 1 度だけ作る**(比べるたびに ID を切り分け、本の並びから最小を探すと、
+    /// 並べ替えが提案の組み立ての大半を占める)。
+    static func inSeriesOrder(_ series: [SeriesProposal]) -> [SeriesProposal] {
+        series.map { (key: orderKey($0), value: $0) }.sorted { $0.key < $1.key }.map(\.value)
     }
 
     func bookProposal(_ book: PreparedBook, _ result: UnitResult?) -> BookProposal {
         let r = result?.books[book.input.id]
         let key = r?.seriesKey
-        let series = key.flatMap { k in result?.series.first { $0.key == k } }
+        let seriesKind = key.flatMap { result?.seriesKinds[$0] }
         var flags = Set<BookProposal.Flag>()
         if r?.volume?.volume.inferred == true { flags.insert(.inferredVolume) }
         if book.core.hasEditionMarks { flags.insert(.edition) }
         if book.core.hasSourceMarks { flags.insert(.source) }
         if r?.isCompilation == true { flags.insert(.compilation) }
         if book.core.standsAlone { flags.insert(.standalone) }
-        if series?.kind == .magazineYear || (series != nil && r?.volume?.fromMagazineIssue == true) { flags.insert(.magazineIssue) }
+        if seriesKind == .magazineYear || (seriesKind != nil && r?.volume?.fromMagazineIssue == true) { flags.insert(.magazineIssue) }
         if book.input.confirmation != .none { flags.insert(.confirmed) }
         // シリーズと巻数は、単位の計算で決まったものを欄へ入れる。
         var metadata = book.metadata
-        metadata.series = key.flatMap { k in result?.series.first { $0.key == k }?.name } ?? ""
+        metadata.series = key.flatMap { result?.seriesNames[$0] } ?? ""
         if let volume = r?.volume?.volume {
             metadata.volume = volume.text
             metadata.volumeSort = volume.sortKey
@@ -423,7 +454,7 @@ extension RuleEngine {
     }
 
     func assemble(_ prepared: Prepared, _ results: [String: UnitResult]) -> ProposalSet {
-        let series = results.flatMap { seriesProposals(unitKey: $0.key, $0.value) }.sorted(by: Self.seriesOrder)
+        let series = Self.inSeriesOrder(results.flatMap { seriesProposals(unitKey: $0.key, $0.value) })
         let proposals = prepared.books.map { bookProposal($0, results[$0.unitKey]) }
         var explanations: [String: Explanation] = [:]
         for result in results.values { for (id, book) in result.books { if let e = book.explanation { explanations[id] = e } } }

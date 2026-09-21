@@ -27,6 +27,10 @@ struct CoreBook: Sendable {
     let confirmation: Confirmation
     /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比べる形で)。
     let volumeHead: Int?
+    /// 比べるタイトルの中で、語の規則が取った語(下ごしらえで 1 度だけ求めたもの。nil なら求めていない)。
+    /// 単位の計算は、ここから始める ―― 単位を計算し直すたびに、全員のタイトルへ正規表現をかけ直さない。
+    /// ほとんどのタイトルは語を持たないので、空の並び(場所を取らない)。
+    var compareClaims: [WordRules.Claim]?
 }
 
 extension RuleEngine {

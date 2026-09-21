@@ -12,7 +12,7 @@ import Foundation
 /// 照合する名前が食い違い、利用者が画面から写した語が当たらない。
 public enum BookName {
     public static func normalized(_ name: String) -> String {
-        name.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+        name.precomposedNFC.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
