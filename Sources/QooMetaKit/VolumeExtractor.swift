@@ -470,8 +470,12 @@ enum ProposalFinalizer {
     static func showRemainingText(_ document: inout WorkingDocument, engine: RuleEngine, log: ExplanationLog?) {
         for i in document.books.indices
         where !document.books[i].series.isEmpty && document.books[i].volumeText.isEmpty && !document.books[i].volumeConfirmed {
-            let title = engine.text.comparable(document.books[i].compareTitle)
             let name = engine.text.comparable(document.books[i].series).key
+            // **見せる文字は、名前に書いてあるとおりの題名から採る。** 比べるタイトルは版の印を外してあるので、
+            // そこから採ると「架空録 新改訂版」が「新」だけになってしまう(2026-09-21、利用者の指摘)。
+            // 総集編のように題名の順を直した本(「X1~4総集編」→「X 総集編 1~4」)だけは、比べる形から採る。
+            let shown = engine.text.comparable(document.books[i].title)
+            let title = shown.key.starts(with: name) ? shown : engine.text.comparable(document.books[i].compareTitle)
             // **語の切れ目から始まる残りだけ**を採る。シリーズ名が語の途中で切れているとき(「月の庭|の安息」)の
             // 残りは、番号の代わりに書かれた言葉ではなく語のかけらなので、巻数にしない。
             guard title.key.starts(with: name) else { continue }
@@ -479,10 +483,12 @@ enum ProposalFinalizer {
                 .trimmingCharacters(in: engine.volumes.leadingSeparators)
                 .trimmingCharacters(in: .whitespaces)
             guard !rest.isEmpty else { continue }
-            // 総集編の語で始まる残りは、区切りが無くても採る(「X総集編1」。語そのものが切れ目を示している)。
-            let startsWithCompilationWord = engine.compilation.keywordRange(in: rest)?.lowerBound == rest.startIndex
-            guard SeriesGrouper.isCleanCut(title, at: name.count) || startsWithCompilationWord
-                || SeriesGrouper.startsNewWord(title, at: name.count) else { continue }
+            // 区切りが無くても、**ひらがなで始まらない残り**は採る(「架空録|アルバム」)。
+            // ひらがなが続くのは語の途中(「月の庭|の安息」)なので、そこだけを外す。
+            // シリーズに入っている本の名前に何か書いてあるのに、巻数の欄が空のままなのはおかしい
+            // (2026-09-21、利用者の指摘)。
+            let firstIsHiragana = rest.first.map(SeriesGrouper.isHiragana) ?? true
+            guard SeriesGrouper.isCleanCut(title, at: name.count) || !firstIsHiragana else { continue }
             document.books[i].volumeText = rest
             log?.apply("unnumberedVolume", to: document.books[i].id)
         }

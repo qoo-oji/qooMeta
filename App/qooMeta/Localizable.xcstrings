@@ -6826,6 +6826,23 @@
         }
       }
     },
+    "Take in a run that is itself a volume of the series": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take in a run that is itself a volume of the series"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シリーズの巻そのものになっている並びも入れる"
+          }
+        }
+      }
+    },
     "Take in a subtitle that follows with no separator": {
       "extractionState": "manual",
       "localizations": {
@@ -9219,6 +9236,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "「彼女催眠2・3・4」の並びに「彼女催眠リベンジ」を入れます。効くのは文字の種類が変わり、続きがひらがなでないとき(ひらがなが続くのは語の途中)で、しかも巻でまとまった組へ入れるときだけです。新しい組を作るのには使いません。"
+          }
+        }
+      }
+    },
+    "“X 6 front half” and “X 6 back half” form their own run named “X 6”. When that name is the series name plus something that reads as a volume, the run joins the series instead of standing beside it": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“X 6 front half” and “X 6 back half” form their own run named “X 6”. When that name is the series name plus something that reads as a volume, the run joins the series instead of standing beside it"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「X 6巻 前編」「X 6巻 後編」は、それだけで「X 6巻」という並びを作ります。その名前が「シリーズ名 + 巻として読めるもの」のときは、別のシリーズにせず、元のシリーズへ入れます"
           }
         }
       }

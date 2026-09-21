@@ -313,6 +313,7 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 | 規則 | パラメータ(既定) | 意味 |
 |---|---|---|
 | `compilation` | `singleWhenMainExists`(true) | 総集編(語は `markers` の `compilationMark`)を本編とは別の `X 総集編` のシリーズにする。2 冊以上か、同じ書き手に本編のシリーズ `X` があれば(`singleWhenMainExists`)1 冊でもシリーズにする |
+| `mergeVolumeSubgroups` | (入切だけ) | 組の名前が「別の組の名前 + 巻」(`X 6巻`)になっているなら、その別の組へ入れる。巻として読めるときだけ |
 | `attachAcrossScript` | (入切だけ) | 区切りなしで続く副題(`X リベンジ`)を、巻でまとまった組へ入れる。文字の種類が変わり、続きがひらがなでないときだけ。**新しい組を作るのには使わない** |
 | `volumeHead` | — | 1 段目: 「タイトル + 巻」の形の本を、巻を除いた頭でまとめる。後ろが巻だけなので頭は 1 文字でもよい |
 | `sharedPrefix` | `minPrefix`(4)、`minWholeTitle`(2) | 2 段目: 残りを先頭の共通部分でまとめる。共通部分が**語の途中で**切れるときは `minPrefix` 文字以上、片方のタイトル全体がもう片方の先頭と一致するとき(`XY` と `XY2`)は `minWholeTitle` 文字以上 |

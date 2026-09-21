@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.21.20",
+  "revision": "2026.09.21.21",
   "lists": {
     "ignoredInComparison": [
       " ", "　", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",", "「", "」", "『", "』", "【",
@@ -39,7 +39,7 @@
     },
     "boundaryCharacters": [
       "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", "！", "？", ".", "。", "、", ",", ":", "：", "「", "」", "『", "』",
-      "【", "】", "<", ">", "〈", "〉", "《", "》", "(", ")", "（", "）", "♪", "☆", "★", "♡", "♥", "…", "#", "＃", "_"
+      "【", "】", "<", ">", "〈", "〉", "《", "》", "(", ")", "（", "）", "+", "＋", "♪", "☆", "★", "♡", "♥", "…", "#", "＃", "_"
     ],
     "trimTrailing": [
       "~", "〜", "～", "-", "‐", "―", "・", "･", ":", "：", "、", ",", "。", ".", "「", "『", "【", "<", "〈", "《", "(", "（",
@@ -107,6 +107,7 @@
     },
     "volumeHead": { "enabled": true },
     "attachAcrossScript": { "enabled": true, "since": 7 },
+    "mergeVolumeSubgroups": { "enabled": true, "since": 8 },
     "sharedPrefix": {
       "enabled": true,
       "minPrefix": 4,

@@ -124,6 +124,8 @@ enum RuleSchema {
             f("volumeHead", rule()),
             // 区切りなしで続く副題(「X リベンジ」)を、巻でまとまった組へ入れる。組を作るのには使わない。
             Field(name: "attachAcrossScript", shape: rule(), since: 7),
+            // 名前が「別の組の名前 + 巻」の組(「X 6巻」)を、その別の組(「X」)へ入れる。
+            Field(name: "mergeVolumeSubgroups", shape: rule(), since: 8),
             f("sharedPrefix", rule([
                 f("minPrefix", .int(1...20)), f("minWholeTitle", .int(1...20)),
                 f("conditions", .object(Node([

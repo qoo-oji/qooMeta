@@ -18,6 +18,9 @@ struct SeriesGrouper: Sendable {
     /// (短いシリーズ名の「X」と「X 2」)。
     var minWholeTitle: Int
 
+    /// 組の名前そのものが「別の組の名前 + 巻」になっている組を、その別の組へ入れるか(規則 mergeVolumeSubgroups)。
+    var mergesVolumeSubgroups: Bool
+
     /// 区切りなしで続く副題の本(「X リベンジ」の X とカタカナの境)も、その組に入れるか(規則 attachAcrossScript)。
     /// **文字の種類が変わる所だけ**を切れ目とみなす、ゆるい判定。すでに巻でまとまった組へ**入れるときにだけ**使い、
     /// 新しい組を作るのには使わない(日本語は語の中で文字種が変わるので、組を作る手がかりには弱い)。
@@ -68,6 +71,7 @@ struct SeriesGrouper: Sendable {
         minWholeTitle = g.minWholeTitle
         attachesSubtitledBooks = g.attachSubtitled
         attachesAcrossScript = g.attachAcrossScript
+        mergesVolumeSubgroups = g.mergeVolumeSubgroups
         rejectsHiraganaEndings = g.rejectHiraganaEndings
         splitsByRelation = g.splitByRelation
         splitsByGenre = g.splitByGenre
@@ -371,6 +375,11 @@ struct SeriesGrouper: Sendable {
                 g.isCompilation = true
                 groups.append(g)
             }
+            // 「X 6巻」のように、**組の名前そのものが「別の組の名前 + 巻」**になっている組は、その別の組の一部。
+            // (「X 6巻 前編」「…後編」が 1 段目で「X 6巻」の組になり、本編「X」と別のシリーズに
+            // 見えていた。2026-09-21、利用者の指摘)。**巻として読めるときだけ**移すので、「X 外伝 1・2」の
+            // ように別の番号の並びを持つ組は、そのまま別のシリーズに残る。
+            if mergesVolumeSubgroups { mergeVolumeSubgroups(&groups, from: groupsBefore) }
         }
         groups = splitByRelation(groups, books: books)
         groups = dissolveSameWorkOnly(groups, books: books)
@@ -401,6 +410,29 @@ struct SeriesGrouper: Sendable {
             i += 1
         }
         return false
+    }
+
+    /// 名前が「別の組の名前 + 巻」になっている組を、その別の組へ入れる(方針ではなく規則 mergeVolumeSubgroups)。
+    /// 入れ先はいちばん短い名前の組。巻として読めない残り(「外伝」)は動かさない。
+    private func mergeVolumeSubgroups(_ groups: inout [CandidateGroup], from first: Int) {
+        var merged = Set<Int>()
+        for i in first..<groups.count where !merged.contains(i) {
+            let name = text.comparable(groups[i].ruleName)
+            let hosts = (first..<groups.count).filter { j -> Bool in
+                guard j != i, !merged.contains(j) else { return false }
+                let hostKey = text.key(groups[j].ruleName)
+                guard !hostKey.isEmpty, name.key.count > hostKey.count,
+                      String(name.key).hasPrefix(hostKey) else { return false }
+                guard Self.isCleanCut(name, at: hostKey.count)
+                    || (attachesAcrossScript && Self.startsNewWord(name, at: hostKey.count)) else { return false }
+                return engine.volumes.isWholeVolume(name.originalRemainder(afterKeyLength: hostKey.count))
+            }
+            guard let host = hosts.min(by: { text.key(groups[$0].ruleName).count < text.key(groups[$1].ruleName).count })
+            else { continue }
+            groups[host].memberIDs = (groups[host].memberIDs + groups[i].memberIDs).sorted()
+            merged.insert(i)
+        }
+        for i in merged.sorted(by: >) { groups.remove(at: i) }
     }
 
     /// その本の名前の頭に当たる組(いちばん長い名前のもの)。総集編の語が題名の途中にあるだけの本を、

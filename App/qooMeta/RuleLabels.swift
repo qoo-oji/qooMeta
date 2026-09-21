@@ -55,6 +55,8 @@ enum RuleLabels {
         "standalone": Item(title: "Words that keep a book out of every series", help: "A book whose title holds one of these joins no series. The bundled list is empty"),
         "compilation": Item(title: "Compilation series", help: "Collects compilations into a series named “X Compilation”"),
         "volumeHead": Item(title: "Stage 1: title plus volume", help: "Groups books shaped like “X 3” by the head that is left once the volume is removed"),
+        "mergeVolumeSubgroups": Item(title: "Take in a run that is itself a volume of the series",
+                                     help: "“X 6 front half” and “X 6 back half” form their own run named “X 6”. When that name is the series name plus something that reads as a volume, the run joins the series instead of standing beside it"),
         "attachAcrossScript": Item(title: "Take in a subtitle that follows with no separator",
                                    help: "“Her Hypnosis Revenge” joins the run of “Her Hypnosis 2, 3, 4”. It acts only where the script changes and what follows is not hiragana — hiragana carries on the same word — and only to join a run that volumes already built, never to start one"),
         "sharedPrefix": Item(title: "Stage 2: shared leading text", help: "Groups the remaining books by the text their titles share at the front"),

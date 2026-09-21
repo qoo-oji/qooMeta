@@ -300,6 +300,99 @@
       ]
     },
     {
+      "id": "an-edition-word-stays-in-the-volume-you-see",
+      "files": [
+        "[架空工房] 架空録 vol.1",
+        "[架空工房] 架空録 vol.2",
+        "[架空工房] 架空録 新改訂版"
+      ],
+      "expect": [
+        {
+          "series": "架空録",
+          "volumeSort": 1
+        },
+        {
+          "series": "架空録",
+          "volumeSort": 2
+        },
+        {
+          "series": "架空録",
+          "volume": "新改訂版",
+          "volumeSort": null
+        }
+      ],
+      "covers": [
+        "unnumberedVolume",
+        "edition"
+      ]
+    },
+    {
+      "id": "a-plus-sign-is-a-word-boundary",
+      "files": [
+        "[架空工房] 架空録＋α",
+        "[架空工房] 架空録2",
+        "[架空工房] 架空録3",
+        "[架空工房] 架空録アルバム"
+      ],
+      "expect": [
+        {
+          "series": "架空録",
+          "volume": "＋α",
+          "volumeSort": null
+        },
+        {
+          "series": "架空録",
+          "volumeSort": 2
+        },
+        {
+          "series": "架空録",
+          "volumeSort": 3
+        },
+        {
+          "series": "架空録",
+          "volume": "アルバム",
+          "volumeSort": null
+        }
+      ],
+      "covers": [
+        "boundaries",
+        "unnumberedVolume"
+      ]
+    },
+    {
+      "id": "a-volume-in-two-parts-stays-in-its-series",
+      "files": [
+        "[架空工房] 架空録2巻",
+        "[架空工房] 架空録3巻",
+        "[架空工房] 架空録6巻 前編",
+        "[架空工房] 架空録6巻 後編"
+      ],
+      "expect": [
+        {
+          "series": "架空録",
+          "volumeSort": 2
+        },
+        {
+          "series": "架空録",
+          "volumeSort": 3
+        },
+        {
+          "series": "架空録",
+          "volume": "6",
+          "volumeSort": 6
+        },
+        {
+          "series": "架空録",
+          "volume": "6",
+          "volumeSort": 6
+        }
+      ],
+      "covers": [
+        "mergeVolumeSubgroups",
+        "volumeHead"
+      ]
+    },
+    {
       "id": "a-compilation-word-in-the-middle-does-not-cost-the-series",
       "files": [
         "[架空工房] 月の庭・楽",
