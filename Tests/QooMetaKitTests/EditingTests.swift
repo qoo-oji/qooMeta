@@ -396,6 +396,20 @@ import QooMetaRules
         #expect(changes.isEmpty)
     }
 
+    /// 片側だけの差分(画面の差分の JSON)は、そのまま読み込める(版の番号が読み込みと合っている)。
+    @Test func eachHalfOfTheDiffReadsBack() throws {
+        var changes = RuleChanges.none
+        let entry = try #require(CompiledRules.builtin.presetCatalog.entries.first { $0.id == "commercial" })
+        var preset = entry.preset
+        preset.defaults["genre"] = "架空の分類甲"
+        changes.setPreset(preset, original: entry.original)
+        changes.setPolicy("separate", for: "subtitled")
+        for half in [RuleChanges.Half.fileNames, .series] {
+            let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data(half)))
+            #expect(c.errors.isEmpty, "\(half): \(c.errors)")
+        }
+    }
+
     /// 先頭の条件を「丸括弧で始まるか」の形で書いていた版の設定も読める(その部分は捨てる。語は残る)。
     @Test func theOldAutoKeysAreReadAndDropped() throws {
         let diff = #"{ "kind": "qoometa.filename-formats", "schemaVersion": 6, "base": "builtin", "presets": { "doujinshi": { "auto": { "words": { "$replace": ["架空の棚乙"] }, "leadingParenthesis": "no", "parenthesisExceptions": { "$replace": ["架空"] } } } } }"#

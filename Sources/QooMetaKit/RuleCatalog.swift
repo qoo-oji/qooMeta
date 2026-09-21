@@ -183,7 +183,9 @@ public struct RuleChanges: Sendable, Hashable {
         case series
 
         var kind: String { self == .fileNames ? "qoometa.filename-formats" : "qoometa.series-rules" }
-        var schemaVersion: Double { self == .fileNames ? 5 : 2 }
+        /// 読み込み(`RuleLoader.envelope`)が受ける版と同じにする。filename-formats を第 6 版にしたとき、ここだけ 5 のまま
+        /// 残り、解析の設定の窓で差分の JSON を書き出すと、そのまま読み込めなかった(2026-09-21 の文書の見直しで見つけた)。
+        var schemaVersion: Double { self == .fileNames ? 6 : 2 }
     }
 
     public func isEmpty(_ half: Half) -> Bool { (half == .fileNames ? formats : series).isEmpty }

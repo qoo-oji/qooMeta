@@ -23,8 +23,8 @@ public struct BookMetadata: Sendable, Hashable, Codable {
     public var series: String
     /// 巻数(表示用)。名前に書かれていた表記(「第01巻」「上」「総集編2」)。数に読めなくてもよい。
     public var volume: String
-    /// 巻数(ソート用)。シリーズの中の位置(「第01巻」なら 1.0)。総集編などをシリーズに含めるときは、設定したオフセットを足した数
-    /// (オフセット 100 の「総集編2」なら 102.0)。読めなければ nil。
+    /// 巻数(ソート用)。シリーズの中の位置(「第01巻」なら 1.0)。名前から分かる順番だけを入れ、分からなければ nil
+    /// (総集編を本編に含めても、オフセットで作った数は入れない。2026-09-22 にオフセットを捨てた)。
     public var volumeSort: Double?
 
     public init(title: String = "", authors: [String] = [], genre: String = "", event: String = "", source: String = "",

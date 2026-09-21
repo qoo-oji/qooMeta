@@ -17,7 +17,7 @@
 
 1. **包みと版を中身から分ける。** 版の番号の役割は下の表のとおり。
 2. **処理の段階は固定し、段階の中の規則に ID を付ける。** 利用者が変えられるのは、規則のオン・オフ、パラメータ、語の一覧。
-   並べ替えられるのは巻の読み手だけ(下の「段階と規則」)。
+   並べ替えられるのは、配列で書いた 2 か所(語の規則 `markers` と巻の読み手 `volume.readers`)だけ(下の「段階と規則」)。
 3. **既定値と利用者の変更を分けて持つ。** 同梱の既定値は書き換えない。利用者の変更は**別の JSON(差分)**として保存し、
    以降は既定値に重ねて使う。「初期化」は差分を消すこと(利用者の判断)。
 4. **語の一覧は名前を付けて `lists` に置き、規則からは `"@list:名前"` で参照する。** 文字の並び(記号の集合)も配列にして `lists` に置く
@@ -37,17 +37,23 @@
 - **方針**: 見分けたものを**どう扱うか**。好みで選ぶ。選択肢は決まった値の中から選ぶ(自由な式にはしない)。
 
 方針は `policies` にまとめて置く。規則の編集より手前の、ふつうの設定として見せられるようにするため
-(GUI では「規則」ではなく「好み」として最初に出す)。既定値は今の扱いのまま。
+(GUI では「規則」ではなく「好み」として最初に出す)。
+
+既定値は、最初は今の扱いのままにしていた。**2026-09-21 に利用者の手元の設定を同梱の既定値へ取り込み**、
+`compilations` が `inMainSeries`、`differentRelation` が `keep` に変わった(下の表の太字は、同梱の series-rules.json の値)。
+`RuleSchema.policies` の選べる値の並びは変えていないので、**最初の値が同梱の既定とは限らない**(最初の値は、JSON に方針が
+欠けているときの代わりにだけ使う)。
 
 | 方針 | 値(**太字**が既定) | 意味 |
 |---|---|---|
 | `editions` | **`sameWork`** / `separateBooks` / `ignore` | 版違い(フルカラー版 …)を、同じ作品の別の版とみなす(同じ巻。版違いだけの組はシリーズにしない)/ 別の本としてシリーズに数える(「X」と「X フルカラー版」で組になる)/ 印を見分けない |
-| `sources` | **`sameWork`** / `separateBooks` / `ignore` | 入手経路違い(DL版・特装版 …)。同上 |
-| `compilations` | **`ownSeries`** / `inMainSeries` / `notInSeries` | 総集編を「X 総集編」という別のシリーズにする / 本編のシリーズ「X」に含める / どのシリーズにも入れない |
+| `sources` | **`sameWork`** / `separateBooks` / `ignore` | 入手経路違い(DL版 …)。同上 |
+| `compilations` | `ownSeries` / **`inMainSeries`** / `notInSeries` | 総集編を「X 総集編」という別のシリーズにする / 本編のシリーズ「X」に含める / どのシリーズにも入れない |
 | `compilationVolume` | **`none`** / `afterRange` | (`inMainSeries` のとき)本編の中での総集編の巻。付けない(並びは末尾)/ 収録範囲が読めたら、その最後の巻の直後(「1~4」なら 4.5)。オフセットは 2026-09-22 に捨てた |
 | `magazines` | **`perYear`** / `whole` | 雑誌を 1 年ぶんごとのシリーズにする(巻は号)/ 雑誌全体で 1 つのシリーズにする(並べ替え用の数は 年 × 100 + 号) |
 | `unnumberedFirst` | **`inferFirst`** / `leaveEmpty` | 番号の無い 1 冊を 1 巻とみなす / みなさない |
-| `differentRelation` | **`split`** / `keep` | ネタ(関連)が違う本を別のシリーズに分ける / 分けない |
+| `unnumberedVolume` | **`asWritten`** / `leaveEmpty` | 巻として読めなかったら、シリーズ名より後ろの文字列をそのまま巻数(表示)にする / 空のままにする。並べ替えの数はどちらでも付けない |
+| `differentRelation` | `split` / **`keep`** | ネタ(関連)が違う本を別のシリーズに分ける / 分けない |
 | `differentGenre` | **`split`** / `keep` | 本の種別が違う本を別のシリーズにする / 同じシリーズにしてよい |
 | `subtitled` | **`attach`** / `separate` | 副題付きの本(「X 〇〇編」)を、巻でまとめた「X」に含める / 含めない |
 
@@ -57,22 +63,24 @@
 - **フィードバックとの関係**: 利用者の直しが、方針を 1 つ切り替えれば満たされるものなら、それは規則の不具合ではなく好みの違い。
   GUI は報告を作る前に、合う方針への切り替えを提案する(api.md「フィードバック」)。
 - 例のファイルは既定の方針で確かめる。方針に依る例は、例ごとに `"policies": { … }` を書いて、その方針での期待値を確かめる。
+  既定の方針が変わっても関係の無い例が崩れないよう、**例が前提にしている方針は例の側に書く**(下の「例のファイル」)。
 
 ```json
 "policies": {
   "editions": "sameWork",
   "sources": "sameWork",
-  "compilations": "ownSeries",
+  "compilations": "inMainSeries",
   "compilationVolume": "none",
   "magazines": "perYear",
   "unnumberedFirst": "inferFirst",
-  "differentRelation": "split",
+  "unnumberedVolume": "asWritten",
+  "differentRelation": "keep",
   "differentGenre": "split",
   "subtitled": "attach"
 }
 ```
 
-差分では値を書くだけ: `"policies": { "compilations": "inMainSeries", "editions": "separateBooks" }`。
+差分では値を書くだけ: `"policies": { "compilations": "ownSeries", "editions": "separateBooks" }`。
 
 ## 版の番号
 
@@ -83,7 +91,18 @@
 | `revision` | 規則ファイル(作者が書く印。日付など) | 中身を改訂したとき | 不具合の報告に添える。キャッシュの判定には使わない(本体が内容のハッシュを別に計算する) |
 | パッケージの版(SemVer) | Git のタグ | Swift の API を変えたとき | 利用側の依存の指定 |
 
-- `schemaVersion` は今 2。`engineLevel` は第 2 版の最初の実装を 1 とし、**今は 6**(2: 語の規則を順番のある規則表にした / 3: 続きの巻の読み手 `sequel` と一覧 `sequelWords` / 4: 大字の巻の読み手 `kanjiAlone` と一覧 `kanjiAloneDigits` / 5: 規則 `volume.followers` と一覧 `volumeFollowers` / 6: 語で書いた数の読み手 `wordNumber` と一覧 `numberWords`、一覧の種類「語 → 語」)。
+- `schemaVersion` は、series-rules.json・examples.json・rules-bundle が 2、filename-formats.json が 6(フォーマットの版は
+  別に数える。下の「ファイル名のフォーマット」)。
+- `engineLevel` は第 2 版の最初の実装を 1 とし、**今は 10**(`CompiledRules.engineLevel`)。
+  - 2: 語の規則を順番のある規則表にした(`markers`。`plain`・`compilationMark`・`standalone`)
+  - 3: 続きの巻の読み手 `sequel` と一覧 `sequelWords`
+  - 4: 大字の巻の読み手 `kanjiAlone` と一覧 `kanjiAloneDigits`
+  - 5: 規則 `volume.followers` と一覧 `volumeFollowers`
+  - 6: 語で書いた数の読み手 `wordNumber` と一覧 `numberWords`、一覧の種類「語 → 語」
+  - 7: 規則 `grouping.attachAcrossScript`(区切りなしで続く副題を、巻でまとまった組へ入れる)
+  - 8: 規則 `grouping.mergeVolumeSubgroups`(「別の組の名前 + 巻」の組を、その組へ入れる)
+  - 9: 規則 `grouping.mergeSubseries`(「別の組の名前 + 副題」の組も入れる。巻でまとまった組どうしだけ)
+  - 10: 規則 `volume.particles` と一覧 `particles`(助詞で始まる残りを巻数(表示)にしない)
 - 規則・パラメータ・一覧を足したら `engineLevel` を 1 上げ、足したものに `"since": その番号` を書く。
 - 第 1 版(`version: 1`、公開から間もなく利用者がいない)からのマイグレーションは、仕組みだけ用意して後回しにする。
 
@@ -169,32 +188,39 @@
 | `{ "$set": {...}, "$unset": [...] }` | 対応表(異体字・括弧の対) | 足す(置き換える)・外す |
 | `{ "$replace": ... }` | 一覧・対応表 | 丸ごと置き換える |
 | `"規則の ID": { "enabled": false, パラメータ… }` | 規則 | 止める・パラメータを変える |
-| `"$order": ["ID", …]` | **巻の読み手だけ** | 挙げた ID を、この順で先頭に寄せる(挙げなかった読み手は既定の順で後ろに続く) |
+| `"$order": ["ID", …]` | **巻の読み手と語の規則だけ** | 挙げた ID を、この順で先頭に寄せる(挙げなかったものは既定の順で後ろに続く) |
 
 ## 段階と規則(`qoometa.series-rules`)
 
 処理の段階は固定で、JSON の構造がそのまま段階を表す。**段階の順や、段階をまたぐ規則の移動はできない。**
 例外(組にしない条件)は、それが働く規則の `conditions` にぶら下げる(実際の処理でも、その規則の判定の内側で働くため)。
 
+下は形を示すための抜粋で、**一覧の語は一部だけ**を書いている(実際の値は同梱の series-rules.json。そこには利用者の蔵書に
+由来する語も入っているので、ここへは写さない)。キー・規則・読み手の並びと、真偽・数の既定値は同梱のファイルと同じ
+(`lists` の中の一覧の並びだけは違う)。
+
 ```json
 {
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.19",
+  "revision": "2026.09.21",
 
   "lists": {
     "ignoredInComparison": [" ", "　", "\t", "~", "〜", "-", "・", "!", "?", "…"],
     "boundaryCharacters": ["~", "〜", "-", "・", "!", "?", "(", ")", "_", "…"],
     "trimTrailing": ["~", "〜", "-", "・", ":", "、", "。", "「", "【", "(", "_"],
-    "keepFollowing": ["!", "?", "！", "？"],
+    "keepFollowing": ["!", "?", "！", "？", "♡", "♥"],
     "brackets": { "】": "【", "」": "「", ")": "(" },
     "variantKanji": { "凜": "凛", "髙": "高" },
     "labelIntroducers": ["side", "part", "episode", "第", "その", "其ノ"],
-    "editionWords": ["フルカラー版", "カラー版", "完全版"],
-    "sourceWords": ["初回限定版", "限定版", "特装版", "通常版", "電子版"],
+    "editionWords": ["フルカラー版", "カラー版", "完全版", "限定版", "特装版", "通常版"],
+    "sourceWords": [],
     "compilationWords": ["総集編", "総集篇"],
+    "plainWords": ["フルカラー総集編"],
+    "standaloneWords": [],
     "volumePrefixes": ["vol", "volume", "ver", "no", "#", "第", "その", "其ノ"],
     "volumeCounters": ["月号", "月", "巻", "話", "号", "章", "弾", "つめ"],
+    "wholeOnlyCounters": ["集"],
     "kanjiCounters": ["巻", "話", "号", "章"],
     "kanjiAloneDigits": ["壱", "弐", "参", "肆", "伍", "壹", "貳", "參"],
     "volumeFollowers": ["~", "-", "・", "!", "?", ".", ")", "ー"],
@@ -204,7 +230,8 @@
     "positionLast": ["下", "下巻", "後編"],
     "sequelWords": ["アフター", "後日談", "その後", "外伝", "おまけ"],
     "notFirstMarkers": ["総集編", "番外編", "外伝"],
-    "notFirstPrefixes": ["ex", "extra", "sp"]
+    "notFirstPrefixes": ["ex", "extra", "sp"],
+    "particles": ["の", "と", "は", "に"]
   },
 
   "compare": {
@@ -213,18 +240,22 @@
     "boundaries": "@list:boundaryCharacters"
   },
 
-  "policies": { "editions": "sameWork", "compilations": "ownSeries", "…": "上の表のとおり" },
+  "policies": { "editions": "sameWork", "compilations": "inMainSeries", "…": "上の表のとおり" },
 
   "markers": [
-    { "id": "plain",           "treat": "keep",        "enabled": true, "words": "@list:plainWords", "patterns": [] },
+    { "id": "plain",           "treat": "keep",        "enabled": true, "since": 2, "words": "@list:plainWords", "patterns": [] },
     { "id": "edition",         "treat": "edition",     "enabled": true, "words": "@list:editionWords", "patterns": ["[\\p{Han}\\p{Katakana}ー]{1,6}語版"] },
     { "id": "source",          "treat": "source",      "enabled": true, "words": "@list:sourceWords",  "patterns": ["[DＤ][LＬ]版"] },
-    { "id": "compilationMark", "treat": "compilation", "enabled": true, "words": "@list:compilationWords", "patterns": [] }
+    { "id": "compilationMark", "treat": "compilation", "enabled": true, "since": 2, "words": "@list:compilationWords", "patterns": [] },
+    { "id": "standalone",      "treat": "standalone",  "enabled": true, "since": 2, "words": "@list:standaloneWords", "patterns": [] }
   ],
 
   "grouping": {
-    "compilation":  { "singleWhenMainExists": true },
+    "compilation":  { "singleWhenMainExists": false },
     "volumeHead":   { "enabled": true },
+    "attachAcrossScript":   { "enabled": true, "since": 7 },
+    "mergeVolumeSubgroups": { "enabled": true, "since": 8 },
+    "mergeSubseries":       { "enabled": true, "since": 9 },
     "sharedPrefix": {
       "enabled": true, "minPrefix": 4, "minWholeTitle": 2,
       "conditions": {
@@ -250,24 +281,35 @@
       { "id": "number",   "type": "number", "enabled": true, "prefixes": "@list:volumePrefixes", "counters": "@list:volumeCounters",
         "wholeOnlyCounters": "@list:wholeOnlyCounters", "mergedSpan": 3 },
       { "id": "kanji",    "type": "kanjiNumber", "enabled": true, "prefixes": "@list:volumePrefixes", "counters": "@list:kanjiCounters" },
+      { "id": "kanjiAlone", "type": "kanjiAloneNumeral", "enabled": true, "since": 4, "digits": "@list:kanjiAloneDigits" },
+      { "id": "wordNumber", "type": "numberWord", "enabled": true, "since": 6, "words": "@list:numberWords" },
       { "id": "greek",    "type": "greekLetter", "enabled": true },
       { "id": "roman",    "type": "romanNumeral", "enabled": true },
       { "id": "position", "type": "positionWord", "enabled": true, "first": "@list:positionFirst", "middle": "@list:positionMiddle", "last": "@list:positionLast" },
       { "id": "sequel", "type": "sequel", "enabled": false, "since": 3, "words": "@list:sequelWords" }
     ],
+    "followers": { "since": 5, "characters": "@list:volumeFollowers" },
+    "particles": { "enabled": true, "since": 10, "words": "@list:particles" },
     "inference": {
       "sharedLeadingKanji": { "enabled": true, "minBooks": 2 },
       "firstVolume": { "excludeMarkers": "@list:notFirstMarkers", "excludePrefixes": "@list:notFirstPrefixes" }
     }
   },
 
-  "retiredIDs": [],
+  "retiredIDs": ["reject-edition-prefix", "editionPrefixWords", "volumeOffset"],
   "aliases": {}
 }
 ```
 
 - `compilation`・`splitByRelation`・`rejectSameWork`・`firstVolume` と、比べる単位・副題付きの扱いは、**働くかどうかを `policies` が決める**
-  (ここに書くのは認識のための語とパラメータだけ)。
+  (ここに書くのは認識のための語とパラメータだけ)。`volume.followers` も `enabled` を持たない(いつも働く)。
+- `grouping` の処理の順: 総集編の本を分けておく → `volumeHead`(1 段目。副題付きの本と `attachAcrossScript` の本もここで入れる)
+  → `sharedPrefix`(2 段目)→ `compilation`(総集編の組を作るか、本編へ入れる)→ `mergeVolumeSubgroups`・`mergeSubseries`
+  (組どうしをまとめる)→ `splitByRelation` → `rejectSameWork`。JSON のキーの並びは、この順とは一致していない
+  (`compilation` が先頭、足した 3 つの規則は `volumeHead` の後ろ)。`attachAcrossScript` は組を作らず、ほかの規則が「区切りの無い所を語の切れ目とみなすか」
+  を決めるのに使う(1 段目へ入れるとき、組どうしをまとめるとき、題名の途中に総集編の語がある本を組へ入れるとき)。
+- 2 段目(`sharedPrefix`)はタイトルを並べて隣どうしを比べるので、組より前に並んだだけで外れた 1 冊を、前後でいちばん近い
+  組の共通部分で拾い直す(2026-09-21)。規則ではなく、いつも働く(並び順で結果が変わるのを直すもので、止める理由が無い)。
 - 段階(`compare` → 比べる単位 → `markers` → `grouping` → `naming` → `volume`)と、`grouping`・`naming`・`inference` の中の規則の順は固定。
   キーの名前が規則の ID を兼ねる。
 - **並び順が優先順位になるのは、配列で書いた所**: `markers`(語の規則)と `volume.readers`(巻の読み手)。どちらも
@@ -312,12 +354,13 @@
 良くなる順が無く(壊れるだけ)、あいだに挟む例外にも意味が無い。配列にすると「動かせそうに見えて動かせない」ものが増え、
 かえって分かりにくくなる。
 
-- `grouping`: 総集編を分ける → `volumeHead`(1 段目)→ 残りを `sharedPrefix`(2 段目)→ できた組を `splitByRelation` で分ける →
-  `rejectSameWork` で捨てる。後ろの 2 つは前の 3 つが作った組を受け取る。`sharedPrefix.conditions` の 3 つは、`sharedPrefix` が
+- `grouping`: 総集編を分ける → `volumeHead`(1 段目)→ 残りを `sharedPrefix`(2 段目)→ 総集編の組(`compilation`)→
+  組どうしをまとめる(`mergeVolumeSubgroups`・`mergeSubseries`)→ できた組を `splitByRelation` で分ける → `rejectSameWork` で捨てる。
+  後ろの規則は前の規則が作った組を受け取る。`sharedPrefix.conditions` の 3 つは、`sharedPrefix` が
   切った共通部分を見る条件なので、その規則の中に置く(どの規則の条件かが、置き場所で分かる)。
 - `naming`: 括弧を閉じる → 続く「!」「?」を含める(名前を**延ばす** 2 つ)→ 末尾の記号を落とす → 末尾の語を落とす(**削る** 2 つ)。
   延ばしてから削る、のほかに意味のある順が無い。
-- `volume.inference`: 規則は 2 つで、互いに結果を変えない。
+- `volume.inference`: 規則は 2 つで、互いに結果を変えない。`volume.followers`・`volume.particles` も、並べ替える相手が無い。
 - 「この本だけは組にしない」は、**利用者の修正**(アプリの一覧で直し、作業ファイルに残る)のほかに、**規則でも書ける**
   (2026-09-20、利用者の求めで足した): 語の規則の `treat: standalone`(同梱の規則 `standalone`、一覧 `standaloneWords`。
   同梱の一覧は空)。新しい仕組みは足さず、語の規則の扱いを 1 つ増やしただけで、順番と例外の決まりはほかの語の規則と同じ。
@@ -325,7 +368,8 @@
   使い分け: 作業ファイルの修正はその一覧のその本(ID = パス)にだけ効き、規則はどの一覧を開いても、題名にその語がある本に効く。
   「この巻にする」のような値を決める例外は、規則にはしない(本ごとの値は修正で持つ)。
 
-**オブジェクトで書いた段階は、JSON に書いてある順に働く**(同梱のファイルのキーの順 = 処理の順。並べ替えはできない)。
+**オブジェクトで書いた段階の中の順は、コードが決めている**(キーの順を書き換えても変わらない。並べ替えはできない)。
+同梱のファイルのキーはおおむね処理の順に並べてあるが、`grouping` だけは一致しない(上の「`grouping` の処理の順」)。
 配列で書いた段階だけが並べ替えられる、と形で見分けられる。
 
 **「そのまま読む語」は、後ろの段階の巻の読み手にも効く**(2026-09-20、利用者の問い「設定さえすれば対応できるようになるか」を
@@ -374,11 +418,19 @@
   名前が巻数を持つ形では、その手前は `@title` ではなく **`@series`**(`@title` にすると、読んだ巻数と、
   タイトルから導いた巻数が競合する)。
 - 1 つの型は文字列か、`{ "format": "…", "separators": [...], "defaults": {...}, "plain": {...} }`。
+- プリセットに書けるキー: `label`・`note`・`separators`・`defaults`・`plain`・`ignoreBracketsInsideTitle`・`auto`・`formats`
+  (要るのは `formats` だけ)。`ignoreBracketsInsideTitle`(省くと true)は、題の途中の括弧を読み残しに数えないかどうか。
+- **`auto`(本ごとにルールセットを選ぶ条件。2026-09-21)**: `words`(フォルダのパスか名前に含む語)と、先頭の語句の
+  `headRequired`(必須)・`headExcluded`(例外)。2 つ以上に当たる本は、必須を持つルールセットが 1 つならそれに決まる。
+  前の書き方(`leadingParenthesis`・`parenthesisExceptions`)は、保存した設定が読めるように受け付けるだけで使わない。
+  詳しくは filename-format.md の 4「本ごとにルールセットを選ぶ」。
 - **`plain`(型として読まない文字列。`words` と `patterns`)**: 名前の中のこの部分は、型の照合のあいだだけただの文字として扱う
-  (括弧でも型の括弧に当たらず、値には残る)。プリセットと型に書けて、**足し合わさる**。同梱の既定は丸括弧の中の西暦。
+  (括弧でも型の括弧に当たらず、値には残る)。プリセットと型に書けて、**足し合わさる**。同梱のどのプリセットにも丸括弧の中の
+  西暦の正規表現が入っている(語もプリセットごとにいくつか。同梱の一覧を参照)。
 - 第 5 版から変えたこと: **ファイル全体の段(`separators`・`defaults`・`plain`)をやめ、プリセットごとの設定にした**
   (2026-09-21、利用者の指示。解析のしかたはルールセットを選ぶことで決まるべきで、外にもう 1 段あると見通しが悪い)。
-  `@volume` の判定を巻の読み手に任せ、商業誌用の巻数を持つ型を `@series (@volume)` にした。
+  `@volume` の判定を巻の読み手に任せ、商業誌用の巻数を持つ型を `@series (@volume)` にした。版の番号は 6 のまま、
+  `ignoreBracketsInsideTitle` と `auto` を足した(どちらも省ける)。
 - 第 4 版から変えたこと: 型ごと・プリセットごとの `separators`、ファイル全体・型ごとの `defaults`、`label`・`note`、
   利用者のプリセット、`defaultPreset` を差分で変えられること、区切りが 1 文字に限られないこと。
   `retiredIDs`・`aliases`(型には ID が無いので意味が無かった)と、プリセットを配列だけで書く短い形(書き方を 1 つにする)は外した。
@@ -394,6 +446,8 @@
     {
       "id": "compilation-numbered-later",
       "files": ["[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 総集編2"],
+      "policies": { "compilations": "ownSeries" },
+      "settings": { "grouping.compilation.singleWhenMainExists": true },
       "expect": [
         { "series": "月の庭", "volume": "1" },
         { "series": "月の庭", "volume": "2" },
@@ -404,19 +458,31 @@
     },
     {
       "id": "same-first-word-is-not-a-series",
+      "preset": "doujinshi",
+      "policies": { "differentRelation": "split" },
       "files": ["(種別A) [架空工房] NEON 夜の街 (作品A)", "(種別A) [架空工房] NEON 朝の港 (作品B)"],
-      "expect": [{ "series": null }, { "series": null, "relation": "作品B", "genre": "種別A" }],
+      "expect": [{ "series": null }, { "series": null, "source": "作品B", "genre": "種別A" }],
       "covers": ["splitByRelation"]
     }
   ]
 }
 ```
 
-- `files` は拡張子を除いたファイル名。フォルダが要る例は `{ "name": "…", "folders": ["…"] }` の形でも書ける。
-- `expect` は同じ順の期待値で、**書いた項目だけ**を確かめる。確かめられる項目: `series`・`volume`・`volumeSort`・`inferred`・
-  `circle`・`authors`・`title`・`relation`・`genre`・`event`・`editions`・`sources`。
-- **`"series": null` は「シリーズに入ってはいけない」**。フィードバックの多くはこの形。
+- 例に書けるキー: `id`・`files`・`expect`・`covers`・`vocabulary`・`policies`・`settings`・`preset`。知らないキーは誤り
+  (読み飛ばすと、書き間違えた期待値が黙って確かめられなくなる)。
+- `files` は拡張子を除いたファイル名。フォルダが要る例は `{ "name": "…", "folders": ["…"] }` の形でも書ける
+  (著者の無い名前は、いちばん内側のフォルダが書き手になる)。
+- `expect` は同じ順・同じ数の期待値で、**書いた項目だけ**を確かめる。確かめられる項目: `series`・`volume`・`volumeSort`・
+  `inferred`・`authors`・`title`・`genre`・`event`・`source`・`info`・`format`(一致した型の番号。1 から)・`editionMark`・
+  `sourceMark`(版・入手経路の印があったか。真偽)。
+- **`"series": null` は「シリーズに入ってはいけない」**。フィードバックの多くはこの形。ほかの文字列の項目の `null` は「空であること」。
 - `vocabulary` はファイル全体の既定で、例ごとに上書きできる(本の種別に依る規則を確かめるため)。
+- `policies` は、この例で選ぶ方針(書いた方針だけを、渡された規則の上で置き換える)。
+- **`settings` は、この例で置き換える規則の値**。点つなぎの場所(`grouping.mergeSubseries.enabled`)→ 値。series-rules の、
+  オブジェクトで書いた所の**既にあるキー**だけを指せる(無い場所は誤り。配列の中の規則 ―― 語の規則と巻の読み手 ―― は指せない)。
+  同梱の既定値は利用者の蔵書に合わせて変わる(2026-09-21 に手元の設定を取り込んだ)ので、**例が前提にしている値は例の側に書く**。
+  そうしておけば、既定値を変えるたびに関係の無い例まで崩れない。
+- `preset` は、この例で名前を読むルールセット(同梱の名前だけ。書かなければ既定のもの)。
 - `covers` は、この例が確かめる規則の ID。規則を止めたときに壊れる例が分かる。
 - **例には架空の名前だけを書く。** フィードバックの実例は、api.md「フィードバック」の置き換えの規則に従って架空の名前にしてから足す。
   他人からの寄稿にも同じ約束を求める(CONTRIBUTING に書く)。
@@ -427,7 +493,7 @@
 |---|---|
 | 包みと `schemaVersion`・`engineLevel`・`since`・`required`、`policies` | 第 1 版からのマイグレーション(仕組みだけ) |
 | 固定の段階と、ID の付いた規則のオン・オフ・パラメータ | 埋め込みの読み方の細かいパラメータ |
-| `lists` と `$add`/`$remove`/`$set`/`$unset`/`$replace`、読み手の `$order` | プロファイルの適用の条件 |
+| `lists` と `$add`/`$remove`/`$set`/`$unset`/`$replace`、読み手の `$order` | ~~プロファイルの適用の条件~~ → 済み(ルールセットの `auto`。2026-09-21) |
 | 誤りをすべて集める厳密な検証(近い綴りの候補、`retiredIDs`・`aliases`) | JSON Schema を登録簿から自動で作ること(最初は手で書く) |
 | 例のファイルと `rules test` | `rules-bundle` 以外の持ち運びの形 |
 | 規則の上限と正規表現の安全性の検査 | |
@@ -443,7 +509,9 @@
   参照している一覧の語は `lists` の側で変える。差分で一覧を配列のまま書くのは誤り(既定の語がすべて消えるので `$replace` と書かせる)。
 - `lists` に書けるのは決まった名前の一覧だけ(利用者が新しい一覧を作ることはまだできない)。
 - 読み手・プロファイルを足すこと、予約語の `engine`・`field` を変えることは、まだできない(`notYetSupported` か誤り)。
-  差分で変えられる予約語の値は `@author` の `split` だけ。
+  差分で変えられる予約語の値は `@author` の `split` だけ。**(この 2 行は第 2 版のフォーマットの案のもの。フォーマットの第 6 版には
+  予約語の定義もプロファイルも無く、著者の区切りは `separators`、本ごとの選び方はルールセットの `auto` になった)**
+- 語の規則(`markers`)は、あとで(2026-09-20)同梱に無い ID で足せるようにした(`$order` で並べ替えられる)。
 - `fallback.wholeNameAsTitle` は、止めたときの代わりが無いので規則にしなかった(最後の手段として常に働く)。
 - 知らないキーでも、値が `"since"` を持つオブジェクトで、その番号が本体の水準より大きければ「新しい版の規則」として警告で飛ばす。
   それ以外の知らないキーは書き間違いとしてエラー。
@@ -451,7 +519,7 @@
   `compilationVolume` の `afterRange` の巻の表記は「総集編 1~4」(数は 4.5)。`magazines` の `whole` の巻の表記は年と号のまま。
 - 内容のハッシュ(`contentHash`)は、`$schema` と `revision` を除いた、重ねた後の中身から計算する。
 - 処理の各所は、規則を値で受け取る(`RuleEngine`: 組み立てた規則と、そこから作った正規表現・比べ方・辞書の一式)。
-  例ごとの方針は、今の規則の方針だけを置き換えて組み立て直したもの(`CompiledRules.applying(policies:)`)で確かめる。
+  例ごとの方針と規則の値は、今の規則の方針と値だけを置き換えて組み立て直したもの(`CompiledRules.applying(policies:settings:)`)で確かめる。
 
 ## 決まったこと(2026-09-19)
 
@@ -459,6 +527,7 @@
 - 書き間違いはエラー、新しい版の規則は飛ばして知らせる(`since` と `engineLevel` で見分ける。`required` なら適用しない)。
 - このリポジトリの規則は既定値。利用者の変更は別の JSON(差分)に保存して以降それを使い、初期化で既定値に戻す。
 - 例のファイルは、実在しない本の名前だけで書いて公開する。
-- 段階は固定。並べ替えられるのは巻の読み手だけ。
-- 認識と方針を分ける。好みで決まる扱い(版・総集編・雑誌・1 巻の推定 …)は `policies` で選べるようにし、既定値は今の扱い。
+- 段階は固定。並べ替えられるのは巻の読み手だけ(のちに語の規則 `markers` も。2026-09-20)。
+- 認識と方針を分ける。好みで決まる扱い(版・総集編・雑誌・1 巻の推定 …)は `policies` で選べるようにし、既定値は今の扱い
+  (2026-09-21 に、利用者の手元の設定を同梱の既定値へ取り込んだ。上の「認識と方針を分ける」)。
 - 規則ファイルはパスを指さない。辞書は名前で指し、利用側が渡す。

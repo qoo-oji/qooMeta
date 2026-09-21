@@ -6,7 +6,8 @@ qooMeta は、本(商業のコミック・同人誌などの書庫ファイル)�
 (規則の JSON + ほかの本と見比べる仕組み)。端末内モデル(Apple Intelligence / FoundationModels)の判定は任意。
 
 **2026-09-19 にコンセプトを見直し、中核は移してほかは作り直すと決めた。作業を始める前に `docs/handoff.md` を読む**(読む順と、
-古くなった文書の一覧がある)。目的と原則は `docs/concept.md`、計画は `docs/roadmap.md`。`docs/design.md` と `docs/api.md` は古い。
+いまの状況がある)。目的と原則は `docs/concept.md`、計画は `docs/roadmap.md`。文書は 2026-09-21 にすべて実装に合わせて見直した。
+変更履歴は `CHANGELOG.md`(Keep a Changelog 形式。利用者に見える変更は `[Unreleased]` に書く)。
 
 ## ターゲットのアプリと、参考にとどめるアプリ
 

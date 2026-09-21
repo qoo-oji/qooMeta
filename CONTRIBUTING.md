@@ -14,6 +14,12 @@ qooMeta は蔵書のファイル名を扱いますが、**実在する本・サ�
 - 置き換えたあとの名前で、同じ結果(同じ誤り)になることを確かめてから送ってください。
 - 本の種別(ファイル名の先頭の丸括弧に書く分類)の名前も、`種別A` のような架空のものにしてください。
 
+## 同梱の規則ファイルについて
+
+`Sources/QooMetaRules/Resources/filename-formats.json` と `series-rules.json` は、作者の手元の設定を既定値として取り込んだもので、
+語の一覧に蔵書の分け方の語を含みます。この 2 つだけは禁止語の検査の対象外です(`scripts/ci/check-private-terms.py` の `EXEMPT`)。
+ここにある語を、ほかのファイル(コード・テスト・文書・例)や Issue・Pull Request に写さないでください。
+
 ## 規則を変えるとき
 
 規則(`Sources/QooMetaRules/Resources/*.json`)や処理を変える前に、確かめたい形を**例のファイル**
@@ -30,8 +36,13 @@ qooMeta は蔵書のファイル名を扱いますが、**実在する本・サ�
 
 - `expect` は `files` と同じ順で、書いた項目だけを確かめます。`"series": null` は「シリーズに入ってはいけない」。
 - `covers` には、その例が確かめる規則の ID を書きます。
+- 例が前提にする規則の値は、例の側に書きます。方針は `"policies": { "compilations": "ownSeries" }`、ほかの値は
+  `"settings": { "grouping.mergeSubseries.enabled": false }`(点つなぎの場所 → 値)。同梱の既定値は利用者の蔵書に合わせて
+  変わることがあるので、書いておかないと、既定値を変えたときに関係の無い例まで崩れます。テストも同じで、
+  `CompiledRules.builtin.applying(policies:settings:)` で前提の値を決めてから確かめます。
 
-変えたら、次がすべて通ることを確かめてください(CI でも同じものが走ります)。
+変えたら、次がすべて通ることを確かめてください(CI でも同じものが走ります)。利用者に見える変更は
+[CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` に書きます。
 
 ```bash
 swift build

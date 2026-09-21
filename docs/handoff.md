@@ -1,59 +1,76 @@
 # 引き継ぎ
 
-2026-09-20 時点。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
+2026-09-21 時点(最初の版 0.1.0。CHANGELOG.md)。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
+下の節は、上ほど新しい状況、その下は日付つきの経緯(古い節の数字や名前は、その時点のもの)。
 
 ## いまの状況
 
-- コンセプトを土台から見直し、利用者と合意した。**シリーズと巻を導く中核は移し、ほかは作り直す。**
-- 段階 1〜4 と 6 は済み(段階 6 は 2026-09-20。基準値は下の「確かめ方と基準値」)。段階 5(画面の骨組み。架空のデータだけ)は作りかけで、利用者が
-  画面を見て直している途中(`App/`。`cd App && xcodegen` で qooMeta.xcodeproj を作り直せる。スキームは `-demo` で起動する)。
-  **段階 5 の終わりの条件(利用者が画面を見てよいと言う)は、まだ満たしていない。**
-- **段階 7・8 は済み**(2026-09-20)。「フルカラー総集編」の直し、総集編・番外編のオフセット、シリーズの操作と取り消し、
-  作業ファイル(`Sources/QooMetaKit/Workfile.swift`)。画面は変更の索引(`ProposalIndex`)の上に載せ替えた
-  (`App/qooMeta/Workspace.swift`。段階 5 の `SeriesDerivation` は画面からは使っていない)。
-  フォルダを開く・作業ファイルを開く / 保存する・フォルダごとの型の並びの割り当ても画面にある。
-- **段階 9(書き出し)も済み**(2026-09-20)。書き出し先ごとの欄の対応表(`FieldMapping`)と、落ちる欄を数えるプレビュー
-  (`Exporter.preview`)。CLI は `--to stacknest|shelfrow|qooviewer`。**画面の書き出しは段階 11**。
-- **段階 10(CLI)も済み**(2026-09-20)。`--in` に作業ファイルを渡せる(`stats`・`export`・`formats`・`bench`)。
-  `config.json` は消した。
-- **段階 11 は途中**(2026-09-20)。済んだのはスタンプ・適用前のプレビュー・書き出しの画面と、アプリの設定
-  (`App/qooMeta/Settings.swift`。規則の差分・スタンプ・書き出しの対応表を
-  `~/Library/Application Support/qooMeta/settings.json` に持つ)。**規則(series-rules)を編集する窓は作った**
-  (2026-09-20。下の「規則の窓」)。**型の並び(ファイル名フォーマットのプリセット)を編集する画面も、同じ窓に作った。**
-  残りは、利用者が窓を見てよいと言うこと(エージェントは画面を見ていない。組み立てと起動だけ確かめた)。
-- 総集編と巻数の方針は、2026-09-20 にすべて決まった(下の「決まったこと」と roadmap.md「決めたことの控え」)。未決は無い。
-- **次にやること(利用者の指示、2026-09-20)**: ① **JSON の構成そのもののブラッシュアップ** → ② **JSON を編集する画面**
-  (段階 11 の残り = 規則の方針・語の一覧・型の並びの編集)。①→② の順にする(画面は JSON の形の上に載るため)。
-  下の「JSON のブラッシュアップ」に、済んだこと(`filename-formats.json` の第 5 版)と残り(`series-rules.json`)を書いてある。
-- 旧来の欄で作った試作(`App/`・`QooMetaPreview` …)は、2026-09-19 にコミットせずに捨てた(履歴にも無い)。段階 0 は済み。
-  コミットやブランチの状態はここに書かない(`git log` を見る)。
+- コンセプトの見直し(2026-09-19)で決めた作り直しは、段階 0〜11 まで済んだ(roadmap.md)。**シリーズと巻を導く中核**は移し、
+  画面・作業ファイル・書き出し・CLI は作り直した。
+- **アプリ**(`App/`。`cd App && xcodegen`)は 4 段の流れ(対象を選ぶ → 解析方法を選ぶ → 確認・編集 → 書き出す。`FlowView`)。
+  設定の窓は「解析の設定」(ファイル名解析。`FileNameRulesView`・`PresetEditorView`)と「抽出の設定」(シリーズと巻数の抽出。
+  `RulesEditorView` の `SeriesRulesView`)の 2 つ。
+- **段 2 の「自動」**: 本ごとに、フォルダのパスと名前の語・ファイル名の先頭の語句からルールセットを選ぶ(`PresetAuto.swift`。
+  下の「本ごとにルールセットを選ぶ」)。**段 3** は一覧の右クリックで選んだ本だけ別のルールセットで読み直せ、型に合わなかった本は灰色。
+- **同梱の既定値は、利用者の手元の設定を取り込んだもの**(2026-09-21)。`filename-formats.json`・`series-rules.json` は
+  禁止語の検査の対象外(CLAUDE.md)。例とテストは、前提にする規則の値を自分の側に書く(`policies`・`settings`)。
+- 画面の確かめは利用者が行っている(エージェントはアプリを起動しない。組み立てとテストだけ)。
+- コミットやブランチの状態はここに書かない(`git log` を見る)。
 
 ## 読む順
 
-| 文書 | 状態 | 中身 |
-|---|---|---|
-| [concept.md](concept.md) | **最新** | 目的、**ターゲットのアプリと参考のアプリの区別**、原則(9 項目)。まずこれ |
-| [metadata.md](metadata.md) | **最新** | 利用先 3 アプリの調査、qooMeta の欄、書き出し先ごとのシリーズと巻、画面の案 |
-| [filename-format.md](filename-format.md) | **最新** | ファイル名フォーマットの書き方・予約語・同梱プリセット |
-| [roadmap.md](roadmap.md) | **最新** | 中核の入口、作り直しの段階(0〜12)と終わりの条件、決めたことの控え |
-| [rules.md](rules.md)・[rules-format-design.md](rules-format-design.md) | 規則ファイルの形式(第 2 版)は有効 | 版・入手経路・本の種別などの方針は古い欄が前提 |
-| [api.md](api.md)・[design.md](design.md) | **古い** | サークル・ネタなど旧来の欄が前提。作り直しで書き直す |
-| `CLAUDE.md` | **最新**(2026-09-19 に冒頭を直した) | 目的、ターゲットと参考の区別、名前を外へ出さない約束 |
+| 文書 | 中身 |
+|---|---|
+| [concept.md](concept.md) | 目的、**ターゲットのアプリと参考のアプリの区別**、原則。まずこれ |
+| [metadata.md](metadata.md) | 利用先 3 アプリの調査、qooMeta の欄、書き出し先ごとのシリーズと巻 |
+| [filename-format.md](filename-format.md) | ファイル名フォーマットの書き方・予約語・ルールセット・自動の判定 |
+| [rules.md](rules.md)・[rules-format-design.md](rules-format-design.md) | 規則ファイルの説明書と、形式の設計 |
+| [design.md](design.md)・[api.md](api.md) | 設計と、ライブラリとしての API |
+| [roadmap.md](roadmap.md) | 作り直しの段階と終わりの条件、決めたことの控え |
+| `CLAUDE.md` | 目的、ターゲットと参考の区別、名前を外へ出さない約束 |
 
-## いまのコードの地図(2026-09-20)
+2026-09-21 に、README とすべての docs を実装に合わせて見直した。
+
+## いまのコードの地図(2026-09-21)
 
 | 置き場所 | 中身 |
 |---|---|
-| `Sources/QooMetaKit/` | 中核(シリーズ・巻)、欄(`BookMetadata`)、型の照合(`FilenameFormat`)、規則の読み込み(`RuleLoader`・`RuleFiles`・`RuleSchema`)、変更の索引(`ProposalIndex`)、まとめて編集(`BulkEdit`)、**作業ファイル(`Workfile`)** |
-| `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、**書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`)** |
+| `Sources/QooMetaKit/` | 中核(シリーズ・巻。`SeriesGrouper`・`VolumeExtractor`)、欄(`BookMetadata`)、型の照合(`FilenameFormat`)、規則の読み込み(`RuleLoader`・`RuleFiles`・`RuleSchema`)、ルールセットの一覧と本ごとの自動の選択(`PresetCatalog`・`PresetAuto`)、変更の索引(`ProposalIndex`)、まとめて編集(`BulkEdit`)、作業ファイル(`Workfile`)、例のファイル(`Examples`) |
+| `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`) |
 | `Sources/QooMetaScan/` | フォルダの走査(本体はファイルに触らないので、ここと CLI・アプリだけがファイルを見る) |
 | `Sources/qoometa/` | CLI。`InputDocument` が提案ファイルと作業ファイルのどちらも読む |
-| `App/qooMeta/` | 画面(言葉は `Localizable.xcstrings`。`Localization.swift`・`RuleLabels.swift` が鍵を持つ)。`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`DetailView`(欄・スタンプ・シリーズの操作)、`ExportView`、`Settings`(規則の差分・スタンプ・対応表)、**`RulesEditorView`(規則の窓)・`RuleLabels`(その言葉)** |
+| `App/qooMeta/` | 画面(言葉は `Localizable.xcstrings`。`Localization.swift`・`RuleLabels.swift` が鍵を持つ)。`FlowView`(4 段の流れ)、`QooMetaApp`(`AppModel`。段 2 の数え直しと自動の選択)、`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`BookTable`(NSTableView の一覧・右クリック)、`DetailView`、`ExportView`、`Settings`、`FileNameRulesView`・`PresetEditorView`(解析の設定)、`RulesEditorView`(抽出の設定) |
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
-  実際の蔵書は「フォルダを開く」で開く(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
-- 確かめ: `swift build`・`swift test`(154 件)・`.build/release/qoometa rules test`(例 121 件)・`bash scripts/ci/check-all.sh`。
+  実際の蔵書は段 1 で選ぶ(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
+- 確かめ: `swift build`・`swift test`(168 件)・`.build/release/qoometa rules test`(例 121 件)・`bash scripts/ci/check-all.sh`。
   速さとメモリは `.build/release/qoometa bench --synthetic 20000`(`--no-authors` も)。
+
+## 2026-09-21 の後半に足したこと(利用者の指示)
+
+- **本ごとにルールセットを選ぶ(段 2 の「自動」)**: 条件は ① フォルダのパスか名前に含む語(`auto.words`)と、② ファイル名の先頭の
+  語句(`headRequired` 必須 / `headExcluded` 例外)。当たるルールセットが 2 つ以上なら、先頭の語句を必須にしたものを採る。それでも
+  絞れない本とどれにも当たらない本は決めず、1 冊でもあれば「自動」は選べない。決まった割り当ては作業ファイルの `presets.folders` に
+  本の ID ごとに入る(`PresetAssignment.preset(for:)` は ID → フォルダ → 上のフォルダと引く。全部をなめない)。
+  最初は ② を「丸括弧で始まるか」の形で作ったが、利用者から見て読めなかったので必須 / 例外の形にした。その版の
+  `leadingParenthesis`・`parenthesisExceptions` は、保存した設定が読めるように受け付けるだけで使わない。
+- **段 3**: 右クリックで、選んだ本を任意のルールセットで読み直す(`Workspace.reparse`。取り消せる)。型に合わなかった本は灰色。
+  段 2 のボタンは「解析の設定」、段 3 のボタンは「抽出の設定」。
+- **規則 `grouping.mergeSubseries`**(`engineLevel` 9): 自前の番号を持つ副シリーズ(「X eve 甲 1・3・4」)も本編へ入れる。巻は副題ごと。
+  入れる側も入れ先も巻でまとまった組(1 段目)だけ ―― 題の頭が同じだけの 2 段目の組へ吸い込んでいた(「私の、〇〇」の事例)。
+- **規則 `volume.particles` と一覧 `particles`**(`engineLevel` 10。既定「の」「と」「は」「に」): 区切りなしでシリーズ名に続く残りを
+  巻数(表示)にしないのは、助詞で始まるときだけ(前はひらがなで始まる残りをすべて外していた)。
+- **題名全体が一致する組にも `reject-hiragana-ending`**: 一致がひらがなで終わり、長いほうがそのままひらがなで続くなら組にしない
+  (「〜です!!」と「〜ですか?」)。続きが漢字なら組にする(「月の庭の」と「月の庭の安息」。同梱の例がある)。
+- **2 段目の取りこぼし**: 並びで組より前に来た本も、組の共通部分で始まれば組に入れる(`SeriesGrouper.absorbStragglers`)。
+- **漢数字の単独の巻**: 一覧 `kanjiAloneDigits` に大字の陸〜玖(七は漆と柒)と、ふつうの漢数字の一〜九を足した。
+- **シリーズ名の後ろに残す文字**(`keepFollowing`)は、巻の前では読み飛ばす。同梱に「♡」「♥」を足した(「X♡2」= シリーズ「X♡」の 2 巻)。
+- **利用者の設定の取り込み**: 設定ファイルの差分を同梱の既定値に重ね、値の変わった所だけを JSON に書いた(中身は読まず、件数だけを
+  確かめた)。方針の既定が変わった(`compilations` = `inMainSeries`、`differentRelation` = `keep`、`singleWhenMainExists` = false、
+  `mergeSubseries` = 入)。これで表に出た、総集編を本編に含めるときの冊数の 2 乗の処理も直した(`SeriesGrouper.NameIndex`)。
+- **例のファイルの `settings`**: 例が前提にする規則の値(点つなぎの場所 → 値)を書ける。`CompiledRules.applying(policies:settings:)`。
+- **結果の指紋の基準値は古くなった**(既定値が変わったため)。下の「確かめ方と基準値」の数字は 2026-09-22 の控えのまま。
+  次に実データで確かめるときに取り直す。
 
 ## 規則の窓(2026-09-20、利用者の指示)
 

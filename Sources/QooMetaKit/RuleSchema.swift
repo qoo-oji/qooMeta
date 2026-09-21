@@ -92,7 +92,7 @@ enum RuleSchema {
         "notFirstMarkers": .words, "notFirstPrefixes": .words, "particles": .words,
     ]
 
-    /// 方針(好みで選ぶ扱い)と、選べる値。最初の値が既定(今の扱い)。
+    /// 方針(好みで選ぶ扱い)と、選べる値。最初の値は、方針を書いていないときに使う値(同梱の既定値は series-rules.json が決める)。
     static let policies: [(name: String, choices: [String])] = [
         ("editions", ["sameWork", "separateBooks", "ignore"]),
         ("sources", ["sameWork", "separateBooks", "ignore"]),
@@ -194,10 +194,10 @@ enum RuleSchema {
 
     // MARK: - ファイル名のフォーマット
 
-    /// filename-formats.json の中身(第 5 版): 既定のプリセットの名前と、名前を付けた型の並び(プリセット)。
+    /// filename-formats.json の中身(第 6 版): 既定のプリセットの名前と、名前を付けた型の並び(プリセット)。
     ///
-    /// 著者の区切り(`separators`)と既定の欄(`defaults`)は ファイル全体 → プリセット → 型 の 3 か所に同じ綴りで書け、
-    /// **内側に書いたものが勝つ**。ファイル全体の `separators` だけは必ず書く(いちばん外側の値が無いと、読み方が決まらない)。
+    /// 著者の区切り(`separators`)と既定の欄(`defaults`)は プリセット → 型 の 2 か所に同じ綴りで書け、
+    /// **内側に書いたものが勝つ**。プリセットが区切りを省いたときは、同梱の既定の区切りを使う。
     static let formatStages = Node([f("defaultPreset", .string), f("presets", .presets)])
 
     /// 型として読まない文字列(`plain`)。プリセットと型の 2 か所に書け、**足し合わさる**(区切りや既定の欄と違い、

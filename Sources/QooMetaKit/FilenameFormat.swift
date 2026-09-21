@@ -114,7 +114,7 @@ public struct PlainText: Sendable, Hashable {
 
     public var isEmpty: Bool { regex == nil }
 
-    /// 外側の分に内側の分を足したもの(`plain` は ファイル全体 → プリセット → 型 と**足し合わさる**。打ち消す使い道が無いため)。
+    /// 外側の分に内側の分を足したもの(`plain` は プリセット → 型 と**足し合わさる**。打ち消す使い道が無いため)。
     public func adding(_ inner: PlainText) -> PlainText {
         inner.isEmpty ? self : isEmpty ? inner : PlainText(words: words + inner.words.filter { !words.contains($0) },
                                                            patterns: patterns + inner.patterns.filter { !patterns.contains($0) })
@@ -390,8 +390,8 @@ public struct FilenameFormat: Sendable, Hashable {
 
 /// 型の並びと、並びの欄の区切り(1 つのプリセット)。
 ///
-/// 区切りと既定の欄は ファイル全体 → プリセット → 型 の 3 か所に書け、**内側に書いたものが勝つ**
-/// (docs/filename-format.md の 4)。ここが持つのは、ファイル全体とプリセットを重ねた後の値。型の分は型が持つ。
+/// 区切りと既定の欄は プリセット → 型 の 2 か所に書け、**内側に書いたものが勝つ**
+/// (docs/filename-format.md の 4)。ここが持つのはプリセットの値。型の分は型が持つ。
 public struct FilenameFormats: Sendable, Hashable {
     public static func == (a: FilenameFormats, b: FilenameFormats) -> Bool {
         (a.label, a.note, a.formats, a.separators) == (b.label, b.note, b.formats, b.separators)

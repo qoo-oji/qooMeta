@@ -340,8 +340,8 @@ struct RuleCompiler {
 
     /// filename-formats.json → 名前を付けた型の並び(プリセット)。型の書き間違いは、番号付きで誤りにする。
     ///
-    /// 区切りと既定の欄は ファイル全体 → プリセット → 型 の順に**内側が勝つ**。区切りは書いた所で丸ごと置き換わり、
-    /// 既定の欄は欄ごとに置き換わる。ここでファイル全体とプリセットを重ね、型の分は型に持たせる(読むときに重ねる)。
+    /// 区切りと既定の欄は プリセット → 型 の順に**内側が勝つ**。区切りは書いた所で丸ごと置き換わり、
+    /// 既定の欄は欄ごとに置き換わる。ここではプリセットの分を読み、型の分は型に持たせる(読むときに重ねる)。
     mutating func formats(_ root: JSONValue, isVolume: VolumeTest = .none) -> FormatPresets? {
         func separators(_ v: JSONValue?) -> [String]? { v?.arrayValue?.compactMap(\.stringValue).filter { !$0.isEmpty } }
         func defaults(_ v: JSONValue?) -> [BookMetadata.Field: [String]] {
