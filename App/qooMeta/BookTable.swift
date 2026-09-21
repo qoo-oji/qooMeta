@@ -66,7 +66,8 @@ struct BookTable: NSViewRepresentable {
         /// 並べ替えの比べ方(鍵は `BookRow` が 1 冊につき 1 度だけ作ってある)。
         func comparator(_ order: SortOrder) -> KeyPathComparator<BookRow> {
             switch self {
-            case .fileName: KeyPathComparator(\BookRow.fileName, order: order)
+            // 名前そのものではなく、開いたときに決めた順位で比べる(理由は `BookRow.fileRank`)。
+            case .fileName: KeyPathComparator(\BookRow.fileRank, order: order)
             case .field(let field): KeyPathComparator(\BookRow[sortKey: field], order: order)
             case .volumeSort: KeyPathComparator(\BookRow[sortKey: .volume], order: order)
             }

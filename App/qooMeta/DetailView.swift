@@ -34,7 +34,8 @@ struct DetailView: View {
             }
             .formStyle(.grouped)
             // 選択が変わったら、入力中の値を捨てる。
-            .id(books.map(\.id))
+            // 顔ぶれが変わったときだけ(全 ID の並びを鍵にすると、すべて選んだときに描くたび 1 万件を比べる)。
+            .id(workspace.selectionToken)
         }
     }
 
