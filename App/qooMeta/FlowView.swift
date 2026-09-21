@@ -48,6 +48,10 @@ struct FlowView: View {
         // ―― 段 3 の画面に付けていたときは、段 2 や段 4 にいるあいだの変更が一覧へ届かず、古い規則で読んだ結果を
         // そのまま書き出していた(2026-09-21 の監査)。一覧ができた時点でも 1 度届ける(組み立ての最中に変わった分)。
         .task(id: RulesDelivery(rules: model.settings.rules.contentHash, workspace: model.workspace.map(ObjectIdentifier.init))) {
+            // 規則の窓で続けて直しているあいだは、少し待つ(1 つ直すたびに全冊を読み直さない。`task(id:)` は、
+            // 待っているあいだに次の変更が来たら、この回を取り消す)。
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
             await model.workspace?.setRules(model.settings.rules)
         }
         .confirmationDialog(discardTitle,

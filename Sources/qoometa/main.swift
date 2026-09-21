@@ -322,6 +322,15 @@ func bench(_ doc: InputDocument, proposer: Proposer) async throws {
     let fill = Date()
     try await index.apply(inputs.map { .upsert($0) })
     let filled = Date().timeIntervalSince(fill)
+    // アプリが一覧を開くときの道(並列)と、規則を替えたときの読み直し。
+    let loadedIndex = ProposalIndex(rules: proposer.rules, dictionaries: proposer.dictionaries)
+    let loadStart = Date()
+    try await loadedIndex.load(inputs)
+    let loaded = Date().timeIntervalSince(loadStart)
+    let reloadStart = Date()
+    try await loadedIndex.reload(rules: proposer.rules, dictionaries: proposer.dictionaries)
+    let reloaded = Date().timeIntervalSince(reloadStart)
+    let sameLoaded = await loadedIndex.snapshot().proposals == set?.proposals
     // 1 冊の変更: 既にある本を、同じ名前のまま入れ直す(単位 1 つの計算し直し)。
     var single: [Double] = []
     for input in inputs.prefix(200) {
@@ -334,7 +343,8 @@ func bench(_ doc: InputDocument, proposer: Proposer) async throws {
     print(String(format: "本 %d 冊: 一括(同期)%.2f 秒、一括(並列)%.2f 秒、索引への投入 %.2f 秒", inputs.count, sync, parallel, filled))
     print(String(format: "1 冊の変更(%d 回): 中央値 %.1f ミリ秒、最大 %.1f ミリ秒", single.count,
                  (single.isEmpty ? 0 : single[single.count / 2]) * 1000, (single.last ?? 0) * 1000))
-    print("索引と一括の結果が同じ: \(same ? "はい" : "いいえ")")
+    print(String(format: "索引へまとめて入れる(並列)%.2f 秒、規則を替えない読み直し %.2f 秒", loaded, reloaded))
+    print("索引と一括の結果が同じ: \(same && sameLoaded ? "はい" : "いいえ")")
 }
 
 /// 渡せる辞書(規則は辞書を名前で指す。ここでは macOS の英単語の一覧だけ)。

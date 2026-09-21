@@ -147,6 +147,8 @@ final class AppModel {
     var isFitting = false
     /// 数え直しの回(`computeFits`)。
     private var fitRound = 0
+    /// ルールセットごとの数えた結果(`key` が同じあいだは使い回す)。
+    private var fitCache: [String: (key: Int, read: Int, leftover: Int)] = [:]
     var chosenPreset: String?
     var workspace: Workspace?
     var error: String?
@@ -297,10 +299,20 @@ final class AppModel {
         let entries = settings.rules.presetCatalog.entries
         let names = picked.files.map(\.baseName)
         let formats = settings.rules.formats
-        let counts = await Task.detached { () -> [String: (read: Int, leftover: Int)] in
+        // **中身の変わっていないルールセットは数え直さない。** 段を行き来するたび・規則を 1 つ直すたびに、全部の
+        // ルールセットで全冊を読み直していた。鍵は、読み方を決めるもの(型の並びと、`@volume` が使う巻の読み手)と、名前の顔ぶれ。
+        let series = settings.rules.mergedSeriesRules
+        let keys = Dictionary(entries.map { entry -> (String, Int) in
+            var hasher = Hasher()
+            hasher.combine(formats[entry.id]); hasher.combine(series["volume"]); hasher.combine(series["lists"])
+            hasher.combine(series["policies"]); hasher.combine(PickedForRules.shared.token); hasher.combine(names.count)
+            return (entry.id, hasher.finalize())
+        }, uniquingKeysWith: { a, _ in a })
+        let missing = entries.map(\.id).filter { fitCache[$0]?.key != keys[$0] }
+        let counted = await Task.detached { () -> [String: (read: Int, leftover: Int)] in
             // ルールセットごとに数えるので、並べて走らせる(蔵書が大きいと 1 本では待たされる)。
             await withTaskGroup(of: (String, Int, Int).self) { group in
-                for id in entries.map(\.id) {
+                for id in missing {
                     group.addTask {
                         let set = formats[id]
                         var read = 0, leftover = 0
@@ -318,6 +330,9 @@ final class AppModel {
             }
         }.value
         guard round == fitRound else { return }
+        for (id, count) in counted { fitCache[id] = (keys[id] ?? 0, count.read, count.leftover) }
+        fitCache = fitCache.filter { keys[$0.key] != nil }
+        let counts = fitCache.mapValues { (read: $0.read, leftover: $0.leftover) }
         presetFits = entries.map {
             PresetFit(id: $0.id, title: $0.preset.displayName, note: RuleLabels.preset($0.id).help,
                       read: counts[$0.id]?.read ?? 0, leftover: counts[$0.id]?.leftover ?? 0)

@@ -31,51 +31,68 @@ public func propose(_ books: [BookInput], rules: CompiledRules, dictionaries: [S
     let engine = RuleEngine(rules: rules, dictionaries: dictionaries)
     // 名前の解析(計算の大半)も、本をまとめた塊ごとに並列に行う。入力の確かめ(ID の重なりなど)は順に。
     let (accepted, rejected) = engine.screen(books, limits: options.limits)
-    let size = max(64, (accepted.count + ProcessorCount.value * 4 - 1) / (ProcessorCount.value * 4))
-    var preparedBooks = [PreparedBook?](repeating: nil, count: accepted.count)
-    do {
-        try await withThrowingTaskGroup(of: [(Int, PreparedBook)].self) { group in
-            for start in stride(from: 0, to: accepted.count, by: size) {
-                group.addTask {
-                    try Task.checkCancellation()
-                    return (start..<min(start + size, accepted.count)).map { i in
-                        (i, engine.prepareOne(accepted[i].input, order: accepted[i].order))
+    let preparedBooks = try await engine.prepareInParallel(accepted)
+    let prepared = Prepared(books: preparedBooks, units: Dictionary(grouping: preparedBooks, by: \.unitKey), rejected: rejected)
+    let results = try await engine.computeUnitsInParallel(prepared.units.mapValues { $0.map(\.core) },
+                                                          explain: options.explanations, progress: progress)
+    return engine.assemble(prepared, results)
+}
+
+extension RuleEngine {
+    /// 名前を読んで中核の入口に詰める所を、本をまとめた塊ごとに並列に行う(入力の順のまま返す)。
+    /// `readings` に前の読み(本の ID → 型で読んだ結果)があれば、名前を読み直さずに使う(型の並びが変わっていないとき)。
+    func prepareInParallel(_ accepted: [(input: BookInput, order: Int)],
+                           readings: [String: FormatReading]? = nil) async throws(CancellationError) -> [PreparedBook] {
+        let size = max(64, (accepted.count + ProcessorCount.value * 4 - 1) / (ProcessorCount.value * 4))
+        var prepared = [PreparedBook?](repeating: nil, count: accepted.count)
+        do {
+            try await withThrowingTaskGroup(of: [(Int, PreparedBook)].self) { group in
+                for start in stride(from: 0, to: accepted.count, by: size) {
+                    group.addTask {
+                        try Task.checkCancellation()
+                        return (start..<min(start + size, accepted.count)).map { i in
+                            (i, self.prepareOne(accepted[i].input, order: accepted[i].order, reading: readings?[accepted[i].input.id]))
+                        }
                     }
                 }
-            }
-            for try await part in group {
-                for (i, book) in part { preparedBooks[i] = book }
-            }
-        }
-    } catch {
-        throw CancellationError()
-    }
-    let prepared = Prepared(books: preparedBooks.map { $0! },
-                            units: Dictionary(grouping: preparedBooks.map { $0! }, by: \.unitKey), rejected: rejected)
-    let keys = prepared.units.keys.sorted()
-    let chunkCount = max(1, min(keys.count, ProcessorCount.value * 4))
-    let chunks = stride(from: 0, to: keys.count, by: max(1, (keys.count + chunkCount - 1) / chunkCount)).map {
-        Array(keys[$0..<min($0 + (keys.count + chunkCount - 1) / chunkCount, keys.count)])
-    }
-    var results: [String: UnitResult] = [:]
-    do {
-        try await withThrowingTaskGroup(of: [(String, UnitResult)].self) { group in
-            for chunk in chunks {
-                group.addTask {
-                    try Task.checkCancellation()
-                    return chunk.map { ($0, engine.computeUnit(prepared.units[$0]!.map(\.core), explain: options.explanations)) }
+                for try await part in group {
+                    for (i, book) in part { prepared[i] = book }
                 }
             }
-            for try await part in group {
-                for (key, result) in part { results[key] = result }
-                progress?(ProposalProgress(completedUnits: results.count, totalUnits: keys.count))
-            }
+        } catch {
+            throw CancellationError()
         }
-    } catch {
-        throw CancellationError()
+        return prepared.map { $0! }
     }
-    if Task.isCancelled { throw CancellationError() }
-    return engine.assemble(prepared, results)
+
+    /// 単位の計算を、単位をまとめた塊ごとに並列に行う(1 単位は平均して数冊なので、単位ごとにタスクを作ると遅くなる)。
+    func computeUnitsInParallel(_ units: [String: [CoreBook]], explain: Bool,
+                                progress: (@Sendable (ProposalProgress) -> Void)? = nil) async throws(CancellationError)
+        -> [String: UnitResult] {
+        let keys = units.keys.sorted()
+        let chunkCount = max(1, min(keys.count, ProcessorCount.value * 4))
+        let chunkSize = max(1, (keys.count + chunkCount - 1) / chunkCount)
+        let chunks = stride(from: 0, to: keys.count, by: chunkSize).map { Array(keys[$0..<min($0 + chunkSize, keys.count)]) }
+        var results: [String: UnitResult] = [:]
+        do {
+            try await withThrowingTaskGroup(of: [(String, UnitResult)].self) { group in
+                for chunk in chunks {
+                    group.addTask {
+                        try Task.checkCancellation()
+                        return chunk.map { ($0, self.computeUnit(units[$0]!, explain: explain)) }
+                    }
+                }
+                for try await part in group {
+                    for (key, result) in part { results[key] = result }
+                    progress?(ProposalProgress(completedUnits: results.count, totalUnits: keys.count))
+                }
+            }
+        } catch {
+            throw CancellationError()
+        }
+        if Task.isCancelled { throw CancellationError() }
+        return results
+    }
 }
 
 /// 並列の度合い(本体は ProcessInfo に触れないので、固定の値にする。塊の数を決めるだけなので厳密でなくてよい)。
@@ -175,12 +192,13 @@ extension RuleEngine {
     }
 
     /// 名前を型で読み、確定した欄を重ねて、中核の入口に詰める。
-    func prepareOne(_ input: BookInput, order: Int) -> PreparedBook {
-        scoped { prepareOneUnscoped(input, order: order) }
+    /// `reading` に前の読みを渡すと、名前を読み直さない(型の並びが変わっていないと分かっているとき)。
+    func prepareOne(_ input: BookInput, order: Int, reading: FormatReading? = nil) -> PreparedBook {
+        scoped { prepareOneUnscoped(input, order: order, reading: reading) }
     }
 
-    private func prepareOneUnscoped(_ input: BookInput, order: Int) -> PreparedBook {
-        let reading = rules.formats[input.preset].read(Self.cleaned(input.name))
+    private func prepareOneUnscoped(_ input: BookInput, order: Int, reading given: FormatReading?) -> PreparedBook {
+        let reading = given ?? rules.formats[input.preset].read(Self.cleaned(input.name))
         let metadata = input.confirmation.fields.applied(to: reading.metadata)
         let compared = compareTitle(metadata.title)
         // 型が名前から直に読んだシリーズ・巻数(`@series` `@volume`)は、利用者が確定した値と同じ扱いで中核へ渡す。

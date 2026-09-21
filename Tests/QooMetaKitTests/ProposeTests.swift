@@ -202,6 +202,78 @@ final class ProgressLog: @unchecked Sendable {
 }
 
 @Suite struct ProposalIndexTests {
+    /// まとめて入れる道(並列)は、1 冊ずつ入れる道・一括の提案と同じ結果になる。重なった ID や断られる名前があっても同じ。
+    @Test func loadingInParallelMatchesApplyingOneByOne() async throws {
+        var books = inputs(Self.names + (0..<300).map { "[架空の書き手\($0 % 23)] 合成の題\($0 / 3) 第\($0 % 3 + 1)巻" })
+        books.append(BookInput(id: "空の名前", name: "   "))
+        let batch = proposeSync(books, rules: .builtin, dictionaries: [:])
+        let loaded = ProposalIndex(rules: .builtin, dictionaries: [:])
+        try await loaded.load(books)
+        let applied = ProposalIndex(rules: .builtin, dictionaries: [:])
+        try await applied.apply(books.map { .upsert($0) })
+        let a = await loaded.snapshot(), b = await applied.snapshot()
+        #expect(a.proposals == batch.proposals && a.series == batch.series && a.rejected == batch.rejected)
+        #expect(a.proposals == b.proposals && a.series == b.series && a.rejected == b.rejected)
+        // 入れたあとの 1 冊の変更も、同じ差分になる。
+        let change = BookChange.upsert(BookInput(id: "新しい本", name: "[架空の書き手1] 合成の題0 第9巻", preset: "doujinshi"))
+        let x = try await loaded.apply([change]), y = try await applied.apply([change])
+        #expect(x.changed == y.changed && x.changedSeries == y.changedSeries)
+
+        // 同じ ID が重なる入力は、後のものが勝つ(1 冊ずつ入れたときと同じ)。
+        let doubled = books + [BookInput(id: books[0].id, name: "[架空工房] 別の題", preset: "doujinshi")]
+        let c = ProposalIndex(rules: .builtin, dictionaries: [:]), d = ProposalIndex(rules: .builtin, dictionaries: [:])
+        try await c.load(doubled)
+        try await d.apply(doubled.map { .upsert($0) })
+        #expect(await c.snapshot().proposals == d.snapshot().proposals)
+    }
+
+    /// 規則を替えて読み直す道(並列。名前の読みを使い回すことがある)は、新しい規則で最初から入れた結果と同じ。
+    @Test func reloadingMatchesAFreshIndex() async throws {
+        let books = inputs(Self.names + (0..<120).map { "[架空の書き手\($0 % 11)] 合成の題\($0 / 3) 第\($0 % 3 + 1)巻 (合成の原作)" })
+        // シリーズの規則だけを変える(名前の読みは使い回される)・巻の読み方を変える(読み直される)の両方。
+        let candidates: [(String, CompiledRules?)] = [
+            ("grouping", RulesTests.compile(RulesTests.diff(#""grouping": { "sharedPrefix": { "minPrefix": 2 } }"#)).rules),
+            ("unnumberedVolume", CompiledRules.builtin.applying(policies: ["unnumberedVolume": "leaveEmpty"]).rules),
+            ("magazines", CompiledRules.builtin.applying(policies: ["magazines": "whole"]).rules),
+        ]
+        for (policies, compiled) in candidates {
+            let changed = try #require(compiled)
+            let index = ProposalIndex(rules: .builtin, dictionaries: [:])
+            try await index.load(books)
+            try await index.reload(rules: changed, dictionaries: [:])
+            let fresh = proposeSync(books, rules: changed, dictionaries: [:])
+            let now = await index.snapshot()
+            #expect(now.proposals == fresh.proposals && now.series == fresh.series, "\(policies)")
+            #expect(now.rulesHash == changed.contentHash)
+        }
+    }
+
+    /// 試しただけ(`preview`)と、取り消された変更は、状態を 1 つも変えない(変えた所だけを控えて戻す)。
+    @Test func previewAndCancellationLeaveTheStateAlone() async throws {
+        let books = inputs(Self.names)
+        let index = ProposalIndex(rules: .builtin, dictionaries: [:])
+        try await index.load(books)
+        let before = await index.snapshot()
+        let changes: [BookChange] = [.remove(id: books[0].id), .upsert(BookInput(id: "x", name: "[架空工房] 月の庭 9", preset: "doujinshi")),
+                                     .upsert(BookInput(id: books[1].id, name: "[別の書き手] まったく別の題", preset: "doujinshi"))]
+        _ = try await index.preview(changes)
+        #expect(await index.snapshot().proposals == before.proposals)
+        #expect(await index.snapshot().series == before.series)
+        let cancelled = Task { () -> Bool in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do { _ = try await index.apply(changes); return false } catch { return true }
+        }
+        #expect(await cancelled.value)
+        #expect(await index.snapshot().proposals == before.proposals)
+        #expect(await index.proposal(for: "x") == nil)
+        // そのあとの変更は、ふつうに効く。
+        _ = try await index.apply(changes)
+        let after = proposeSync([books[1]].map { _ in BookInput(id: books[1].id, name: "[別の書き手] まったく別の題", preset: "doujinshi") }
+                                + books.dropFirst(2) + [BookInput(id: "x", name: "[架空工房] 月の庭 9", preset: "doujinshi")],
+                                rules: .builtin, dictionaries: [:])
+        #expect(Set(await index.snapshot().proposals) == Set(after.proposals))
+    }
+
     static let names = [
         "[架空工房] 月の庭 1", "[架空工房] 月の庭 2", "[架空工房] 月の庭 3", "[架空工房] 風の港", "[架空工房] 風の港 2",
         "[幻想舎] 星の歌 上", "[幻想舎] 星の歌 下", "[幻想舎] 星の歌 総集編", "[白紙堂] 雨の窓 春の章", "[白紙堂] 雨の窓 夏の章",

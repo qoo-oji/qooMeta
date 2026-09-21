@@ -94,6 +94,10 @@ final class NameCheck {
 
     private var task: Task<Void, Never>?
     private var last: Int?
+    /// 「直す前」の読めぐあい(保存してある並びと名前が同じあいだは使い回す。下書きを 1 文字打つたびに、
+    /// 変わっていない側まで全冊を読み直さない)。
+    private var beforeKey: Int?
+    private var beforeOutcomes: [FormatOutcome] = []
 
     /// 下書きか、選んだ名前が変わったら読み直す。中身が同じなら何もしない(画面は何度も描き直されるため)。
     func update(now: FilenameFormats, before: FilenameFormats, names: [String], token: Int) {
@@ -110,6 +114,12 @@ final class NameCheck {
             return
         }
         isWorking = true
+        var beforeHasher = Hasher()
+        beforeHasher.combine(before)
+        beforeHasher.combine(token)
+        beforeHasher.combine(names.count)
+        let newBeforeKey = beforeHasher.finalize()
+        let known = newBeforeKey == beforeKey && beforeOutcomes.count == names.count ? beforeOutcomes : nil
         task = Task { [weak self] in
             // 打っている途中の型で何度も読み直さない(1 文字ごとに蔵書ぜんぶを読むことになる)。
             try? await Task.sleep(for: .milliseconds(300))
@@ -120,7 +130,7 @@ final class NameCheck {
                 var nowCounts = Counts(), beforeCounts = Counts()
                 for (index, name) in names.enumerated() {
                     let check = now.check(name)
-                    let was = before.check(name).outcome
+                    let was = known?[index] ?? before.check(name).outcome
                     nowCounts.add(check.outcome)
                     beforeCounts.add(was)
                     rows.append(Row(id: index, name: name, now: check, before: was))
@@ -129,6 +139,8 @@ final class NameCheck {
             }.value
             guard !Task.isCancelled else { return }
             self?.rows = result.0
+            self?.beforeKey = newBeforeKey
+            self?.beforeOutcomes = result.0.map(\.before)
             self?.now = result.1
             self?.before = result.2
             self?.better = result.0.count { $0.change == .better }

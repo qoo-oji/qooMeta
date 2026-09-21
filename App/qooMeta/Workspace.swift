@@ -153,6 +153,8 @@ final class Workspace {
     /// 絞り込みや検索をまとめて変えている最中(途中では作り置きを作り直さない)。
     private var isBatching = false
     private var pendingSearch: Task<Void, Never>?
+    /// いま走っている、規則を替えての読み直し。
+    private var reloading: Task<[BookRow]?, Never>?
     private let index: ProposalIndex
     /// 索引への変更は入れた順に流す(あとの変更が先に着かないように)。
     private var tail: Task<Void, Never>?
@@ -254,19 +256,23 @@ final class Workspace {
         guard rules.contentHash != self.rules.contentHash else { return }
         self.rules = rules
         formats = rules.formats
+        // 規則を続けて直しているときは、前の読み直しを途中でやめる(その結果は、もう使わない)。
+        // 索引は「全か無か」なので、やめた読み直しは何も変えない。
+        reloading?.cancel()
         let previous = tail
         working += 1
         let task = Task { [index] in
             await previous?.value
             // 前の修正が着いてからの値で行を作る。
             let confirmations = self.inputs.mapValues(\.confirmation), ranks = self.fileRanks
-            let rows = await Task.detached {
-                try? await index.update(rules: rules, dictionaries: SystemDictionaries.all)
+            let work = Task.detached { () -> [BookRow]? in
+                do { try await index.reload(rules: rules, dictionaries: SystemDictionaries.all) } catch { return nil }
                 return await index.snapshot().proposals.map {
                     BookRow($0, confirmation: confirmations[$0.id] ?? .none, fileRank: ranks[$0.id] ?? 0)
                 }
-            }.value
-            self.replaceBooks(rows)
+            }
+            self.reloading = work
+            if let rows = await work.value { self.replaceBooks(rows) }
             self.working -= 1
         }
         tail = task
@@ -283,7 +289,8 @@ final class Workspace {
         // その間じゅう画面が止まる(2026-09-21、利用者の報告)。
         let confirmations = inputs.mapValues(\.confirmation)
         let (rows, ranks) = await Task.detached { [index] in
-            try? await index.apply(all.map { .upsert($0) })
+            // まとめて入れる口(名前の読み取りも単位の計算も並列)。1 冊ずつの `apply` は 1 本で順に読む。
+            try? await index.load(all)
             // ファイル名順の順位は、ここで 1 度だけ決める(名前は変わらない)。Finder と同じ、数字を数として読む順。
             let byName = all.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             let ranks = Dictionary(byName.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
