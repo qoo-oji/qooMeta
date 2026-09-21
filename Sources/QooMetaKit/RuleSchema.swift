@@ -89,7 +89,7 @@ enum RuleSchema {
         "kanjiAloneDigits": .words, "volumeFollowers": .characters, "numberWords": .wordPairs,
         "positionFirst": .words,
         "positionMiddle": .words, "positionLast": .words, "sequelWords": .words,
-        "notFirstMarkers": .words, "notFirstPrefixes": .words,
+        "notFirstMarkers": .words, "notFirstPrefixes": .words, "particles": .words,
     ]
 
     /// 方針(好みで選ぶ扱い)と、選べる値。最初の値が既定(今の扱い)。
@@ -126,6 +126,8 @@ enum RuleSchema {
             Field(name: "attachAcrossScript", shape: rule(), since: 7),
             // 名前が「別の組の名前 + 巻」の組(「X 6巻」)を、その別の組(「X」)へ入れる。
             Field(name: "mergeVolumeSubgroups", shape: rule(), since: 8),
+            // 名前が「別の組の名前 + 副題」の組(自前の番号を持つ副シリーズ)も、その別の組へ入れる。
+            Field(name: "mergeSubseries", shape: rule(), since: 9),
             f("sharedPrefix", rule([
                 f("minPrefix", .int(1...20)), f("minWholeTitle", .int(1...20)),
                 f("conditions", .object(Node([
@@ -147,6 +149,8 @@ enum RuleSchema {
             f("readers", .readers),
             // 巻の番号のすぐ後ろに来てよい文字。読み手ごとではなく、番号を読むどの読み手にも同じように効く。
             f("followers", rule([f("characters", .list(.characters))], enabled: false)),
+            // シリーズ名に区切りなしで続く残りが、この語(助詞)で始まるなら、語の続きとみなして巻数(表示)にしない。
+            Field(name: "particles", shape: rule([f("words", .list(.words))]), since: 10),
             f("inference", .object(Node([
                 f("sharedLeadingKanji", rule([f("minBooks", .int(2...10))])),
                 f("firstVolume", rule([f("excludeMarkers", .list(.words)), f("excludePrefixes", .list(.words))], enabled: false)),
@@ -208,7 +212,17 @@ enum RuleSchema {
     static let presetNode = Node([
         optional("label", .string), optional("note", .string), optional("separators", .separators),
         optional("defaults", .presetDefaults), optional("plain", .object(plainNode)),
-        optional("ignoreBracketsInsideTitle", .bool), f("formats", .formats),
+        optional("ignoreBracketsInsideTitle", .bool), optional("auto", .object(autoNode)), f("formats", .formats),
+    ])
+
+    /// ルールセットを本ごとに選ぶ条件(`PresetAutoRule`)。省いたルールセットは、自動では選ばれない。
+    ///
+    /// `leadingParenthesis` と `parenthesisExceptions` は、先頭の条件を「丸括弧で始まるか」の形で書いていた版
+    /// (2026-09-21 の数時間だけ)が保存した設定を読めるように残すだけで、**使わない**(読むと捨てる)。
+    /// 保存し直せば、今の書き方(`headRequired`・`headExcluded`)に置き換わる。
+    static let autoNode = Node([
+        optional("words", .strings), optional("headRequired", .strings), optional("headExcluded", .strings),
+        optional("leadingParenthesis", .choice(["any", "yes", "no"])), optional("parenthesisExceptions", .strings),
     ])
 
     /// 1 つの型をオブジェクトで書いたとき。要るのは `format` だけ。

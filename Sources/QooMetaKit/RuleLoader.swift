@@ -485,6 +485,8 @@ struct RuleLoader {
         guard field.optional else { return nil }
         switch field.shape {
         case .string: return .null
+        // 選択肢は、先頭が省いたときの値(古い書き方の `auto.leadingParenthesis` を、同梱に無くても読めるように)。
+        case .choice(let choices): return choices.first.map(JSONValue.string)
         case .separators: return .array(FilenameFormats.defaultSeparators.map(JSONValue.string))
         case .presetDefaults, .object: return .object([:])
         case .strings, .patterns: return .array([])

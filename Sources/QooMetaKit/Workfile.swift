@@ -83,6 +83,7 @@ public struct Workfile: Codable, Sendable, Hashable {
 
     /// フォルダごとの型の並びの割り当て(CLI の `--presets` と同じ形)。
     /// 起点からの相対パスの頭が合うものを使い、長い頭から先に見る。
+    /// 本の ID そのものも書ける(その本だけに当たる)。自動の選択と、一覧から選んだ本を読み直すときはこちらを使う。
     public struct PresetAssignment: Codable, Sendable, Hashable {
         /// どのフォルダにも当たらない本が使う名前(nil なら同梱の既定)。
         public var defaultPreset: String?
@@ -95,8 +96,14 @@ public struct Workfile: Codable, Sendable, Hashable {
         }
 
         public func preset(for id: String) -> String? {
-            let match = folders.keys.filter { id == $0 || id.hasPrefix($0 + "/") }.max { $0.count < $1.count }
-            return match.flatMap { folders[$0] } ?? defaultPreset
+            // 長い頭から: 本の ID そのもの → そのフォルダ → その上のフォルダ …。**割り当てを全部なめない** ――
+            // 本ごとの割り当て(自動の選択)は 1 万件にもなり、1 冊ごとに全部を見ると冊数の 2 乗になる。
+            var key = Substring(id)
+            while true {
+                if let name = folders[String(key)] { return name }
+                guard let slash = key.lastIndex(of: "/") else { return defaultPreset }
+                key = key[..<slash]
+            }
         }
 
         enum CodingKeys: String, CodingKey { case defaultPreset = "default", folders }

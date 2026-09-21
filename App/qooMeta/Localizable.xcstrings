@@ -74,33 +74,15 @@
       "extractionState": "manual",
       "localizations": {
         "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%1$lld of %2$lld names read in full"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%1$lld of %2$lld names read in full"
-                }
-              }
-            }
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld names read in full"
           }
         },
         "ja": {
-          "variations": {
-            "plural": {
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%2$lld 冊中 %1$lld 冊を解析できました"
-                }
-              }
-            }
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld 冊中 %1$lld 冊を解析できました"
           }
         }
       }
@@ -261,6 +243,76 @@
         }
       }
     },
+    "%lld books match more than one rule set": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld book matches more than one rule set"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld books match more than one rule set"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld 冊は、2 つ以上のルールセットに当たります"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld books match no rule set": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld book matches no rule set"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld books match no rule set"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld 冊は、どのルールセットにも当たりません"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld books selected": {
       "extractionState": "manual",
       "localizations": {
@@ -399,6 +451,23 @@
         }
       }
     },
+    "A book in the series “X” whose title goes on straight after “X” with no separator gets the rest of the title as its volume (“Xなつまつり”). When the rest starts with one of the particles in the list (“Xの安息”), it is the rest of a word, and the volume is left empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book in the series “X” whose title goes on straight after “X” with no separator gets the rest of the title as its volume (“Xなつまつり”). When the rest starts with one of the particles in the list (“Xの安息”), it is the rest of a word, and the volume is left empty"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シリーズ「X」の本で、題名が「X」のあとに区切りなしで続くときは、残りを巻数(表示)にします(「Xなつまつり」)。残りが一覧の助詞で始まるとき(「Xの安息」)は語の続きなので、巻数(表示)を空にします"
+          }
+        }
+      }
+    },
     "A book on its own is given volume 1, or is not": {
       "extractionState": "manual",
       "localizations": {
@@ -480,6 +549,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "本編の後の話に巻数が付かない"
+          }
+        }
+      }
+    },
+    "A book whose folders or name contain any one of these. Upper and lower case, and full and half width, are not told apart. With no word, this rule set is never chosen automatically.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A book whose folders or name contain any one of these. Upper and lower case, and full and half width, are not told apart. With no word, this rule set is never chosen automatically."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダか名前に、どれか 1 つを含む本に当てます。大文字と小文字、全角と半角は区別しません。語が無ければ、このルールセットは自動では選ばれません。"
           }
         }
       }
@@ -752,6 +838,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "同じ名前のルールセットがあります"
+          }
+        }
+      }
+    },
+    "A rule set that requires a phrase comes before one that ① alone takes. So when two rule sets share a word and one of them requires “(”, books whose names start with “(” go to that one and the rest to the other.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A rule set that requires a phrase comes before one that ① alone takes. So when two rule sets share a word and one of them requires “(”, books whose names start with “(” go to that one and the rest to the other."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先頭の語句を必須にしたルールセットは、① だけで当たるルールセットより優先されます。同じ語を持つ 2 つのルールセットの片方で「(」を必須にすれば、「(」で始まる本はそちら、それ以外の本はもう片方で読みます。"
           }
         }
       }
@@ -1211,6 +1314,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "著者"
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        }
+      }
+    },
+    "Automatic choice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic choice"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動の判定"
           }
         }
       }
@@ -1943,6 +2080,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "段 1 で本を選ぶと、その名前がここに並びます。このルールセットで解析できない名前がひと目で分かります。"
+          }
+        }
+      }
+    },
+    "Chooses a rule set for each book, by the words its folders and name contain. Set the words for each rule set in the parsing settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chooses a rule set for each book, by the words its folders and name contain. Set the words for each rule set in the parsing settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダと名前に含まれる語から、本ごとにルールセットを選びます。ルールセットごとの語は「解析の設定」で設定します。"
           }
         }
       }
@@ -3086,6 +3240,23 @@
         }
       }
     },
+    "Excluded — not books whose file name starts with one of these": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluded — not books whose file name starts with one of these"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例外 — ファイル名がこのどれかで始まる本には当てない"
+          }
+        }
+      }
+    },
     "Export": {
       "extractionState": "manual",
       "localizations": {
@@ -3133,6 +3304,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "書き出す…"
+          }
+        }
+      }
+    },
+    "Extraction settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraction settings"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抽出の設定"
           }
         }
       }
@@ -3354,6 +3542,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "例: (仮)"
+          }
+        }
+      }
+    },
+    "For example: /Shelf/Folder/(Event) [Author] Title.zip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For example: /Shelf/Folder/(Event) [Author] Title.zip"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例: /書庫/フォルダ/(イベント) [作者] 題.zip"
           }
         }
       }
@@ -3851,6 +4056,23 @@
         }
       }
     },
+    "In step 2, “Automatic” reads a book with this rule set when the book meets both ① and ② below. A book that no rule set takes, or that more than one takes, is not decided — and then “Automatic” cannot be chosen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In step 2, “Automatic” reads a book with this rule set when the book meets both ① and ② below. A book that no rule set takes, or that more than one takes, is not decided — and then “Automatic” cannot be chosen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "段 2 の「自動」は、下の ① と ② を両方満たす本を、このルールセットで読みます。どのルールセットにも当たらない本や、2 つ以上に当たって絞れない本は決まらず、そのときは「自動」を選べません。"
+          }
+        }
+      }
+    },
     "In the main series": {
       "extractionState": "manual",
       "localizations": {
@@ -3966,6 +4188,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "漢数字(三・第三巻)"
+          }
+        }
+      }
+    },
+    "Kanji numerals on their own (弐, 参, 四)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kanji numerals on their own (弐, 参, 四)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "それだけで巻になる漢数字(弐、参、四)"
           }
         }
       }
@@ -4208,6 +4447,23 @@
         }
       }
     },
+    "Leave a volume empty when what follows the series name starts with a particle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave a volume empty when what follows the series name starts with a particle"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シリーズ名の後ろが助詞で始まるなら、巻数(表示)を空にする"
+          }
+        }
+      }
+    },
     "Leave the number empty (the volume still shows what the name says)": {
       "extractionState": "manual",
       "localizations": {
@@ -4408,23 +4664,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "シリーズ名と巻数の決め方(分類の設定・タイトル内の探索・語の一覧)を確認・編集します"
-          }
-        }
-      }
-    },
-    "Look at and edit the rule sets…": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Look at and edit the rule sets…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ルールセットを見て直す…"
           }
         }
       }
@@ -4718,6 +4957,23 @@
         }
       }
     },
+    "Narrows the books ① found by how their file names start. Leave both empty and ① alone decides.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narrows the books ① found by how their file names start. Leave both empty and ① alone decides."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① で当たった本を、ファイル名の先頭で絞ります。どちらも空なら、① だけで決まります。"
+          }
+        }
+      }
+    },
     "Neta": {
       "extractionState": "manual",
       "localizations": {
@@ -4816,6 +5072,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "どの欄にも割り当てられずに残った括弧はありません。"
+          }
+        }
+      }
+    },
+    "No rule set has words to choose by yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No rule set has words to choose by yet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選ぶための語を設定したルールセットが、まだありません"
           }
         }
       }
@@ -5041,23 +5314,6 @@
         }
       }
     },
-    "Old-style kanji numerals on their own (弐, 参)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Old-style kanji numerals on their own (弐, 参)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "それだけで巻になる大字(弐、参)"
-          }
-        }
-      }
-    },
     "One character": {
       "extractionState": "manual",
       "localizations": {
@@ -5228,6 +5484,57 @@
         }
       }
     },
+    "Parse the File Name Again With": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parse the File Name Again With"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイル名を再解析"
+          }
+        }
+      }
+    },
+    "Parse the file names again with “%@”": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parse the file names again with “%@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」でファイル名を再解析"
+          }
+        }
+      }
+    },
+    "Parsing settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parsing settings"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解析の設定"
+          }
+        }
+      }
+    },
     "Part of the settings file could not be read and was skipped. The file as it was is kept as “%@”.": {
       "extractionState": "manual",
       "localizations": {
@@ -5245,6 +5552,23 @@
         }
       }
     },
+    "Particles (hiragana that carry on the word before them)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Particles (hiragana that carry on the word before them)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "助詞(前の語に続くひらがな)"
+          }
+        }
+      }
+    },
     "Partly confirmed": {
       "extractionState": "manual",
       "localizations": {
@@ -5258,6 +5582,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "一部確定"
+          }
+        }
+      }
+    },
+    "Path or file name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Path or file name"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パスかファイル名"
+          }
+        }
+      }
+    },
+    "Phrase": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phrase"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語句"
           }
         }
       }
@@ -5870,6 +6228,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "書き換える"
+          }
+        }
+      }
+    },
+    "Required — only books whose file name starts with one of these": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Required — only books whose file name starts with one of these"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必須 — ファイル名がこのどれかで始まる本だけに当てる"
           }
         }
       }
@@ -6843,6 +7218,23 @@
         }
       }
     },
+    "Take in a run with numbers of its own": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take in a run with numbers of its own"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自前の番号を持つ組も取り込む"
+          }
+        }
+      }
+    },
     "Take in a subtitle that follows with no separator": {
       "extractionState": "manual",
       "localizations": {
@@ -7111,6 +7503,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "書き出すファイルには蔵書の名前が含まれます。手元の場所に保存してください。"
+          }
+        }
+      }
+    },
+    "The numerals in the list (弐, 参, 四 …) are read as the volume with no word before and no unit after, as long as a space, the end of the name, or a separator follows. “X 四季” is not read": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The numerals in the list (弐, 参, 四 …) are read as the volume with no word before and no unit after, as long as a space, the end of the name, or a separator follows. “X 四季” is not read"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一覧の漢数字(弐・参・四 …)は、前に語が無く後ろに単位が無くても、空白・名前の終わり・区切りが続けば巻として読みます。「X 四季」は読みません"
           }
         }
       }
@@ -7710,6 +8119,23 @@
         }
       }
     },
+    "Try a book": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try a book"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "試す"
+          }
+        }
+      }
+    },
     "Try a name": {
       "extractionState": "manual",
       "localizations": {
@@ -8186,19 +8612,19 @@
         }
       }
     },
-    "When the shared text is cut mid-word and ends in a particle": {
+    "When the shared text is cut mid-word and ends in a particle. Also when one whole title is the head of another and the longer goes on in hiragana (“…です!!” and “…ですか?”)": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When the shared text is cut mid-word and ends in a particle"
+            "value": "When the shared text is cut mid-word and ends in a particle. Also when one whole title is the head of another and the longer goes on in hiragana (“…です!!” and “…ですか?”)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "語の途中で切れた共通部分が、助詞などで終わるとき"
+            "value": "語の途中で切れた共通部分が、助詞などで終わるとき。片方の題名全体がもう片方の頭と一致し、長いほうがそのままひらがなで続くときも(「…です!!」と「…ですか?」)"
           }
         }
       }
@@ -8216,6 +8642,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "語の途中で切れた共通部分が、カタカナだけ・漢字だけのとき"
+          }
+        }
+      }
+    },
+    "When “Automatic” chooses this rule set": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When “Automatic” chooses this rule set"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動」でこのルールセットを選ぶ条件"
           }
         }
       }
@@ -8488,6 +8931,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "ウインドウ"
+          }
+        }
+      }
+    },
+    "With every rule set together: %@ all take it, so “Automatic” cannot decide it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With every rule set together: %@ all take it, so “Automatic” cannot decide it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのルールセットで見ると: %@ のどれにも当たるので、「自動」では決まりません。"
+          }
+        }
+      }
+    },
+    "With every rule set together: none takes it, so “Automatic” cannot decide it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With every rule set together: none takes it, so “Automatic” cannot decide it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのルールセットで見ると: どれにも当たらないので、「自動」では決まりません。"
+          }
+        }
+      }
+    },
+    "With every rule set together: “Automatic” reads it with “%@”.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With every rule set together: “Automatic” reads it with “%@”."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのルールセットで見ると: 「自動」では「%@」で読みます。"
           }
         }
       }
@@ -9223,6 +9717,23 @@
         }
       }
     },
+    "“%@” has the same word and neither requires a phrase, so a book with that word is taken by both and not decided — unless an excluded phrase keeps it out of one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” has the same word and neither requires a phrase, so a book with that word is taken by both and not decided — unless an excluded phrase keeps it out of one."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」にも同じ語があり、どちらも先頭の語句を必須にしていないので、その語を含む本は両方に当たって決まりません(例外の語句で片方から外れる本を除く)。"
+          }
+        }
+      }
+    },
     "“Her Hypnosis Revenge” joins the run of “Her Hypnosis 2, 3, 4”. It acts only where the script changes and what follows is not hiragana — hiragana carries on the same word — and only to join a run that volumes already built, never to start one": {
       "extractionState": "manual",
       "localizations": {
@@ -9257,6 +9768,23 @@
         }
       }
     },
+    "“X eve A”, “X eve A 3” and “X eve A 4” form their own run named “X eve A”, because they carry numbers of their own. When this is on, such a run joins the series “X” too — but only when “X” is itself a run of numbered volumes — and each book keeps its subtitle in the volume (“eve A 3”) so it does not clash with the series’ own volume 3. Compilations are left to the compilation policy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“X eve A”, “X eve A 3” and “X eve A 4” form their own run named “X eve A”, because they carry numbers of their own. When this is on, such a run joins the series “X” too — but only when “X” is itself a run of numbered volumes — and each book keeps its subtitle in the volume (“eve A 3”) so it does not clash with the series’ own volume 3. Compilations are left to the compilation policy"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「X eve A」「X eve A 3」「X eve A 4」は自前の番号を持つので、「X eve A」という別の組になります。入にすると、そうした組もシリーズ「X」に入れます(「X」そのものが番号の並んだ組のときだけ)。巻は副題ごと(「eve A 3」)にして、本編の 3 巻と重ならないようにします。総集編は、総集編の方針に従います"
+          }
+        }
+      }
+    },
     "“X ex”, “X SP”": {
       "extractionState": "manual",
       "localizations": {
@@ -9270,6 +9798,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "「X ex」「X SP」"
+          }
+        }
+      }
+    },
+    "→ This rule set does not take the book": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ This rule set does not take the book"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ このルールセットには当たらない"
+          }
+        }
+      }
+    },
+    "→ This rule set takes the book": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ This rule set takes the book"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ このルールセットに当たる"
           }
         }
       }
@@ -9308,6 +9870,142 @@
         }
       }
     },
+    "① Contains none of the words": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① Contains none of the words"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① どの語も含まない"
+          }
+        }
+      }
+    },
+    "① Contains “%@”": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① Contains “%@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① 「%@」を含む"
+          }
+        }
+      }
+    },
+    "① Words in the folder path or the name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① Words in the folder path or the name"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "① フォルダのパスや名前に含まれる語"
+          }
+        }
+      }
+    },
+    "② Phrases at the start of the file name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② Phrases at the start of the file name"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② ファイル名の先頭の語句"
+          }
+        }
+      }
+    },
+    "② Starts with none of the excluded phrases": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② Starts with none of the excluded phrases"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② 例外の語句のどれでも始まらない"
+          }
+        }
+      }
+    },
+    "② Starts with none of the required phrases": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② Starts with none of the required phrases"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② 必須の語句のどれでも始まらない"
+          }
+        }
+      }
+    },
+    "② Starts with “%@”, which is excluded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② Starts with “%@”, which is excluded"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② 例外の「%@」で始まる"
+          }
+        }
+      }
+    },
+    "② Starts with “%@”, which is required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② Starts with “%@”, which is required"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "② 必須の「%@」で始まる"
+          }
+        }
+      }
+    },
     "□ (ideographic space)": {
       "extractionState": "manual",
       "localizations": {
@@ -9342,6 +10040,23 @@
         }
       }
     },
+    "の, と, は, に. When what follows the series name with no separator starts with one of these, it is not shown as the volume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "の, と, は, に. When what follows the series name with no separator starts with one of these, it is not shown as the volume"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "の、と、は、に。シリーズ名のあとに区切りなしで続く残りがこれで始まるなら、巻数(表示)にしません"
+          }
+        }
+      }
+    },
     "アフター, 後日談, その後 … The wording in the name is kept as the volume you see. The number it sorts by is the last volume of that series plus one; compilations and side stories, which sit at the offset, are not counted as part of the numbering.": {
       "extractionState": "manual",
       "localizations": {
@@ -9359,36 +10074,19 @@
         }
       }
     },
-    "壱, 弐, 参 are the old way of writing 一, 二, 三. They are read as the volume with no word before and no unit after, because — unlike an ordinary kanji numeral — they are not mistaken for a word in the title": {
+    "壱 to 玖 (the old way of writing 一 to 九, with both 漆 and 柒 for seven), the traditional forms 壹 貳 參, and the ordinary numerals 一 to 九. “X 弐” and “X 四” are volumes 2 and 4. Take out the ones your titles use as words.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "壱, 弐, 参 are the old way of writing 一, 二, 三. They are read as the volume with no word before and no unit after, because — unlike an ordinary kanji numeral — they are not mistaken for a word in the title"
+            "value": "壱 to 玖 (the old way of writing 一 to 九, with both 漆 and 柒 for seven), the traditional forms 壹 貳 參, and the ordinary numerals 一 to 九. “X 弐” and “X 四” are volumes 2 and 4. Take out the ones your titles use as words."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "壱・弐・参 は 一・二・三 の古い書き方です。ふつうの漢数字と違って題名の言葉と見間違えないので、前に語が無くても後ろに単位が無くても巻として読みます"
-          }
-        }
-      }
-    },
-    "壱, 弐, 参, 肆, 伍 … The old way of writing 一 to 五, together with the traditional forms 壹 貳 參. “X 弐” is volume 2, while “X 二” is not read, because an ordinary kanji numeral cannot be told from a word in the title. Add 陸 and the ones after it if your books use them — mind that 陸 is an ordinary word too.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "壱, 弐, 参, 肆, 伍 … The old way of writing 一 to 五, together with the traditional forms 壹 貳 參. “X 弐” is volume 2, while “X 二” is not read, because an ordinary kanji numeral cannot be told from a word in the title. Add 陸 and the ones after it if your books use them — mind that 陸 is an ordinary word too."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "壱、弐、参、肆、伍 … 一〜五 の古い書き方と、その旧字体 壹・貳・參 です。「X 弐」は 2 巻になります。「X 二」を読まないのは、ふつうの漢数字が題名の言葉と見分けられないためです。陸から先を使う蔵書なら、ここに足してください(「陸」はふつうの語でもあることに注意)。"
+            "value": "壱〜玖(一〜九の大字。七は漆と柒の両方)、旧字体の壹・貳・參、ふつうの漢数字の一〜九。「X 弐」「X 四」はそれぞれ 2 巻・4 巻です。題名で言葉として使う字があれば外してください。"
           }
         }
       }

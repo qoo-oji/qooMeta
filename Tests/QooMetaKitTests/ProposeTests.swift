@@ -102,11 +102,14 @@ let allDictionaries = SystemDictionaries.all
         #expect(a.series.first { $0.name == "月の庭" }?.memberIDs == ["002", "000"])  // 巻の順
     }
 
-    @Test func flagsAndKinds() {
+    @Test func flagsAndKinds() throws {
+        // 総集編を別のシリーズにする方針で(同梱の既定は利用者の蔵書に合わせて変わるので、ここで決める)。
+        let rules = try #require(CompiledRules.builtin.applying(policies: ["compilations": "ownSeries"],
+                                                                    settings: ["grouping.compilation.singleWhenMainExists": .bool(true)]).rules)
         let set = proposeSync(inputs([
             "[架空工房] 月の庭", "[架空工房] 月の庭 2", "[架空工房] 月の庭 総集編", "[架空工房] 月の庭 3【フルカラー版】",
             "[架空工房] 週刊架空 2025年35号", "[架空工房] 週刊架空 2025年36号",
-        ]), rules: .builtin, dictionaries: [:])
+        ]), rules: rules, dictionaries: [:])
         #expect(set["000"]?.flags == [.inferredVolume])
         #expect(set["002"]?.flags == [.compilation])
         #expect(set["003"]?.flags == [.edition])
@@ -350,5 +353,136 @@ struct SplitMix {
         z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
         z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         return z ^ (z >> 31)
+    }
+}
+
+/// 規則 mergeSubseries: 自前の番号を持つ副シリーズ(「X eve 〇〇 3」)を本編へ入れるか。既定は切(別のシリーズ)。
+@Suite struct SubseriesTests {
+    static let names = ["月の庭 1", "月の庭 2", "月の庭 3", "月の庭 eve 甲", "月の庭 eve 甲 3", "月の庭 eve 甲 4",
+                        "月の庭 eve 乙", "月の庭 総集編", "月の庭 総集編 2"].map { "[架空工房] \($0)" }
+
+    static func propose(_ rules: CompiledRules) -> [String: (series: String, volume: String)] {
+        let set = proposeSync(inputs(names), rules: rules, dictionaries: SystemDictionaries.all)
+        return Dictionary(uniqueKeysWithValues: set.proposals.map { ($0.metadata.title, ($0.metadata.series, $0.metadata.volume)) })
+    }
+
+    static func rules(subseries: Bool) throws -> CompiledRules {
+        // 同梱の既定は利用者の蔵書に合わせて変わるので、規則の入切と総集編の方針はここで決める。
+        try #require(CompiledRules.builtin.applying(policies: ["compilations": "ownSeries"],
+                                                    settings: ["grouping.mergeSubseries.enabled": .bool(subseries)]).rules)
+    }
+
+    @Test func aSubseriesStandsApartWhenTheRuleIsOff() throws {
+        let p = Self.propose(try Self.rules(subseries: false))
+        #expect(p["月の庭 eve 甲 3"]?.series == "月の庭 eve 甲")
+        #expect(p["月の庭 eve 甲 3"]?.volume == "3")
+        // 番号の無い副題の本は、これまでどおり本編に入る(方針 subtitled)。
+        #expect(p["月の庭 eve 乙"]?.series == "月の庭")
+    }
+
+    @Test func aSubseriesJoinsTheMainSeriesWhenTheRuleIsOn() throws {
+        let p = Self.propose(try Self.rules(subseries: true))
+        // 副題ごと書いた巻になる(本編の 3 と重ならない)。
+        #expect(p["月の庭 eve 甲"]?.series == "月の庭" && p["月の庭 eve 甲"]?.volume == "eve 甲")
+        #expect(p["月の庭 eve 甲 3"]?.series == "月の庭" && p["月の庭 eve 甲 3"]?.volume == "eve 甲 3")
+        #expect(p["月の庭 3"]?.volume == "3")
+        // 総集編の組は動かさない(どこへ入れるかは方針 compilations)。
+        #expect(p["月の庭 総集編 2"]?.series == "月の庭 総集編")
+    }
+
+    /// 入れ先は、巻でまとまった組だけ。題の頭が同じだけの組(2 段目の「僕の」)へ、番号の並んだシリーズを吸い込まない
+    /// (2026-09-21、利用者の報告)。
+    @Test func aSeriesIsNotSwallowedByASharedPrefixGroup() throws {
+        let rules = try Self.rules(subseries: true)
+        let names = ["僕の、お姉さん", "僕の、お姉さん２", "僕の、お姉さん３", "僕の、お母さん", "僕の、彼女さん"].map { "[架空工房] \($0)" }
+        let set = proposeSync(inputs(names), rules: rules, dictionaries: SystemDictionaries.all)
+        let p = Dictionary(uniqueKeysWithValues: set.proposals.map { ($0.metadata.title, $0.metadata) })
+        #expect(p["僕の、お姉さん３"]?.series == "僕の、お姉さん" && p["僕の、お姉さん３"]?.volume == "3")
+        #expect(p["僕の、お母さん"]?.series == "僕の")
+    }
+}
+
+/// 規則 volume.particles: シリーズ名に区切りなしで続く残りは、助詞(一覧)で始まるときだけ巻数(表示)にしない。
+@Suite struct ParticleTests {
+    static let names = ["カクウ合宿ドキドキ面談・甲", "カクウ合宿なつまつり・乙", "カクウ合宿催眠面談", "カクウ合宿のおはなし"]
+        .map { "[架空工房] \($0)" }
+
+    static func volumes(_ rules: CompiledRules) -> [String: (series: String, volume: String)] {
+        let set = proposeSync(inputs(names), rules: rules, dictionaries: SystemDictionaries.all)
+        return Dictionary(uniqueKeysWithValues: set.proposals.map { ($0.metadata.title, ($0.metadata.series, $0.metadata.volume)) })
+    }
+
+    @Test func onlyARemainderStartingWithAParticleIsLeftEmpty() {
+        let v = Self.volumes(.builtin)
+        #expect(v["カクウ合宿なつまつり・乙"]?.series == "カクウ合宿")
+        #expect(v["カクウ合宿なつまつり・乙"]?.volume == "なつまつり・乙")
+        #expect(v["カクウ合宿ドキドキ面談・甲"]?.volume == "ドキドキ面談・甲")
+        #expect(v["カクウ合宿のおはなし"]?.series == "カクウ合宿")
+        #expect(v["カクウ合宿のおはなし"]?.volume == "")
+    }
+
+    @Test func theParticlesAreAList() throws {
+        var changes = RuleChanges.none
+        changes.remove(["の"], from: "particles")
+        changes.add(["な"], to: "particles")
+        let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data()))
+        let v = Self.volumes(try #require(c.rules, "\(c.errors)"))
+        #expect(v["カクウ合宿のおはなし"]?.volume == "のおはなし")
+        #expect(v["カクウ合宿なつまつり・乙"]?.volume == "")
+    }
+}
+
+/// 片方のタイトル全体がもう片方の頭と一致する形でも、長いほうが語の途中で切れ、一致がひらがなで終わるなら組にしない。
+@Suite struct WholeTitleHiraganaTests {
+    @Test func aPhraseThatGoesOnInHiraganaIsNotASeries() {
+        let set = proposeSync(inputs(["[架空工房] ひみつのは好きです！！", "[架空工房] ひみつのは好きですか？"]),
+                              rules: .builtin, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.series.isEmpty })
+    }
+
+    @Test func aWholeTitleFollowedByAVolumeStillJoins() {
+        let set = proposeSync(inputs(["[架空工房] ひみつのは", "[架空工房] ひみつのは2"]),
+                              rules: .builtin, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.series == "ひみつのは" })
+    }
+}
+
+/// それだけで巻になる漢数字: 大字(旧字体も)と、ふつうの漢数字の一〜九(2026-09-21、利用者の指示)。
+@Suite struct KanjiAloneTests {
+    @Test func kanjiNumeralsUpToNineAreVolumes() {
+        let titles = ["月の庭 再会の話", "月の庭 弐 夏の話", "月の庭 参 秋の話", "月の庭 四 冬の話", "月の庭 伍", "月の庭 陸", "月の庭 漆", "月の庭 捌",
+                      "月の庭 九 春の話"]
+        let set = proposeSync(inputs(titles.map { "[架空工房] \($0)" }), rules: .builtin, dictionaries: SystemDictionaries.all)
+        let sorts = Dictionary(uniqueKeysWithValues: set.proposals.map { ($0.metadata.title, $0.metadata.volumeSort) })
+        #expect(sorts["月の庭 四 冬の話"] == 4)
+        #expect(sorts["月の庭 陸"] == 6)
+        #expect(sorts["月の庭 漆"] == 7)
+        #expect(sorts["月の庭 捌"] == 8)
+        #expect(sorts["月の庭 九 春の話"] == 9)
+        #expect(set.proposals.allSatisfy { $0.metadata.series == "月の庭" })
+    }
+
+    /// 語の切れ目まで求めるので、漢数字で始まる言葉は巻にしない。
+    @Test func aWordStartingWithAKanjiNumeralIsNotAVolume() {
+        let set = proposeSync(inputs(["[架空工房] 月の庭 四季", "[架空工房] 月の庭 陸上部"]), rules: .builtin, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.volumeSort == nil })
+    }
+}
+
+/// 並べた順で決まる取りこぼし: 組の共通部分で始まる本は、並びで組より前に来ても、その組に入る。
+@Suite struct StragglerTests {
+    @Test func aBookBeforeTheRunStillJoinsIt() {
+        // 「に甲」「に乙」どうしは助詞で終わる長い共通部分で断られるが、どちらも「延長戦」の本との共通部分「…教室」で始まる。
+        let names = ["キスしないと帰れない教室に親友のパパと閉じ込められた", "キスしないと帰れない教室に娘の親友と閉じ込められた",
+                     "キスしないと帰れない教室 延長戦"].map { "[架空工房] \($0)" }
+        let set = proposeSync(inputs(names), rules: .builtin, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.series == "キスしないと帰れない教室" })
+    }
+
+    @Test func twoBooksAloneStillStayApart() {
+        let names = ["キスしないと帰れない教室に親友のパパと閉じ込められた", "キスしないと帰れない教室に娘の親友と閉じ込められた"]
+            .map { "[架空工房] \($0)" }
+        let set = proposeSync(inputs(names), rules: .builtin, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.series.isEmpty })
     }
 }

@@ -72,7 +72,9 @@ struct FormatsPane: View {
                                 PresetGroupList(draft: $draft, group: $group)
                                     .frame(minWidth: 190, idealWidth: 220, maxWidth: 280)
                                 // 余った幅はここへ。型の 1 行(番号・型の文字列・釦 4 つ)が切れずに見えるだけの幅が要る。
-                                PresetGroupEditor(draft: $draft, group: group)
+                                PresetGroupEditor(draft: $draft, group: group,
+                                                  others: catalog.entries.filter { $0.id != entry.id }
+                                                      .map { AutoRuleEditor.Other(id: $0.id, title: $0.preset.displayName, rule: $0.preset.auto) })
                                     .frame(minWidth: 420, idealWidth: 620, maxWidth: .infinity)
                             }
                             .frame(minHeight: 220, idealHeight: 380)
@@ -196,6 +198,8 @@ struct PresetDraft {
     var plain = PlainText.none
     /// 題の途中の括弧を読み残しに数えないか(既定は数えない)。
     var ignoresBracketsInsideTitle = true
+    /// 段 2 の「自動」で、このルールセットを選ぶ条件。
+    var auto = PresetAutoRule.none
     var rows: [Row] = []
 
     init() {}
@@ -208,13 +212,18 @@ struct PresetDraft {
         defaults = preset.defaults
         plain = preset.plain
         ignoresBracketsInsideTitle = preset.ignoresBracketsInsideTitle
+        auto = preset.auto
         rows = preset.formats.map { Row(format: $0) }
     }
 
     var preset: PresetCatalog.Preset {
         PresetCatalog.Preset(name: name, label: label.trimmingCharacters(in: .whitespaces), note: note.trimmingCharacters(in: .whitespaces),
                              separators: separators, defaults: defaults.filter { !$0.value.isEmpty }, plain: plain,
-                             ignoresBracketsInsideTitle: ignoresBracketsInsideTitle, formats: rows.map(\.format))
+                             ignoresBracketsInsideTitle: ignoresBracketsInsideTitle,
+                             auto: PresetAutoRule(words: auto.words.filter { !$0.isEmpty },
+                                                  headRequired: auto.headRequired.filter { !$0.isEmpty },
+                                                  headExcluded: auto.headExcluded.filter { !$0.isEmpty }),
+                             formats: rows.map(\.format))
     }
 
     /// 下書きの型の並びを、いま読める形にしたもの。**書きかけで読めない型は飛ばす**(1 文字打つたびに読めなくなるため)。
@@ -273,7 +282,7 @@ struct PresetDraft {
 ///
 /// **解析のテストはここに入れない。** どの組を直しているときにも見たいものなので、下のプレビューに置く。
 private enum EditorGroup: String, CaseIterable, Identifiable {
-    case formats, separators, defaults, plain
+    case formats, separators, defaults, plain, auto
 
     var id: String { rawValue }
 
@@ -284,6 +293,7 @@ private enum EditorGroup: String, CaseIterable, Identifiable {
         case .separators: "Author separators"
         case .defaults: "Default values"
         case .plain: "Excluded text"
+        case .auto: "Automatic choice"
         }
     }
 
@@ -294,6 +304,7 @@ private enum EditorGroup: String, CaseIterable, Identifiable {
         case .separators: "Author separators"
         case .defaults: "Values for fields the name does not carry"
         case .plain: "Text excluded while parsing"
+        case .auto: "When “Automatic” chooses this rule set"
         }
     }
 
@@ -303,6 +314,7 @@ private enum EditorGroup: String, CaseIterable, Identifiable {
         case .separators: "scissors"
         case .defaults: "text.badge.plus"
         case .plain: "eye.slash"
+        case .auto: "wand.and.stars"
         }
     }
 
@@ -313,6 +325,7 @@ private enum EditorGroup: String, CaseIterable, Identifiable {
         case .separators: (draft.separators ?? FilenameFormats.defaultSeparators).count
         case .defaults: draft.defaults.filter { !$0.value.isEmpty }.count
         case .plain: draft.plain.words.count + draft.plain.patterns.count
+        case .auto: draft.auto.words.count
         }
     }
 }
@@ -377,6 +390,8 @@ private let helpWidth: CGFloat = 560
 private struct PresetGroupEditor: View {
     @Binding var draft: PresetDraft
     var group: EditorGroup
+    /// ほかのルールセットの自動の条件(保存してあるもの)。自動の判定の組で、組み合わせた結果を見せるのに使う。
+    var others: [AutoRuleEditor.Other]
 
     var body: some View {
         ScrollView {
@@ -387,6 +402,7 @@ private struct PresetGroupEditor: View {
                 case .separators: separators
                 case .defaults: defaults
                 case .plain: plain
+                case .auto: auto
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -430,6 +446,10 @@ private struct PresetGroupEditor: View {
         PlainTextEditor(plain: $draft.plain)
     }
 
+    @ViewBuilder private var auto: some View {
+        AutoRuleEditor(rule: $draft.auto, id: draft.name, title: draft.preset.displayName, others: others)
+    }
+
     @ViewBuilder private var separators: some View {
         Text("The characters that split the authors read from a name. A format can set its own instead.")
             .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
@@ -441,6 +461,117 @@ private struct PresetGroupEditor: View {
         Text("A field read from the name is never overwritten. These also go into names that matched no format.")
             .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
         DefaultsFields(defaults: $draft.defaults)
+    }
+}
+
+/// 自動の判定の組。① フォルダのパスや名前の語 と ② ファイル名の先頭の語句(必須・例外)を並べ、名前を打てば
+/// どの条件でどう決まったかを 1 段ずつ見せる。② は**利用者の考え方のまま**「この語句が先頭にあることを必須にするか、
+/// 例外にするか」で書く(2026-09-21、利用者の指摘: 「丸括弧で始まるか」の形では、何を決めているのか読めなかった)。
+struct AutoRuleEditor: View {
+    struct Other: Hashable {
+        var id: String
+        var title: String
+        var rule: PresetAutoRule
+    }
+
+    @Binding var rule: PresetAutoRule
+    var id: String
+    var title: String
+    var others: [Other]
+    @State private var sample = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("In step 2, “Automatic” reads a book with this rule set when the book meets both ① and ② below. A book that no rule set takes, or that more than one takes, is not decided — and then “Automatic” cannot be chosen.")
+                .font(.callout).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("① Words in the folder path or the name").font(.subheadline.bold())
+                    Text("A book whose folders or name contain any one of these. Upper and lower case, and full and half width, are not told apart. With no word, this rule set is never chosen automatically.")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+                    InlineArrayEditor(items: rule.words, placeholder: "Word") { rule.words = $0 }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(4)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("② Phrases at the start of the file name").font(.subheadline.bold())
+                    Text("Narrows the books ① found by how their file names start. Leave both empty and ① alone decides.")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+                    Text("Required — only books whose file name starts with one of these").font(.caption.bold()).padding(.top, 2)
+                    InlineArrayEditor(items: rule.headRequired, placeholder: "Phrase") { rule.headRequired = $0 }
+                    Text("Excluded — not books whose file name starts with one of these").font(.caption.bold()).padding(.top, 2)
+                    InlineArrayEditor(items: rule.headExcluded, placeholder: "Phrase") { rule.headExcluded = $0 }
+                    Text("A rule set that requires a phrase comes before one that ① alone takes. So when two rule sets share a word and one of them requires “(”, books whose names start with “(” go to that one and the rest to the other.")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: helpWidth, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(4)
+            }
+
+            ForEach(overlaps, id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                    .frame(maxWidth: helpWidth, alignment: .leading)
+            }
+
+            Divider().padding(.vertical, 2)
+            tryout
+        }
+    }
+
+    /// ほかのルールセットと語が重なり、**どちらも先頭の語句を必須にしていない**とき、その語を含む本は両方に当たって決まらない。
+    private var overlaps: [String] {
+        let mine = Set(rule.words.map { $0.lowercased() })
+        guard !mine.isEmpty, !rule.requiresHead else { return [] }
+        return others.compactMap { other in
+            guard !other.rule.requiresHead, !mine.isDisjoint(with: other.rule.words.map { $0.lowercased() }) else { return nil }
+            return "“%@” has the same word and neither requires a phrase, so a book with that word is taken by both and not decided — unless an excluded phrase keeps it out of one.".ui(other.title)
+        }
+    }
+
+    /// 名前を打つと、① ② の順にどう判定したかと、ほかのルールセットと合わせた結果(自動で何が選ばれるか)を見せる。
+    @ViewBuilder private var tryout: some View {
+        Text("Try a book").font(.headline)
+        TextField("Path or file name", text: $sample, prompt: Text("For example: /Shelf/Folder/(Event) [Author] Title.zip"))
+            .textFieldStyle(.roundedBorder)
+        let text = sample.trimmingCharacters(in: .whitespaces)
+        if !text.isEmpty {
+            let name = ((text as NSString).lastPathComponent as NSString).deletingPathExtension
+            let result = rule.explain(path: text, name: name)
+            VStack(alignment: .leading, spacing: 4) {
+                step(result.word != nil, result.word.map { "① Contains “%@”".ui($0) } ?? "① Contains none of the words".ui)
+                if result.hasRequired {
+                    step(result.required != nil, result.required.map { "② Starts with “%@”, which is required".ui($0) }
+                         ?? "② Starts with none of the required phrases".ui)
+                }
+                if let excluded = result.excluded {
+                    step(false, "② Starts with “%@”, which is excluded".ui(excluded))
+                } else if !rule.headExcluded.isEmpty {
+                    step(true, "② Starts with none of the excluded phrases".ui)
+                }
+                Text(result.fits ? "→ This rule set takes the book".ui : "→ This rule set does not take the book".ui)
+                    .font(.callout.bold())
+                let titles = Dictionary([(id, title)] + others.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+                let decision = PresetAutoChoice.decide(path: text, name: name,
+                                                       rules: [(id, rule)] + others.map { ($0.id, $0.rule) })
+                Group {
+                    switch decision {
+                    case .none: Text("With every rule set together: none takes it, so “Automatic” cannot decide it.")
+                    case .one(let chosen): Text("With every rule set together: “Automatic” reads it with “%@”.".ui(titles[chosen] ?? chosen))
+                    case .many(let all): Text("With every rule set together: %@ all take it, so “Automatic” cannot decide it.".ui(
+                        all.map { "“\(titles[$0] ?? $0)”" }.joined(separator: ", ")))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle({ if case .one = decision { AnyShapeStyle(.secondary) } else { AnyShapeStyle(.orange) } }())
+            }
+        }
+    }
+
+    private func step(_ ok: Bool, _ text: String) -> some View {
+        Label(text, systemImage: ok ? "checkmark.circle.fill" : "xmark.circle")
+            .font(.callout).foregroundStyle(ok ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
     }
 }
 

@@ -36,6 +36,10 @@ public struct Example: Sendable {
     public var genres: [String]?
     /// この例で選ぶ方針(書いた方針だけを、渡された規則の上で置き換える)。
     public var policies: [String: String] = [:]
+    /// この例で置き換える規則の値(`grouping.mergeSubseries.enabled` のような点つなぎの場所 → 値)。
+    /// 同梱の既定値は利用者の蔵書に合わせて変わるので、**例が前提にしている値は例の側に書いておく**
+    /// (既定値を変えるたびに、関係の無い例まで崩れないように。2026-09-21)。
+    public var settings: [String: JSONValue] = [:]
     /// この例で名前を読む型の並び(プリセット)。書かなければ既定。
     public var preset: String?
 }
@@ -126,7 +130,7 @@ struct ExampleReader {
     }
 
     mutating func example(_ value: JSONValue, _ path: String) -> Example? {
-        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary", "policies", "preset"])
+        guard let o = object(value, path, allowed: ["id", "files", "expect", "covers", "vocabulary", "policies", "settings", "preset"])
         else { return nil }
         let id = string(o["id"], join(path, "id")) ?? ""
         if id.isEmpty, o["id"] != nil { error(join(path, "id"), .invalidValue, "空の ID") }
@@ -179,6 +183,10 @@ struct ExampleReader {
                 }
             }
         }
+        var settings: [String: JSONValue] = [:]
+        if let s = o["settings"] {
+            if let map = s.objectValue { settings = map } else { error(join(path, "settings"), .invalidValue, "場所 → 値のオブジェクトであるべきところ") }
+        }
         var preset: String?
         if let p = o["preset"], let name = string(p, join(path, "preset")) {
             if RuleSchema.presetNames.contains(name) { preset = name }
@@ -188,7 +196,7 @@ struct ExampleReader {
             }
         }
         return Example(id: id, books: books, expectations: expectations, covers: covers, genres: genres,
-                       policies: policies, preset: preset)
+                       policies: policies, settings: settings, preset: preset)
     }
 
     mutating func expectation(_ value: JSONValue, _ path: String) -> Expectation? {
@@ -232,20 +240,22 @@ public enum ExampleRunner {
     ///   - rules: 例を確かめる規則(既定値、または利用者の変更を重ねたもの)。例が方針を書いていれば、その上で置き換える。
     ///   - dictionaries: 規則が名前で指す辞書。本の種別の語彙は例のファイルに書いたもの。
     public static func run(_ file: ExampleFile, rules: CompiledRules, dictionaries: [String: WordSet]) -> [Outcome] {
-        var rulesByPolicies: [[String: String]: CompiledRules] = [[:]: rules]
+        struct Key: Hashable { var policies: [String: String]; var settings: [String: JSONValue] }
+        var rulesByPolicies: [Key: CompiledRules] = [Key(policies: [:], settings: [:]): rules]
         return file.examples.map { example in
-            if rulesByPolicies[example.policies] == nil {
-                let compilation = rules.applying(policies: example.policies)
+            let key = Key(policies: example.policies, settings: example.settings)
+            if rulesByPolicies[key] == nil {
+                let compilation = rules.applying(policies: example.policies, settings: example.settings)
                 guard let applied = compilation.rules else {
                     return Outcome(id: example.id, covers: example.covers,
-                                   mismatches: compilation.errors.map { "方針を選べない: \($0)" })
+                                   mismatches: compilation.errors.map { "方針・設定を選べない: \($0)" })
                 }
-                rulesByPolicies[example.policies] = applied
+                rulesByPolicies[key] = applied
             }
             let inputs = example.books.enumerated().map { i, book in
                 BookInput(id: String(format: "%04d", i + 1), name: book.name, preset: example.preset)
             }
-            let set = proposeSync(inputs, rules: rulesByPolicies[example.policies]!, dictionaries: dictionaries)
+            let set = proposeSync(inputs, rules: rulesByPolicies[key]!, dictionaries: dictionaries)
             var mismatches: [String] = []
             for (i, expectation) in example.expectations.enumerated() where i < inputs.count {
                 guard let book = set[inputs[i].id] else {

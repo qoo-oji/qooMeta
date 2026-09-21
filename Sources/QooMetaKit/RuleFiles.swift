@@ -39,7 +39,7 @@ public struct RulesCompilation: Sendable {
 /// 組み立て済みの規則。
 public struct CompiledRules: Sendable {
     /// 本体が知っている規則の水準。規則・パラメータ・一覧を足したら上げ、足したものの `since` にこの番号を書く。
-    public static let engineLevel = 8
+    public static let engineLevel = 10
 
     let series: SeriesRules
     /// 名前を付けた型の並び。本ごとに、どのプリセットで読むかを選べる(フォルダごとに分けたい利用者のため)。
@@ -150,13 +150,32 @@ public struct CompiledRules: Sendable {
     }
 
     /// 方針だけを置き換えた規則(例ごとの方針、GUI の「好み」の切り替え)。今の規則(利用者の変更を重ねたもの)を土台にする。
-    public func applying(policies: [String: String], dictionaries: Set<String> = ["english"]) -> RulesCompilation {
-        guard !policies.isEmpty, case .object(var series) = mergedSeriesRules else {
+    ///
+    /// `settings` は、点つなぎの場所(`grouping.mergeSubseries.enabled`)→ 値。**すでにある場所だけ**を置き換える
+    /// (書き間違いを黙って新しいキーにしない)。例のファイルが、前提にしている値を書いておくのに使う。
+    public func applying(policies: [String: String], settings: [String: JSONValue] = [:],
+                         dictionaries: Set<String> = ["english"]) -> RulesCompilation {
+        guard !policies.isEmpty || !settings.isEmpty, case .object(var series) = mergedSeriesRules else {
             return RulesCompilation(rules: self, errors: [], warnings: [])
         }
         var current = series["policies"]?.objectValue ?? [:]
         for (name, choice) in policies { current[name] = .string(choice) }
         series["policies"] = .object(current)
+        func replace(_ value: JSONValue, at keys: ArraySlice<String>, in node: JSONValue) -> JSONValue? {
+            guard let key = keys.first, case .object(var o) = node, let child = o[key] else { return nil }
+            if keys.count == 1 { o[key] = value; return .object(o) }
+            guard let replaced = replace(value, at: keys.dropFirst(), in: child) else { return nil }
+            o[key] = replaced
+            return .object(o)
+        }
+        var root = JSONValue.object(series)
+        for (path, value) in settings.sorted(by: { $0.key < $1.key }) {
+            guard let replaced = replace(value, at: ArraySlice(path.split(separator: ".").map(String.init)), in: root) else {
+                return RulesCompilation(rules: nil, errors: [RulesIssue(.unknownKey, source: "examples", at: path)], warnings: [])
+            }
+            root = replaced
+        }
+        if case .object(let o) = root { series = o }
         let builtIn = BuiltInRules(seriesRules: Data(JSONValue.object(series).rendered().utf8),
                                    filenameFormats: Data(mergedFilenameFormats.rendered().utf8))
         let compilation = CompiledRules.compile(RuleSources(builtIn: builtIn), dictionaries: dictionaries)
@@ -165,7 +184,7 @@ public struct CompiledRules: Sendable {
         return RulesCompilation(rules: CompiledRules(
             series: rules.series, formats: rules.formats, mergedSeriesRules: rules.mergedSeriesRules,
             mergedFilenameFormats: rules.mergedFilenameFormats,
-            changedPaths: Set(changedPaths + policies.keys.map { "policies.\($0)" }).sorted(), contentHash: rules.contentHash,
+            changedPaths: Set(changedPaths + policies.keys.map { "policies.\($0)" } + settings.keys).sorted(), contentHash: rules.contentHash,
             defaultSeriesRules: defaultSeriesRules, defaultFilenameFormats: defaultFilenameFormats),
             errors: compilation.errors, warnings: compilation.warnings)
     }
@@ -270,6 +289,7 @@ struct RuleCompiler {
                 attachSubtitled: policies["subtitled"] != "separate",
                 attachAcrossScript: enabled(grouping?["attachAcrossScript"]),
                 mergeVolumeSubgroups: enabled(grouping?["mergeVolumeSubgroups"]),
+                mergeSubseries: enabled(grouping?["mergeSubseries"]),
                 splitByRelation: policies["differentRelation"] != "keep",
                 splitByGenre: policies["differentGenre"] != "keep",
                 volumeHeadEnabled: enabled(grouping?["volumeHead"]),
@@ -302,6 +322,7 @@ struct RuleCompiler {
                 kanjiPrefixes: words(kanji?["prefixes"], lists),
                 kanjiCounters: words(kanji?["counters"], lists),
                 followers: words(volume?["followers"]?["characters"], lists),
+                particles: enabled(volume?["particles"]) ? words(volume?["particles"]?["words"], lists) : [],
                 numberWords: pairs(wordNumber?["words"], lists).compactMapValues(Double.init),
                 kanjiAloneDigits: words(kanjiAlone?["digits"], lists),
                 positionWords: .init(first: words(position?["first"], lists), middle: words(position?["middle"], lists),
@@ -382,6 +403,8 @@ struct SeriesRules: Sendable {
         var attachAcrossScript: Bool
         /// 規則 `mergeVolumeSubgroups`。名前が「別の組の名前 + 巻」の組を、その別の組へ入れる。
         var mergeVolumeSubgroups: Bool
+        /// 規則 `mergeSubseries`。名前が「別の組の名前 + 副題」の組(自前の番号を持つ副シリーズ)も、その別の組へ入れる。
+        var mergeSubseries: Bool
         /// 方針 `differentRelation`(ネタが違う本を分ける)。
         var splitByRelation: Bool
         /// 方針 `differentGenre`(本の種別が違う本を分ける)。
@@ -468,6 +491,9 @@ struct SeriesRules: Sendable {
         /// 巻の番号のすぐ後ろに来てよい文字(規則 volume.followers)。単位でも空白でもない区切り
         /// (「X 4ー純愛編ー」の「ー」)。ここに無い文字が続くと、その数字は巻として読まない。
         var followers: [String]
+        /// 助詞とみなすひらがな(規則 volume.particles。止めていれば空)。シリーズ名に区切りなしで続く残りがこれで始まるなら、
+        /// 語の続き(「月の庭|の安息」)なので巻数(表示)にしない。
+        var particles: [String]
         /// 数を語で書いた巻(「ふたつ」= 2、「みっかめ」= 3)。語 → 数の対応表(規則 volume.readers の wordNumber)。
         var numberWords: [String: Double]
         /// 前に語も後ろに単位も無しで、それだけで巻と読んでよい漢数字(大字。壱・弐・参)。

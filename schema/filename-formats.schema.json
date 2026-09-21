@@ -88,6 +88,9 @@
         "ignoreBracketsInsideTitle": {
           "type": "boolean",
           "description": "題の途中(頭でも末尾でもない所)にある括弧を、読み残しに数えないか。省くと true。型が括弧を欄として読むのは名前の頭・著者の直後・末尾だけなので、途中の括弧は欄になりようがない"
+        },
+        "auto": {
+          "$ref": "#/$defs/auto"
         }
       }
     },
@@ -172,6 +175,52 @@
             "minLength": 1
           },
           "description": "正規表現(ICU)"
+        }
+      }
+    },
+    "auto": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "本ごとにルールセットを自動で選ぶ条件。① words と ② 先頭の語句(headRequired・headExcluded)を両方満たす本に当たる。2 つ以上に当たる本は、headRequired を書いたルールセットが 1 つならそれに決まり、そうでなければ決まらない。どれにも当たらない本も決まらない",
+      "properties": {
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "① フォルダのパスか本の名前に、どれか 1 つを含む本に当てる(大文字と小文字、全角と半角は区別しない)。空なら自動では選ばれない"
+        },
+        "headRequired": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "② 必須: ファイル名がこのどれかで始まる本だけに当てる。空なら問わない"
+        },
+        "headExcluded": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "② 例外: ファイル名がこのどれかで始まる本には当てない"
+        },
+        "leadingParenthesis": {
+          "enum": [
+            "any",
+            "yes",
+            "no"
+          ],
+          "description": "古い書き方。読んでも使わない"
+        },
+        "parenthesisExceptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "古い書き方。読んでも使わない"
         }
       }
     }

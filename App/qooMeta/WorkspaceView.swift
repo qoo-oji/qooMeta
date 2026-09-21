@@ -25,7 +25,7 @@ struct WorkspaceView: View {
             }
             ToolbarItem {
                 Button { openWindow(id: SeriesRulesView.windowID) } label: {
-                    Label("Series and volume extraction", systemImage: "list.bullet.indent")
+                    Label("Extraction settings", systemImage: "list.bullet.indent")
                 }
                 // 絵だけでは何の窓が開くか分からない(2026-09-20、利用者の指摘)。名前も出す。
                 .labelStyle(.titleAndIcon)
@@ -153,7 +153,10 @@ struct BookTableView: View {
         // 表は AppKit の NSTableView(`BookTable`。SwiftUI の Table をやめた理由はそちらに)。
         // 並べ替えた結果は Workspace が作り置きしている(ここで並べ替えると、描くたびに 1 万冊を並べ直すことになる)。
         BookTable(books: workspace.books, positions: workspace.visiblePositions, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
-                  canEdit: canEdit, isEdited: isEdited, help: help, commit: commit)
+                  canEdit: canEdit, isEdited: isEdited, help: help, commit: commit,
+                  ruleSets: { workspace.rules.presetCatalog.entries.map { ($0.id, $0.preset.displayName) } },
+                  ruleSetOf: { workspace.presetName(for: $0) },
+                  reparse: { workspace.reparse($0, with: $1) })
         .modifier(HideTopScrollEdgeEffect())
         .alert(item: $pendingSeries) { pending in
             Alert(title: Text("Set the series to “%@”?".ui(pending.name)),

@@ -28,7 +28,7 @@ final class VolumeExtractor: Sendable {
     let rules: SeriesRules.Volume
     /// 語の規則。「そのまま読む語」(`treat: keep`)に重なる表記は、巻として読まない。
     private let words: WordRules?
-    static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒捌玖拾佰仟"
+    static let kanjiDigits = "〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒漆捌玖拾佰仟"
 
     /// 語の一覧を空にしたとき、空の選択肢が何にでも一致しないよう、決して一致しない形にする。
     static func nonEmpty(_ pattern: String) -> String { pattern.isEmpty ? "(?!)" : pattern }
@@ -222,7 +222,7 @@ final class VolumeExtractor: Sendable {
 
     /// 「第」+ 数字 + 任意の漢字 1 字の単位(巻だけでできているかを見るとき。後ろの文字は問わない)。
     private static let wholeOrdinal = try! NSRegularExpression(
-        pattern: #"^第\s*(?:\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒捌玖拾佰仟]+)(?:[-‐]\d+)?\s*\p{Han}?$"#)
+        pattern: #"^第\s*(?:\d+(?:\.\d+)?|[〇零一二三四五六七八九十百千壱弐参壹貳參肆伍陸柒漆捌玖拾佰仟]+)(?:[-‐]\d+)?\s*\p{Han}?$"#)
 
     /// 巻の後ろの括弧書き(`isWholeVolume` が除く)と、数の範囲。呼ぶたびに組み立てない。
     private static let trailingBracket = try! NSRegularExpression(pattern: #"\s*[\[(【][^\[\]()【】]*[\])】]\s*$"#)
@@ -280,7 +280,7 @@ final class VolumeExtractor: Sendable {
     static func kanjiNumber(_ s: String) -> Int? {
         let digits: [Character: Int] = [
             "〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
-            "壱": 1, "弐": 2, "参": 3, "肆": 4, "伍": 5, "陸": 6, "柒": 7, "捌": 8, "玖": 9,
+            "壱": 1, "弐": 2, "参": 3, "肆": 4, "伍": 5, "陸": 6, "柒": 7, "漆": 7, "捌": 8, "玖": 9,
             // 大字の旧字体(利用者の指摘 2026-09-22)。壹 = 壱 = 一、貳 = 弐 = 二、參 = 参 = 三。
             "壹": 1, "貳": 2, "參": 3,
         ]
@@ -490,12 +490,14 @@ enum ProposalFinalizer {
                 .trimmingCharacters(in: engine.volumes.leadingSeparators)
                 .trimmingCharacters(in: .whitespaces)
             guard !rest.isEmpty else { continue }
-            // 区切りが無くても、**ひらがなで始まらない残り**は採る(「架空録|アルバム」)。
-            // ひらがなが続くのは語の途中(「月の庭|の安息」)なので、そこだけを外す。
-            // シリーズに入っている本の名前に何か書いてあるのに、巻数の欄が空のままなのはおかしい
-            // (2026-09-21、利用者の指摘)。
-            let firstIsHiragana = rest.first.map(SeriesGrouper.isHiragana) ?? true
-            guard SeriesGrouper.isCleanCut(title, at: name.count) || !firstIsHiragana else { continue }
+            // 区切りが無くても採る(「架空録|アルバム」「架空録|なつまつり」)。シリーズに入っている本の名前に何か
+            // 書いてあるのに、巻数の欄が空のままなのはおかしい(2026-09-21、利用者の指摘)。
+            // 外すのは、**助詞で始まる残り**だけ(「月の庭|の安息」は語の途中)。前はひらがなで始まる残りをすべて
+            // 外していて、「なつまつり」のような新しい語まで空欄になった。助詞をひらがなの形から見分ける手立ては
+            // 無いので、どれを助詞とみなすかは一覧(規則 volume.particles)が決める(2026-09-21、利用者の指示)。
+            let particles = engine.rules.series.volume.particles
+            guard SeriesGrouper.isCleanCut(title, at: name.count) || !particles.contains(where: { !$0.isEmpty && rest.hasPrefix($0) })
+            else { continue }
             document.books[i].volumeText = rest
             log?.apply("unnumberedVolume", to: document.books[i].id)
         }
@@ -634,7 +636,7 @@ enum ProposalFinalizer {
             let kanji = !others.isEmpty && others.allSatisfy { $0.allSatisfy(VolumeExtractor.kanjiDigits.contains) }
             var one = !kanji ? nil
                 : others.joined().contains(where: "壹貳參".contains) ? "壹"
-                : others.joined().contains(where: "壱弐参肆伍陸柒捌玖拾佰仟".contains) ? "壱" : "一"
+                : others.joined().contains(where: "壱弐参肆伍陸柒漆捌玖拾佰仟".contains) ? "壱" : "一"
             // 数を語で書くシリーズ(「に」「さん」…)も同じ: 1 を表す語が対応表にあれば、それで書く。
             if one == nil, !others.isEmpty, others.allSatisfy(engine.volumes.rules.numberWords.keys.contains) {
                 one = engine.volumes.rules.numberWords.filter { $0.value == 1 }.keys.sorted {

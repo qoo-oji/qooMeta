@@ -85,6 +85,12 @@ struct BookTable: NSViewRepresentable {
     var isEdited: (BookMetadata.Field, BookRow) -> Bool
     var help: (BookMetadata.Field, BookRow) -> String
     var commit: (BookMetadata.Field, String, BookRow) -> Void
+    /// 右クリックで選べるルールセット(ID と見出し。並びの順)。開いたときに聞く(描くたびに作らない)。
+    var ruleSets: () -> [(id: String, title: String)]
+    /// その本を読んでいるルールセットの ID。
+    var ruleSetOf: (String) -> String
+    /// 選んだ本の名前を、そのルールセットで読み直す。
+    var reparse: (Set<BookRow.ID>, String) -> Void
 
     /// 列の並び・幅・表示を覚えておく名前。
     static let autosaveName = "qooMeta.bookTable"
@@ -125,6 +131,10 @@ struct BookTable: NSViewRepresentable {
         let menu = NSMenu()
         menu.delegate = coordinator
         table.headerView?.menu = menu
+        // 行の右クリック(選んだ本を、ほかのルールセットで読み直す)。中身は開くときに作る。
+        let rowMenu = NSMenu()
+        rowMenu.delegate = coordinator
+        table.menu = rowMenu
         coordinator.table = table
 
         let scroll = NSScrollView()
@@ -148,6 +158,8 @@ struct BookTable: NSViewRepresentable {
         let label = NSTextField(labelWithString: "")
         /// 利用者が直した欄(色を変える)。
         var isEditedValue = false { didSet { updateColor() } }
+        /// どの型にも合わなかった本の行(灰色にする。名前全体を仮のタイトルにしただけで、欄を読めていない)。
+        var isUnmatched = false { didSet { updateColor() } }
 
         override init(frame: NSRect) {
             super.init(frame: frame)
@@ -175,7 +187,7 @@ struct BookTable: NSViewRepresentable {
         func updateColor() {
             guard !label.isEditable else { return }
             label.textColor = backgroundStyle == .emphasized ? .alternateSelectedControlTextColor
-                : isEditedValue ? .controlAccentColor : .labelColor
+                : isEditedValue ? .controlAccentColor : isUnmatched ? .tertiaryLabelColor : .labelColor
         }
 
         /// 書き換えに入る・出るときの見た目(入っているあいだは、ふつうの入力欄の色)。
@@ -278,6 +290,7 @@ struct BookTable: NSViewRepresentable {
                 cellsCreated += 1
             }
             let book = book(row)
+            cell.isUnmatched = !book.matchedFormat
             cell.setEditing(false)
             cell.label.stringValue = column.text(of: book)
             switch column {
@@ -377,6 +390,7 @@ struct BookTable: NSViewRepresentable {
         func menuNeedsUpdate(_ menu: NSMenu) {
             guard let table else { return }
             menu.removeAllItems()
+            if menu === table.menu { return fillRowMenu(menu, in: table) }
             // ファイル名の列は隠せない(どの本の行かが分からなくなる)。
             for tableColumn in table.tableColumns {
                 guard let column = Column(tableColumn.identifier), column != .fileName else { continue }
@@ -386,6 +400,51 @@ struct BookTable: NSViewRepresentable {
                 item.state = tableColumn.isHidden ? .off : .on
                 menu.addItem(item)
             }
+        }
+
+        // MARK: 読み直す(行の上で右クリック)
+
+        /// 右クリックした行が選んだ本のうちにあれば、選んだ本すべて。なければ、その行の本だけ(Finder と同じ)。
+        private func clickedIDs(in table: NSTableView) -> Set<String> {
+            let clicked = table.clickedRow
+            guard clicked >= 0, clicked < rowCount else { return [] }
+            if table.selectedRowIndexes.contains(clicked) {
+                return Set(table.selectedRowIndexes.compactMap { $0 < rowCount ? book($0).id : nil })
+            }
+            return [book(clicked).id]
+        }
+
+        private func fillRowMenu(_ menu: NSMenu, in table: NSTableView) {
+            let ids = clickedIDs(in: table)
+            guard !ids.isEmpty else { return }
+            let current = Set(ids.map(parent.ruleSetOf))
+            let item = NSMenuItem(title: "Parse the File Name Again With".ui, action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for ruleSet in parent.ruleSets() {
+                let choice = NSMenuItem(title: ruleSet.title, action: #selector(reparse(_:)), keyEquivalent: "")
+                choice.target = self
+                choice.representedObject = ReparseTarget(ids: ids, ruleSet: ruleSet.id)
+                // いまのルールセットに印を付ける(選んだ本で分かれていれば、半分の印)。
+                choice.state = current.contains(ruleSet.id) ? (current.count == 1 ? .on : .mixed) : .off
+                submenu.addItem(choice)
+            }
+            item.submenu = submenu
+            menu.addItem(item)
+        }
+
+        /// メニューの項目に持たせる、読み直す本とルールセット(開いた時点の選択で決める)。
+        private final class ReparseTarget: NSObject {
+            let ids: Set<String>
+            let ruleSet: String
+            init(ids: Set<String>, ruleSet: String) {
+                self.ids = ids
+                self.ruleSet = ruleSet
+            }
+        }
+
+        @objc func reparse(_ sender: NSMenuItem) {
+            guard let target = sender.representedObject as? ReparseTarget else { return }
+            parent.reparse(target.ids, target.ruleSet)
         }
 
         @objc func toggleColumn(_ sender: NSMenuItem) {

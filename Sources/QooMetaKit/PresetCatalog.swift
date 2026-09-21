@@ -31,11 +31,13 @@ public struct PresetCatalog: Sendable, Hashable {
         public var plain: PlainText
         /// 題の途中の括弧を読み残しに数えないか(既定は数えない。`FilenameFormats.ignoresBracketsInsideTitle`)。
         public var ignoresBracketsInsideTitle: Bool
+        /// 本ごとに自動で選ぶときの条件。
+        public var auto: PresetAutoRule
         public var formats: [Format]
 
         public init(name: String, label: String = "", note: String = "", separators: [String]? = nil,
                     defaults: [String: String] = [:], plain: PlainText = .none,
-                    ignoresBracketsInsideTitle: Bool = true, formats: [Format] = []) {
+                    ignoresBracketsInsideTitle: Bool = true, auto: PresetAutoRule = .none, formats: [Format] = []) {
             self.name = name
             self.label = label
             self.note = note
@@ -43,6 +45,7 @@ public struct PresetCatalog: Sendable, Hashable {
             self.defaults = defaults
             self.plain = plain
             self.ignoresBracketsInsideTitle = ignoresBracketsInsideTitle
+            self.auto = auto
             self.formats = formats
         }
     }
@@ -65,6 +68,9 @@ public struct PresetCatalog: Sendable, Hashable {
     public static var defaultFields: [String] { RuleSchema.presetDefaultFields }
 
     public var names: Set<String> { Set(entries.map(\.preset.name)) }
+
+    /// 本ごとに自動で選ぶ条件(並びの順。条件の無いルールセットも含む)。
+    public var autoRules: [(name: String, rule: PresetAutoRule)] { entries.map { ($0.preset.name, $0.preset.auto) } }
 }
 
 extension CompiledRules {
@@ -72,11 +78,15 @@ extension CompiledRules {
         func strings(_ v: JSONValue?) -> [String]? { v?.arrayValue?.compactMap(\.stringValue) }
         func defaults(_ v: JSONValue?) -> [String: String] { v?.objectValue?.compactMapValues(\.stringValue) ?? [:] }
         func plain(_ v: JSONValue?) -> PlainText { PlainText(words: strings(v?["words"]) ?? [], patterns: strings(v?["patterns"]) ?? []) }
+        func auto(_ v: JSONValue?) -> PresetAutoRule {
+            PresetAutoRule(words: strings(v?["words"]) ?? [], headRequired: strings(v?["headRequired"]) ?? [],
+                           headExcluded: strings(v?["headExcluded"]) ?? [])
+        }
         func preset(_ name: String, _ v: JSONValue) -> PresetCatalog.Preset {
             PresetCatalog.Preset(
                 name: name, label: v["label"]?.stringValue ?? "", note: v["note"]?.stringValue ?? "",
                 separators: strings(v["separators"]), defaults: defaults(v["defaults"]), plain: plain(v["plain"]),
-                ignoresBracketsInsideTitle: v["ignoreBracketsInsideTitle"]?.boolValue ?? true,
+                ignoresBracketsInsideTitle: v["ignoreBracketsInsideTitle"]?.boolValue ?? true, auto: auto(v["auto"]),
                 formats: (v["formats"]?.arrayValue ?? []).compactMap { entry in
                     guard let text = RuleLoader.formatText(entry).stringValue else { return nil }
                     return PresetCatalog.Format(text: text, separators: strings(entry["separators"]), defaults: defaults(entry["defaults"]),
@@ -127,6 +137,11 @@ extension RuleChanges {
             if preset.ignoresBracketsInsideTitle != original.ignoresBracketsInsideTitle {
                 o["ignoreBracketsInsideTitle"] = .bool(preset.ignoresBracketsInsideTitle)
             }
+            if preset.auto != original.auto {
+                func replacing(_ items: [String]) -> JSONValue { .object(["$replace": .array(items.map(JSONValue.string))]) }
+                o["auto"] = .object(["words": replacing(preset.auto.words), "headRequired": replacing(preset.auto.headRequired),
+                                     "headExcluded": replacing(preset.auto.headExcluded)])
+            }
             if preset.formats != original.formats { o["formats"] = .object(["$replace": .array(preset.formats.map(entry))]) }
         } else {
             if !preset.label.isEmpty { o["label"] = .string(preset.label) }
@@ -135,6 +150,11 @@ extension RuleChanges {
             if !preset.defaults.isEmpty { o["defaults"] = .object(preset.defaults.mapValues(JSONValue.string)) }
             if !preset.plain.isEmpty { o["plain"] = whole(preset.plain) }
             if !preset.ignoresBracketsInsideTitle { o["ignoreBracketsInsideTitle"] = .bool(false) }
+            if preset.auto != .none {
+                o["auto"] = .object(["words": .array(preset.auto.words.map(JSONValue.string)),
+                                     "headRequired": .array(preset.auto.headRequired.map(JSONValue.string)),
+                                     "headExcluded": .array(preset.auto.headExcluded.map(JSONValue.string))])
+            }
             o["formats"] = .array(preset.formats.map(entry))
         }
         if o.isEmpty { Self.remove(&formats, ["presets", preset.name]) } else { Self.set(&formats, ["presets", preset.name], .object(o)) }

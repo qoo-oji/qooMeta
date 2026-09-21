@@ -560,6 +560,22 @@ final class Workspace {
         } else {
             updated.defaultPreset = name
         }
+        setPresets(updated, "Change the format list".ui)
+    }
+
+    /// 選んだ本の名前を、そのルールセットで読み直す(一覧の右クリック)。割り当ては本ごとに持つ
+    /// (フォルダの割り当てより、本の ID のほうが長い頭なので勝つ)。
+    func reparse(_ ids: Set<BookRow.ID>, with name: String) {
+        var updated = presets
+        for id in ids where inputs[id] != nil { updated.folders[id] = name }
+        setPresets(updated, "Parse the file names again with “%@”".ui(formats.displayName(of: name)))
+    }
+
+    /// その本を読むルールセットの名前(割り当てが無ければ既定のもの)。
+    func presetName(for id: String) -> String { presets.preset(for: id) ?? formats.defaultName }
+
+    /// 割り当てを丸ごと替える(段 2 で選び直したとき)。当たる本の名前を読み直し、1 回の操作として取り消せる。
+    func setPresets(_ updated: Workfile.PresetAssignment, _ undoName: String = "Change the format list".ui) {
         guard updated != presets else { return }
         let beforePresets = presets
         presets = updated
@@ -572,7 +588,7 @@ final class Workspace {
             inputs[id]?.preset = preset
             changed.append(id)
         }
-        pushUndo("Change the format list".ui, previous, presets: beforePresets)
+        pushUndo(undoName, previous, presets: beforePresets)
         hasUnsavedChanges = true
         push(changed)
     }

@@ -29,6 +29,9 @@ qooMeta は、本(商業のコミック・同人誌などの書庫ファイル)�
   `scripts/dev/build-private-terms.py <蔵書のフォルダ>` で作る。qooViewer の一覧も併せて入れてある)。
   git hook(`scripts/dev/install-git-hooks.sh` で有効化)が、一覧が無ければコミットを拒否する。
   検査の出力に語そのものは出ない(`--reveal` は手元だけ)。
+- **例外: 同梱の規則ファイル 2 つ**(`Sources/QooMetaRules/Resources/filename-formats.json` と `series-rules.json`)は
+  禁止語の検査の対象外(2026-09-21、利用者の判断)。利用者の手元の設定を既定値として取り込んだもので、語の一覧に蔵書の分け方の語を含む。
+  ほか(コード・テスト・docs・examples.json・コミットメッセージ)は今までどおり。この 2 つの中身も、エージェントは読んで出力しない。
 - 端末内モデルは通信しない。クラウドの AI サービスへ名前を送る機能は作らない(作るなら利用者の明示の判断で)。
 
 ## ビルドとテスト

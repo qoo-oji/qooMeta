@@ -43,6 +43,10 @@ VOLUMES_PATH = re.compile(r"/Volumes/([^/\s'\"`)」]+)/([^/\s'\"`)」]+)")
 SKIP_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".heic", ".icns", ".pdf", ".zip", ".cbz",
                  ".rar", ".cbr", ".7z", ".cb7", ".epub", ".bmp", ".tif", ".tiff")
 SELF = {"scripts/ci/check-private-terms.py", "scripts/ci/check-private-terms.sh", "scripts/dev/build-private-terms.py"}
+# 同梱の規則の既定値。利用者の手元の設定を取り込んだもので、語の一覧(自動の判定の語・型として読まない語など)は
+# 蔵書の分け方そのものだから、禁止語に当たる語を含んでよい(2026-09-21、利用者の判断)。外すのはこの 2 つだけで、
+# コード・テスト・docs・例(examples.json)・コミットメッセージは今までどおり見る。
+EXEMPT = {"Sources/QooMetaRules/Resources/filename-formats.json", "Sources/QooMetaRules/Resources/series-rules.json"}
 
 
 def git(*args: str) -> str:
@@ -154,7 +158,7 @@ def tracked_sources(untracked: bool = False) -> list[tuple[str, str]]:
     # ステージせずに確かめるため。
     listing = git("ls-files", "-z", *(["--cached", "--others", "--exclude-standard"] if untracked else []))
     for path in listing.split("\0"):
-        if not path or path in SELF or path.lower().endswith(SKIP_SUFFIXES):
+        if not path or path in SELF or path in EXEMPT or path.lower().endswith(SKIP_SUFFIXES):
             continue
         try:
             with open(path, "rb") as f:
@@ -172,7 +176,7 @@ def staged_sources() -> list[tuple[str, str]]:
     sources = []
     out = git("diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z")
     for path in out.split("\0"):
-        if not path or path in SELF or path.lower().endswith(SKIP_SUFFIXES):
+        if not path or path in SELF or path in EXEMPT or path.lower().endswith(SKIP_SUFFIXES):
             continue
         data = subprocess.run(["git", "show", f":{path}"], capture_output=True, check=True).stdout
         if is_text(data):

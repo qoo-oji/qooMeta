@@ -585,6 +585,9 @@
     },
     {
       "id": "not-inferred-for-a-compilation",
+      "policies": {
+        "compilations": "ownSeries"
+      },
       "files": [
         "[架空工房] 星降る夜の喫茶店 総集編",
         "[架空工房] 星降る夜の喫茶店 2"
@@ -1106,8 +1109,9 @@
       ]
     },
     {
-      "id": "an-ordinary-kanji-numeral-still-needs-a-word-or-a-unit",
+      "id": "an-ordinary-kanji-numeral-alone-is-a-volume-but-a-word-starting-with-one-is-not",
       "files": [
+        "[架空工房] 星の海 一",
         "[架空工房] 星の海 二",
         "[架空工房] 星の海 第三巻",
         "[架空工房] 星の海 参加者たち"
@@ -1115,8 +1119,13 @@
       "expect": [
         {
           "series": "星の海",
+          "volume": "一",
+          "volumeSort": 1
+        },
+        {
+          "series": "星の海",
           "volume": "二",
-          "volumeSort": null
+          "volumeSort": 2
         },
         {
           "series": "星の海",
@@ -1589,6 +1598,9 @@
     },
     {
       "id": "single-head-groups-move-longest-first",
+      "settings": {
+        "grouping.mergeSubseries.enabled": false
+      },
       "files": [
         "[架空工房] MOON 架空 2",
         "[架空工房] MOON 架空 3",
@@ -1690,6 +1702,9 @@
     },
     {
       "id": "compilations-form-their-own-series",
+      "policies": {
+        "compilations": "ownSeries"
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
@@ -1723,6 +1738,12 @@
     },
     {
       "id": "single-compilation-joins-when-main-series-exists",
+      "policies": {
+        "compilations": "ownSeries"
+      },
+      "settings": {
+        "grouping.compilation.singleWhenMainExists": true
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
@@ -1746,6 +1767,9 @@
     },
     {
       "id": "single-compilation-without-main-series-is-not-a-series",
+      "policies": {
+        "compilations": "ownSeries"
+      },
       "files": [
         "[架空工房] 月の庭",
         "[架空工房] 月の庭 総集編"
@@ -1835,6 +1859,12 @@
     },
     {
       "id": "edition-mark-before-compilation-stays-in-the-title",
+      "policies": {
+        "compilations": "ownSeries"
+      },
+      "settings": {
+        "grouping.compilation.singleWhenMainExists": true
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 フルカラー版総集編",
@@ -1863,6 +1893,9 @@
     },
     {
       "id": "range-before-compilation-is-its-volume",
+      "policies": {
+        "compilations": "ownSeries"
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
@@ -2256,6 +2289,9 @@
     },
     {
       "id": "different-relations-are-not-a-series",
+      "policies": {
+        "differentRelation": "split"
+      },
       "preset": "doujinshi",
       "files": [
         "(種別A) [架空工房] NEON 夜の街 (作品A)",
@@ -2278,6 +2314,9 @@
     },
     {
       "id": "unlabeled-relation-joins-the-largest-group",
+      "policies": {
+        "differentRelation": "split"
+      },
       "preset": "doujinshi",
       "files": [
         "[架空工房] 月の庭 2 (作品A)",
@@ -2600,6 +2639,9 @@
     },
     {
       "id": "numbered-extras-form-a-run-of-their-own",
+      "settings": {
+        "grouping.mergeSubseries.enabled": false
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",
@@ -2631,6 +2673,9 @@
     },
     {
       "id": "a-summary-edition-is-a-compilation",
+      "policies": {
+        "compilations": "ownSeries"
+      },
       "files": [
         "[架空工房] 月の庭 1",
         "[架空工房] 月の庭 2",

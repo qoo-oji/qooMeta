@@ -6,8 +6,8 @@ import QooMetaRules
 // 説明・まとめて編集・規則のカタログと変更・フィードバック。名前はすべて架空のもの。
 
 @Suite struct ExplanationTests {
-    static func explained(_ names: [String]) -> ProposalSet {
-        proposeSync(inputs(names), rules: .builtin, dictionaries: SystemDictionaries.all,
+    static func explained(_ names: [String], rules: CompiledRules = .builtin) -> ProposalSet {
+        proposeSync(inputs(names), rules: rules, dictionaries: SystemDictionaries.all,
                     options: ProposalOptions(explanations: true))
     }
 
@@ -30,7 +30,9 @@ import QooMetaRules
         (["[架空工房] 月の庭", "[架空工房] 月の庭【フルカラー版】"], "rejectSameWork"),
     ])
     func nearMisses(names: [String], rule: String) throws {
-        let set = Self.explained(names)
+        // 原作の違いで分けるのは方針 differentRelation = split のとき(同梱の既定は利用者の蔵書に合わせて変わるので、ここで決める)。
+        let rules = try #require(CompiledRules.builtin.applying(policies: ["differentRelation": "split"]).rules)
+        let set = Self.explained(names, rules: rules)
         #expect(set.series.isEmpty)
         let miss = try #require(set.explanation(for: "000")?.nearMisses.first)
         #expect(miss.otherID == "001")
@@ -337,6 +339,72 @@ import QooMetaRules
         // 削除: 利用者のプリセットは消え、既定のプリセットの指定も同梱のものに戻る。
         changes.removePreset("自分の棚")
         #expect(changes.isEmpty)
+    }
+
+    /// 本ごとにルールセットを選ぶ条件: 保存して読み直せ、当たるものが 1 つに絞れる本だけが決まる。
+    @Test func presetsAreChosenPerBook() throws {
+        func compile(_ changes: RuleChanges) throws -> CompiledRules {
+            let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data()))
+            return try #require(c.rules, "\(c.errors)")
+        }
+        // 同梱の値は利用者の蔵書に合わせて変わるので、条件はすべてここで決める(同梱の値に頼らない)。
+        let start = CompiledRules.builtin.presetCatalog
+        let conditions: [String: PresetAutoRule] = [
+            "commercial": PresetAutoRule(words: ["架空の棚甲"]),
+            "doujinshi": PresetAutoRule(words: ["架空の棚乙", "ｋａｋｕｕ"]),
+            "doujinshi-event": PresetAutoRule(words: ["架空の棚乙", "ｋａｋｕｕ"], headRequired: ["("], headExcluded: ["(架空除外"]),
+        ]
+        var changes = RuleChanges.none
+        for entry in start.entries {
+            var preset = entry.preset
+            preset.auto = conditions[entry.id] ?? .none
+            changes.setPreset(preset, original: entry.original)
+        }
+        let catalog = try compile(changes).presetCatalog
+        for (id, rule) in conditions { #expect(catalog.entries.first { $0.id == id }?.preset.auto == rule) }
+
+        // 例外の語句で始まる名前(全角の括弧で書いたもの)。
+        let excepted = "（架空除外甲）"
+        let books: [PresetAutoChoice.Book] = [
+            .init(id: "a", path: "/x/架空の棚甲/[架空工房] 月の庭 (3).cbz", name: "[架空工房] 月の庭 (3)"),
+            .init(id: "b", path: "/x/架空の棚乙/(架空祭4) [架空工房] 月の庭.zip", name: "(架空祭4) [架空工房] 月の庭"),
+            .init(id: "c", path: "/x/架空の棚乙/[架空工房] 月の庭.zip", name: "[架空工房] 月の庭"),
+            .init(id: "d", path: "/x/KAKUU/\(excepted) [架空工房] 月の庭.zip", name: "\(excepted) [架空工房] 月の庭"),
+            .init(id: "e", path: "/x/ほか/[架空工房] 月の庭.zip", name: "[架空工房] 月の庭"),
+            .init(id: "f", path: "/x/架空の棚甲/架空の棚乙/[架空工房] 月の庭.zip", name: "[架空工房] 月の庭"),
+            .init(id: "g", path: "/x/架空の棚乙/（架空祭5） [架空工房] 月の庭.zip", name: "（架空祭5） [架空工房] 月の庭"),
+        ]
+        let result = PresetAutoChoice.choose(books, rules: catalog.autoRules)
+        #expect(result.assigned["a"] == "commercial")
+        // 先頭が ( の本は、イベント(先頭を必須にしたもの)とジャンル(語だけ)の両方に当たり、必須にしたほうに決まる。全角の括弧も同じ。
+        #expect(result.assigned["b"] == "doujinshi-event")
+        #expect(result.assigned["g"] == "doujinshi-event")
+        #expect(result.assigned["c"] == "doujinshi")
+        // 例外の語句で始まる本は、イベントに当たらない(全角と半角、大文字と小文字は区別しない)。
+        #expect(result.assigned["d"] == "doujinshi")
+        // どれにも当たらない本、絞れない本(先頭を必須にしていないルールセットどうし)は決めない。
+        #expect(result.assigned["e"] == nil && result.assigned["f"] == nil)
+        #expect(result.unmatched == 1 && result.ambiguous == 1 && !result.isComplete)
+
+        // 設定の画面が見せる途中経過: ① 語 → ② 先頭の語句(必須・例外)。
+        let eventRule = try #require(catalog.entries.first { $0.id == "doujinshi-event" }?.preset.auto)
+        let d = eventRule.explain(path: books[3].path, name: books[3].name)
+        #expect(d.word == "ｋａｋｕｕ" && d.required != nil && d.excluded != nil && !d.fits)
+
+        // 同梱の中身に戻せば、差分から消える。
+        for entry in start.entries { changes.setPreset(entry.preset, original: entry.original) }
+        #expect(changes.isEmpty)
+    }
+
+    /// 先頭の条件を「丸括弧で始まるか」の形で書いていた版の設定も読める(その部分は捨てる。語は残る)。
+    @Test func theOldAutoKeysAreReadAndDropped() throws {
+        let diff = #"{ "kind": "qoometa.filename-formats", "schemaVersion": 6, "base": "builtin", "presets": { "doujinshi": { "auto": { "words": { "$replace": ["架空の棚乙"] }, "leadingParenthesis": "no", "parenthesisExceptions": { "$replace": ["架空"] } } } } }"#
+        let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: Data(diff.utf8)))
+        let rules = try #require(c.rules, "\(c.errors)")
+        let bundled = try #require(CompiledRules.builtin.presetCatalog.entries.first { $0.id == "doujinshi" }?.preset.auto)
+        let read = try #require(rules.presetCatalog.entries.first { $0.id == "doujinshi" }?.preset.auto)
+        #expect(read.words == ["架空の棚乙"])
+        #expect(read.headRequired == bundled.headRequired && read.headExcluded == bundled.headExcluded)
     }
 
     @Test func singleKindDiffIsRead() throws {

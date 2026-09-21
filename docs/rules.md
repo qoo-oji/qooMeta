@@ -192,9 +192,10 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 | `volumeCounters` | 語 | 巻の番号の後ろに付く単位(`巻` `話` `号` `月号` `弾` `つめ` …) |
 | `wholeOnlyCounters` | 語 | 「残りが巻だけか」を見るときにだけ使う単位(既定は `集`) |
 | `kanjiCounters` | 語 | 漢数字の後ろに付く単位(`一巻` `三話`) |
+| `particles` | 語 | 助詞とみなすひらがな(既定は `の` `と` `は` `に`)。シリーズ名に区切りなしで続く残りがこれで始まるなら、巻数(表示)にしない(規則 `volume.particles`) |
 | `volumeFollowers` | 文字 | 巻の番号のすぐ後ろに来てよい文字(`~ - ・ ! ? . ) ー`)。単位・空白・名前の終わりも巻として読む |
 | `numberWords` | 語 → 語 | 数を表す語(`に → 2` `さん → 3` `ふたつ → 2` `みっかめ → 3`)。読み方も数え方も同じ表に書く。巻数(表示)は書いてある語のまま |
-| `kanjiAloneDigits` | 語 | それだけで巻になる漢数字(大字と、その旧字体。同梱は `壱` `弐` `参` `肆` `伍` と `壹` `貳` `參`)。`X 弐` は 2 巻。ふつうの漢数字(`二`)は入れない |
+| `kanjiAloneDigits` | 語 | それだけで巻になる漢数字。同梱は大字の `壱`〜`玖`(七は `漆` `柒` の両方)、旧字体の `壹` `貳` `參`、ふつうの漢数字の `一`〜`九`(2026-09-21、利用者の指示。前はふつうの漢数字を入れていなかった)。`X 弐` は 2 巻、`X 四` は 4 巻 |
 | `positionFirst` / `positionMiddle` / `positionLast` | 語 | 上・前編 … / 中・中編 … / 下・後編 …。**3 つは同じ並びで書きます**(上/中/下、上巻/中巻/下巻、前編/中編/後編)。推定した 1 巻を、そろいの語(「後編」なら「前編」)で書くのに使います |
 | `sequelWords` | 語 | 本編の後に続くことを示す語(`アフター` `後日談` `その後` `外伝` `番外編` `特別編` `おまけ` `EXTRA` `続` `補`)。巻数(表示)は名前のとおり、並べる数はシリーズの最後の巻の次 |
 | `notFirstMarkers` | 語 | シリーズ名より後ろにこの語がある本は、1 巻の推定の候補にしない |
@@ -204,16 +205,20 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 見分けた結果を**どう扱うか**。正解が 1 つあるわけではないので、好みで選びます。太字が既定(今の扱い)。
 
+太字が同梱の既定値。**2026-09-21 に、利用者の手元の設定を同梱の既定値へ取り込んだ**(`compilations` = `inMainSeries`、
+`differentRelation` = `keep`、`grouping.compilation.singleWhenMainExists` = false、`grouping.mergeSubseries` = 入、
+巻の単位の語の追加)。例(examples.json)とテストは、前提にしている値を自分の側に書いてある(`policies`・`settings`)。
+
 | 方針 | 値 | 意味 |
 |---|---|---|
 | `subtitled` | **`attach`** / `separate` | 副題付きの本(`X 〇〇編`)を、巻でまとめた `X` の組に入れる / 入れない |
-| `differentRelation` | **`split`** / `keep` | ネタ(`@relation`)が違う本を別のシリーズに分ける(ネタの無い本はいちばん大きい組へ)/ 分けない |
+| `differentRelation` | `split` / **`keep`** | ネタ(`@relation`)が違う本を別のシリーズに分ける(ネタの無い本はいちばん大きい組へ)/ 分けない |
 | `differentGenre` | **`split`** / `keep` | 本の種別(`@genre`)が違う本を別のシリーズにする / 同じシリーズにしてよい |
 | `unnumberedFirst` | **`inferFirst`** / `leaveEmpty` | 番号の無い 1 冊を 1 巻とみなす / みなさない |
 | `unnumberedVolume` | **`asWritten`** / `leaveEmpty` | 巻として読めなかったら、シリーズ名より後ろの文字列をそのまま巻数(表示)にする / 空のままにする。並べ替えの数はどちらでも付かない |
 | `editions` | **`sameWork`** / `separateBooks` / `ignore` | 版違いを同じ作品の別の版とみなす / 別の本として数える / 印を見分けない |
 | `sources` | **`sameWork`** / `separateBooks` / `ignore` | 入手経路違い。同上 |
-| `compilations` | **`ownSeries`** / `inMainSeries` / `notInSeries` | 総集編を `X 総集編` という別のシリーズにする / 本編に含める / どのシリーズにも入れない |
+| `compilations` | `ownSeries` / **`inMainSeries`** / `notInSeries` | 総集編を `X 総集編` という別のシリーズにする / 本編に含める / どのシリーズにも入れない |
 | `compilationVolume` | **`none`** / `afterRange` | (`inMainSeries` のとき)本編の中での総集編の巻。`none` は数を付けない(表示は「総集編1」のまま)。`afterRange` は収録範囲が読めたとき、その最後の巻の直後(「1~4」なら 4.5) |
 | `magazines` | **`perYear`** / `whole` | 雑誌を 1 年ぶんごとのシリーズにする / 雑誌全体で 1 つのシリーズにする |
 
@@ -312,12 +317,13 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 | 規則 | パラメータ(既定) | 意味 |
 |---|---|---|
-| `compilation` | `singleWhenMainExists`(true) | 総集編(語は `markers` の `compilationMark`)を本編とは別の `X 総集編` のシリーズにする。2 冊以上か、同じ書き手に本編のシリーズ `X` があれば(`singleWhenMainExists`)1 冊でもシリーズにする |
+| `compilation` | `singleWhenMainExists`(false) | 総集編(語は `markers` の `compilationMark`)を本編とは別の `X 総集編` のシリーズにする。2 冊以上か、同じ書き手に本編のシリーズ `X` があれば(`singleWhenMainExists`)1 冊でもシリーズにする |
 | `mergeVolumeSubgroups` | (入切だけ) | 組の名前が「別の組の名前 + 巻」(`X 6巻`)になっているなら、その別の組へ入れる。巻として読めるときだけ |
+| `mergeSubseries` | (入切だけ。既定は入) | 組の名前が「別の組の名前 + 副題」(`X eve 甲` が `X eve 甲 3`・`X eve 甲 4` と自前の番号を持つ組)になっているなら、それも別の組へ入れる。**入れる側も入れ先も、巻でまとまった組(`volumeHead`)のときだけ**(題の頭が同じだけの 2 段目の組へ、番号の並んだシリーズを吸い込まない)。巻は副題ごと書いたもの(`eve 甲 3`)になり、本編の巻と重ならない。総集編の組は動かさない(方針 `compilations`)。切のときは、`X 外伝 1・2` のような組は別のシリーズに残る |
 | `attachAcrossScript` | (入切だけ) | 区切りなしで続く副題(`X リベンジ`)を、巻でまとまった組へ入れる。文字の種類が変わり、続きがひらがなでないときだけ。**新しい組を作るのには使わない** |
 | `volumeHead` | — | 1 段目: 「タイトル + 巻」の形の本を、巻を除いた頭でまとめる。後ろが巻だけなので頭は 1 文字でもよい |
 | `sharedPrefix` | `minPrefix`(4)、`minWholeTitle`(2) | 2 段目: 残りを先頭の共通部分でまとめる。共通部分が**語の途中で**切れるときは `minPrefix` 文字以上、片方のタイトル全体がもう片方の先頭と一致するとき(`XY` と `XY2`)は `minWholeTitle` 文字以上 |
-| `sharedPrefix.conditions.reject-hiragana-ending` | — | 語の途中で切れる共通部分が、ひらがな(助詞など)で終わるなら組にしない |
+| `sharedPrefix.conditions.reject-hiragana-ending` | — | 語の途中で切れる共通部分が、ひらがな(助詞など)で終わるなら組にしない。片方のタイトル全体がもう片方の頭と一致する形(`minWholeTitle`)でも、一致がひらがなで終わり、長いほうがそのままひらがなで続くなら組にしない(`〜です!!` と `〜ですか?`) |
 | `sharedPrefix.conditions.reject-single-script` | — | 語の途中で切れる共通部分が 1 種類の文字だけ(カタカナだけ、漢字だけ …)なら組にしない |
 | `sharedPrefix.conditions.reject-common-english` | `dictionary`(`english`)、`unlessVolume`(true) | 2 冊とも一般的な英単語だけでできたタイトルなら組にしない。`unlessVolume` なら、後ろに巻があれば組にする |
 | `splitByRelation` | — | ネタが違う本を分ける(働くかどうかは方針 `differentRelation`) |
@@ -350,7 +356,7 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 | `number` | `number` | `prefixes`、`counters`、`wholeOnlyCounters`、`mergedSpan`(3) | 数字(`2` `Vol.3` `第5話` `2つめ`)。`36-37` は、後ろの数が前より大きく差が `mergedSpan` 以下のときだけ合併号(範囲)として読む(`2021-01` のような年月は範囲にならない) |
 | `kanji` | `kanjiNumber` | `prefixes`、`counters` | 漢数字(`その二` `第三話`)。大字(壱弐参 …)と百・千も。`counters` の単位か、`prefixes` のうち日本語の語(`第` `その` …)が前に付くときだけ |
 | `wordNumber` | `numberWord` | `words` | **数を語で書いた巻**(`に` = 2、`さん` = 3、`ふたつ` = 2、`みっかめ` = 3)。対応表に無い語は読まない。語がひとまとまりで書かれているときだけ(`ふたつの影` は読まない) |
-| `kanjiAlone` | `kanjiAloneNumeral` | `digits` | **大字だけでできた巻**(`X 弐` = 2、`X 肆` = 4、旧字体の `壹` `貳` `參` も同じ。`X-壹-副題` のように区切りに挟まれた形も読む)。前に語が無くても後ろに単位が無くても読む。語の切れ目まで求めるので `参加者たち` は読まない。ふつうの漢数字(`二`)を `digits` に入れない限り、そちらは今までどおり `第`・`巻` などが要る |
+| `kanjiAlone` | `kanjiAloneNumeral` | `digits` | **一覧の漢数字だけでできた巻**(`X 弐` = 2、`X 肆` = 4、旧字体の `壹` `貳` `參` も同じ。`X-壹-副題` のように区切りに挟まれた形も読む)。前に語が無くても後ろに単位が無くても読む。語の切れ目まで求めるので `参加者たち` は読まない。同梱の `digits` には、ふつうの漢数字の `一`〜`九` も入っている(`X 四` = 4)。十より大きい数は `第`・`巻` などが要る |
 | `greek` | `greekLetter` | — | ギリシャ文字(`α` = 1) |
 | `roman` | `romanNumeral` | — | ローマ数字(大文字、1〜39) |
 | `position` | `positionWord` | `first`、`middle`、`last` | 上・中・下、前編・中編・後編。シリーズに `middle` の語があれば 上1・中2・下3、無ければ 上1・下2。`後編1` のような番号付きは 3.1 |
@@ -365,6 +371,13 @@ qoometa scan <フォルダ> --out … --rules 変更.json   # どのコマンド
 
 数字を巻として読むのは、そのすぐ後ろが**単位・空白・名前の終わり**か、この一覧(`@list:volumeFollowers`)の文字のときだけです
 (`月の庭 4ー夜編ー` の `ー`)。ここに無い文字が続く数字は、巻ではなく題名の一部として扱います。
+
+#### `particles` — 助詞とみなすひらがな
+
+シリーズに入った本で巻が読めないとき、シリーズ名より後ろの文字列をそのまま巻数(表示)にします(方針 `unnumberedVolume`)。
+シリーズ名との間に区切りが無く、残りがこの一覧(`@list:particles`)の語で始まるときは、語の続き(`月の庭の安息` の `の安息`)
+なので巻数(表示)にしません。ひらがなで始まる残りでも、助詞でなければ(`月の庭なつまつり`)巻数(表示)にします。
+規則を止めると、残りは何で始まっても巻数(表示)にします。
 
 #### `inference` — 推定
 

@@ -21,6 +21,10 @@ struct SeriesGrouper: Sendable {
     /// 組の名前そのものが「別の組の名前 + 巻」になっている組を、その別の組へ入れるか(規則 mergeVolumeSubgroups)。
     var mergesVolumeSubgroups: Bool
 
+    /// 組の名前が「別の組の名前 + 副題」になっている組(自前の番号を持つ副シリーズ)も、その別の組へ入れるか
+    /// (規則 mergeSubseries)。
+    var mergesSubseries: Bool
+
     /// 区切りなしで続く副題の本(「X リベンジ」の X とカタカナの境)も、その組に入れるか(規則 attachAcrossScript)。
     /// **文字の種類が変わる所だけ**を切れ目とみなす、ゆるい判定。すでに巻でまとまった組へ**入れるときにだけ**使い、
     /// 新しい組を作るのには使わない(日本語は語の中で文字種が変わるので、組を作る手がかりには弱い)。
@@ -72,6 +76,7 @@ struct SeriesGrouper: Sendable {
         attachesSubtitledBooks = g.attachSubtitled
         attachesAcrossScript = g.attachAcrossScript
         mergesVolumeSubgroups = g.mergeVolumeSubgroups
+        mergesSubseries = g.mergeSubseries
         rejectsHiraganaEndings = g.rejectHiraganaEndings
         splitsByRelation = g.splitByRelation
         splitsByGenre = g.splitByGenre
@@ -330,22 +335,46 @@ struct SeriesGrouper: Sendable {
             let placement = engine.rules.series.compilation.placement
             let mainKeys = Set(groups[groupsBefore...].map { String(text.comparable($0.ruleName).key) })
             let byName = Dictionary(grouping: placement == .notInSeries ? [] : compilations) { String(text.comparable($0.1.name).key) }
+            // 本編へ入れるときに引く表(組の名前・まだ組に入っていない本・組に入った本)。**総集編ごとに全部の組と全冊を
+            // なめない** ―― 1 つの単位に総集編が多いと、冊数の 2 乗になっていた(2026-09-21 の計測。8,000 冊で 10 倍)。
+            var groupNames = NameIndex()
+            var claimed = Set<Int>()
+            var unclaimedBooks = NameIndex()
+            var positionOfID: [Int: Int] = [:]
+            if placement == .inMainSeries, !byName.isEmpty {
+                for i in groupsBefore..<groups.count { groupNames.insert(text.key(groups[i].ruleName), i) }
+                claimed = Set(groups[groupsBefore...].flatMap(\.memberIDs))
+                for (position, item) in items.enumerated() {
+                    positionOfID[item.id] = position
+                    if !claimed.contains(item.id) { unclaimedBooks.insert(String(item.text.key), position) }
+                }
+            }
+            /// 組に入った本を、引く表からも外す。
+            func claim(_ ids: [Int]) {
+                for id in ids where claimed.insert(id).inserted {
+                    if let position = positionOfID[id] { unclaimedBooks.remove(String(items[position].text.key), position) }
+                }
+            }
             for key in byName.keys.sorted() {
                 let members = byName[key]!
                 let hasMain = members[0].1.mains.contains { mainKeys.contains(String(text.comparable($0).key)) }
                 // 本編に含める: 本編のシリーズがあれば、その組へ入れる。無ければ既定と同じく「X 総集編」にする。
                 if placement == .inMainSeries,
-                   let main = mainGroup(for: members[0].1.mains, in: groups, from: groupsBefore) {
+                   let main = mainGroup(for: members[0].1.mains, in: groupNames) {
                     groups[main.index].memberIDs = (groups[main.index].memberIDs + members.map(\.0.id)).sorted()
-                    if let name = main.rename { groups[main.index].ruleName = name }
+                    claim(members.map(\.0.id))
+                    if let name = main.rename {
+                        groupNames.remove(text.key(groups[main.index].ruleName), main.index)
+                        groups[main.index].ruleName = name
+                        groupNames.insert(text.key(name), main.index)
+                    }
                     continue
                 }
                 // 本編が組になっていなくても、本編の本が残っているなら、その本と総集編で 1 つのシリーズにする
                 // (利用者の事例 2026-09-22: 1〜10 は総集編に入っているので捨て、本編は 11 の 1 冊だけ。
                 // 本編が 1 冊では組にならないので、総集編だけが「X 総集編」の別シリーズになっていた)。
                 if placement == .inMainSeries,
-                   let main = mainBooksFor(members[0].1.mains, items: items,
-                                           claimed: Set(groups[groupsBefore...].flatMap(\.memberIDs))) {
+                   let main = mainBooksFor(members[0].1.mains, items: items, unclaimed: unclaimedBooks) {
                     var g = CandidateGroup(
                         id: 0, writerKey: writerKey.components(separatedBy: "\u{1}")[0],
                         memberIDs: (main.ids + members.map(\.0.id)).sorted(), ruleName: main.name,
@@ -354,6 +383,8 @@ struct SeriesGrouper: Sendable {
                     g.allowsSingle = true
                     g.evidence = .compilation
                     groups.append(g)
+                    groupNames.insert(text.key(g.ruleName), groups.count - 1)
+                    claim(g.memberIDs)
                     continue
                 }
                 // 総集編の語が**題名の途中にあるだけ**で、その名前が指す本編が無いとき(「X・食／総集編」)は、
@@ -362,6 +393,7 @@ struct SeriesGrouper: Sendable {
                 if members.count == 1, !hasMain, placement != .notInSeries,
                    let g = attachableGroup(for: members[0].0, in: groups, from: groupsBefore) {
                     groups[g].memberIDs = (groups[g].memberIDs + [members[0].0.id]).sorted()
+                    if placement == .inMainSeries { claim([members[0].0.id]) }
                     log?.apply("subtitled", to: members[0].0.id)
                     continue
                 }
@@ -374,12 +406,17 @@ struct SeriesGrouper: Sendable {
                 g.evidence = .compilation
                 g.isCompilation = true
                 groups.append(g)
+                if placement == .inMainSeries {
+                    groupNames.insert(text.key(g.ruleName), groups.count - 1)
+                    claim(g.memberIDs)
+                }
             }
             // 「X 6巻」のように、**組の名前そのものが「別の組の名前 + 巻」**になっている組は、その別の組の一部。
             // (「X 6巻 前編」「…後編」が 1 段目で「X 6巻」の組になり、本編「X」と別のシリーズに
             // 見えていた。2026-09-21、利用者の指摘)。**巻として読めるときだけ**移すので、「X 外伝 1・2」の
             // ように別の番号の並びを持つ組は、そのまま別のシリーズに残る。
             if mergesVolumeSubgroups { mergeVolumeSubgroups(&groups, from: groupsBefore) }
+            if mergesSubseries { mergeVolumeSubgroups(&groups, from: groupsBefore, anyRemainder: true) }
         }
         groups = splitByRelation(groups, books: books)
         groups = dissolveSameWorkOnly(groups, books: books)
@@ -414,18 +451,28 @@ struct SeriesGrouper: Sendable {
 
     /// 名前が「別の組の名前 + 巻」になっている組を、その別の組へ入れる(方針ではなく規則 mergeVolumeSubgroups)。
     /// 入れ先はいちばん短い名前の組。巻として読めない残り(「外伝」)は動かさない。
-    private func mergeVolumeSubgroups(_ groups: inout [CandidateGroup], from first: Int) {
+    ///
+    /// `anyRemainder` なら、残りが巻として読めなくても入れる(規則 mergeSubseries)。「X eve 1・3・4」のように
+    /// 自前の番号を持つ副シリーズは、本編と別のシリーズに残すのが既定だが、本編にまとめたい蔵書もある
+    /// (2026-09-21、利用者の指示。入切できるように)。
+    ///
+    /// そのときは、**入れる側も入れ先も、巻でまとまった組(1 段目)だけ**にする。入れ先を問わないと、共通する前半部分で
+    /// できた組(2 段目。「私の」のように、題の頭が同じだけの別の作品を集めたもの)が入れ先になり、ちゃんと番号の
+    /// 並んだシリーズ(「私の、〇〇 2・3・4」)がそこへ吸い込まれた(2026-09-21、利用者の報告)。本編が自分の番号を
+    /// 持っていることが「副シリーズ」と言える条件。総集編の組も、これで入れる側にも入れ先にもならない
+    /// (どこへ入れるかは方針 compilations が決める)。
+    private func mergeVolumeSubgroups(_ groups: inout [CandidateGroup], from first: Int, anyRemainder: Bool = false) {
         var merged = Set<Int>()
-        for i in first..<groups.count where !merged.contains(i) {
+        for i in first..<groups.count where !merged.contains(i) && !(anyRemainder && groups[i].evidence != .volumeHead) {
             let name = text.comparable(groups[i].ruleName)
             let hosts = (first..<groups.count).filter { j -> Bool in
-                guard j != i, !merged.contains(j) else { return false }
+                guard j != i, !merged.contains(j), !(anyRemainder && groups[j].evidence != .volumeHead) else { return false }
                 let hostKey = text.key(groups[j].ruleName)
                 guard !hostKey.isEmpty, name.key.count > hostKey.count,
                       String(name.key).hasPrefix(hostKey) else { return false }
                 guard Self.isCleanCut(name, at: hostKey.count)
                     || (attachesAcrossScript && Self.startsNewWord(name, at: hostKey.count)) else { return false }
-                return engine.volumes.isWholeVolume(name.originalRemainder(afterKeyLength: hostKey.count))
+                return anyRemainder || engine.volumes.isWholeVolume(name.originalRemainder(afterKeyLength: hostKey.count))
             }
             guard let host = hosts.min(by: { text.key(groups[$0].ruleName).count < text.key(groups[$1].ruleName).count })
             else { continue }
@@ -454,23 +501,21 @@ struct SeriesGrouper: Sendable {
     /// 総集編の言う名前(「鬼ヶ島」)に直して受け入れる ―― 共通部分が助詞で終わるのは 2 段目の弱点で、
     /// 総集編はシリーズ名がどこまでかを名前で言っているから、そちらを採る(利用者の事例 2026-09-22)。
     /// 余りが漢字・カタカナを含むとき(「鬼ヶ島戦記」)は、別の作品なので受け入れない。
-    private func mainGroup(for mains: [String], in groups: [CandidateGroup],
-                           from first: Int) -> (index: Int, rename: String?)? {
+    private func mainGroup(for mains: [String], in names: NameIndex) -> (index: Int, rename: String?)? {
         for main in mains {
-            if let i = (first..<groups.count).first(where: { text.key(main) == text.key(groups[$0].ruleName) }) {
-                return (i, nil)
-            }
+            let key = text.key(main)
+            // 同じ名前の組が 2 つあれば、先にできたほう。
+            if let i = names.withPrefix(key).filter({ $0.key == key }).map(\.index).min() { return (i, nil) }
         }
         for main in mains {
             let key = text.key(main)
             guard !key.isEmpty else { continue }
-            let found = (first..<groups.count).filter { i in
-                let name = text.key(groups[i].ruleName)
-                guard name.count > key.count, name.hasPrefix(key) else { return false }
-                return name.dropFirst(key.count).allSatisfy(Self.isHiragana)
+            let found = names.withPrefix(key).filter { entry in
+                entry.key.count > key.count && entry.key.dropFirst(key.count).allSatisfy(Self.isHiragana)
             }
-            if let i = found.min(by: { text.key(groups[$0].ruleName).count < text.key(groups[$1].ruleName).count }) {
-                return (i, main)
+            // いちばん短い名前。同じ長さなら先にできた組。
+            if let best = found.min(by: { ($0.key.count, $0.index) < ($1.key.count, $1.index) }) {
+                return (best.index, main)
             }
         }
         return nil
@@ -481,13 +526,16 @@ struct SeriesGrouper: Sendable {
     ///
     /// 拾うのは、タイトルが本編の名前そのものか、**そのすぐ後ろが巻だけでできている**本に限る(1 段目と同じ見方)。
     /// 語の切れ目だけを頼りにすると、「X の住人たち」のような別の作品まで引き込んでしまう。
+    ///
+    /// `unclaimed` は、まだどの組にも入っていない本(鍵 → `items` の位置)。
     private func mainBooksFor(_ mains: [String], items: [(id: Int, text: ComparableText)],
-                              claimed: Set<Int>) -> (name: String, ids: [Int])? {
+                              unclaimed: NameIndex) -> (name: String, ids: [Int])? {
         for main in mains {
             let key = text.key(main)
             guard !key.isEmpty else { continue }
-            let ids = items.filter { item in
-                guard !claimed.contains(item.id), String(item.text.key).hasPrefix(key) else { return false }
+            // 並びは入れた順(前は items を順になめていた)。
+            let ids = unclaimed.withPrefix(key).map(\.index).sorted().map { items[$0] }.filter { item in
+                guard String(item.text.key).hasPrefix(key) else { return false }
                 if item.text.key.count == key.count { return true }
                 return !Self.splitsANumber(item.text, at: key.count) && Self.isCleanCut(item.text, at: key.count)
                     && engine.volumes.isWholeVolume(item.text.originalRemainder(afterKeyLength: key.count))
@@ -495,6 +543,41 @@ struct SeriesGrouper: Sendable {
             if !ids.isEmpty { return (main, ids) }
         }
         return nil
+    }
+
+    /// 名前(比べる形の鍵)を並べておき、頭が合うものを二分探索で引く表。頭が同じ鍵は、並びの中でひと続きになる
+    /// (`anyHasPrefix` と同じ見方)。
+    struct NameIndex {
+        private(set) var entries: [(key: String, index: Int)] = []
+
+        private func lowerBound(_ key: String, _ index: Int = Int.min) -> Int {
+            var low = 0, high = entries.count
+            while low < high {
+                let middle = (low + high) / 2
+                if (entries[middle].key, entries[middle].index) < (key, index) { low = middle + 1 } else { high = middle }
+            }
+            return low
+        }
+
+        mutating func insert(_ key: String, _ index: Int) {
+            entries.insert((key, index), at: lowerBound(key, index))
+        }
+
+        mutating func remove(_ key: String, _ index: Int) {
+            let i = lowerBound(key, index)
+            if i < entries.count, entries[i].key == key, entries[i].index == index { entries.remove(at: i) }
+        }
+
+        /// この頭で始まる鍵(鍵の順)。
+        func withPrefix(_ prefix: String) -> [(key: String, index: Int)] {
+            var result: [(key: String, index: Int)] = []
+            var i = lowerBound(prefix)
+            while i < entries.count, entries[i].key.unicodeScalars.starts(with: prefix.unicodeScalars) {
+                if entries[i].key.hasPrefix(prefix) { result.append(entries[i]) }
+                i += 1
+            }
+            return result
+        }
     }
 
     private struct Member { let item: (id: Int, text: ComparableText); var prefixLength: Int }
@@ -531,8 +614,16 @@ struct SeriesGrouper: Sendable {
             let midWordAccepted = l >= minPrefix
                 && !(rejectsHiraganaEndings && !cleanOnBothSides && Self.isHiragana(item.text.key[l - 1]))
                 && !(rejectsSingleWordPrefixes && !cleanOnBothSides && Self.isSingleScriptRun(Array(item.text.key.prefix(l))))
+            // 片方のタイトル全体がもう片方の頭と一致する形(「XY」と「XY2」)も、一致がひらがなで終わり、長いほうが
+            // **そのままひらがなで続く**なら採らない(規則 reject-hiragana-ending をここにも掛ける)。記号を無視して比べるので、
+            // 「〜です！！」と「〜ですか？」が「〜です」と「〜ですか」になり、この形で組になっていた(2026-09-21、利用者の報告)。
+            // 続きが漢字やカタカナなら新しい語なので、これまでどおり採る(「月の庭の」と「月の庭の安息」)。
+            let longer = item.text.key.count > l ? item.text : last.item.text
+            let continuesInHiragana = l > 0 && longer.key.count > l
+                && Self.isHiragana(longer.key[l - 1]) && Self.isHiragana(longer.key[l])
+            let wholeTitleAccepted = l >= minWholeTitle && l == shorter && !(rejectsHiraganaEndings && continuesInHiragana)
             if run.count == 1 {
-                accepts = midWordAccepted || cleanOnBothSides || (l >= minWholeTitle && l == shorter)
+                accepts = midWordAccepted || cleanOnBothSides || wholeTitleAccepted
             } else if l == runPrefix {
                 accepts = true
             } else {
@@ -562,7 +653,38 @@ struct SeriesGrouper: Sendable {
             }
         }
         if !run.isEmpty { result.append(run) }
-        return result
+        return Self.absorbStragglers(result)
+    }
+
+    /// 並べた順で決まる取りこぼしを拾う。1 冊だけ残った本の鍵が、近くの組(2 冊以上)の共通部分で始まるなら、その組へ入れる。
+    ///
+    /// 2 冊以上の組は、共通部分がちょうど同じ本を条件なしで受け入れる(`runs` の `l == runPrefix`)。それが、並べたときに
+    /// 組より**前**に来たというだけで外れていた ―― 「X に甲…」は隣の「X に乙…」と長い共通部分(助詞で終わる)で比べられて
+    /// 断られ、そのあとに来た「X 延長戦」だけが「X に乙…」と組になる(2026-09-21、利用者の報告)。
+    /// 共通部分で始まる鍵は並びの中でひと続きなので、見るのは前後でいちばん近い組だけでよい(全部の組と比べない)。
+    private static func absorbStragglers(_ runs: [[Member]]) -> [[Member]] {
+        var runs = runs
+        let multi = runs.indices.filter { runs[$0].count >= 2 }
+        guard !multi.isEmpty else { return runs }
+        var moved = Set<Int>()
+        for i in runs.indices where runs[i].count == 1 {
+            let item = runs[i][0].item
+            // 前後でいちばん近い 2 冊以上の組(multi は並びの順)。
+            var low = 0, high = multi.count
+            while low < high { let middle = (low + high) / 2; if multi[middle] < i { low = middle + 1 } else { high = middle } }
+            let neighbours = [low > 0 ? multi[low - 1] : nil, low < multi.count ? multi[low] : nil].compactMap { $0 }
+            let fitting = neighbours.compactMap { r -> (run: Int, length: Int)? in
+                let length = runs[r].map(\.prefixLength).min() ?? 0
+                guard length >= 1, item.text.key.count >= length,
+                      item.text.key.starts(with: runs[r][0].item.text.key.prefix(length)) else { return nil }
+                return (r, length)
+            }
+            // 共通部分の長いほう(よりはっきり同じ組)。
+            guard let best = fitting.max(by: { $0.length < $1.length }) else { continue }
+            runs[best.run].append(Member(item: item, prefixLength: best.length))
+            moved.insert(i)
+        }
+        return runs.indices.filter { !moved.contains($0) }.map { runs[$0] }
     }
 
     /// 「タイトル + 巻」の形なら、巻を除いた頭の長さ(比較用の形で)。語の切れ目で切れていて、

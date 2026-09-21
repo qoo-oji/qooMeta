@@ -172,8 +172,10 @@ import QooMetaRules
         let old = Self.compile(Self.diff(#""policies": { "compilationVolume": "offset" }"#))
         #expect(old.errors.isEmpty, "\(old.errors)")
         #expect(old.warnings.map(\.code) == [.retiredID])
-        // 含めない(既定)ときは、総集編だけが別のシリーズ。番外編は続きの本なので本編に残る。
-        let apart = proposeSync(inputs(names), rules: .builtin, dictionaries: [:])
+        // 含めない(ownSeries)ときは、総集編だけが別のシリーズ。番外編は続きの本なので本編に残る。
+        let apart = proposeSync(inputs(names), rules: try #require(CompiledRules.builtin.applying(policies: ["compilations": "ownSeries"],
+                                                                    settings: ["grouping.compilation.singleWhenMainExists": .bool(true)]).rules),
+                                dictionaries: [:])
         #expect(seriesName(apart, "002") == "月の庭 総集編")
         #expect(seriesName(apart, "003") == "月の庭")
     }

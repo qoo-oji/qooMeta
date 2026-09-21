@@ -210,19 +210,23 @@ private struct ChoosePresetStep: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if model.isFitting { ProgressView().controlSize(.small) }
+                    if let auto = model.autoFit {
+                        AutoFitRow(fit: auto, total: model.picked?.books.count ?? 0,
+                                   selected: model.choosesAuto) { model.chooseParsing(nil) }
+                    }
                     ForEach(model.presetFits) { fit in
                         PresetFitRow(fit: fit, total: model.picked?.books.count ?? 0,
-                                     selected: model.chosenPreset == fit.id) { model.chosenPreset = fit.id }
+                                     selected: !model.choosesAuto && model.chosenPreset == fit.id) { model.chooseParsing(fit.id) }
                     }
                     Text("Books that fit no shape keep their whole name as a provisional title. You can fix them in the next step, or change how the names are read.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button {
                             // いまここで選んでいるルールセットを、窓にも選ばせる。
-                            if let preset = model.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
+                            if !model.choosesAuto, let preset = model.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
                             openWindow(id: FileNameRulesView.windowID)
                         } label: {
-                            Label("Look at and edit the rule sets…", systemImage: "textformat.abc")
+                            Label("Parsing settings", systemImage: "textformat.abc")
                         }
                         Text("A rule set you save there appears here at once.")
                             .font(.caption).foregroundStyle(.secondary)
@@ -238,9 +242,78 @@ private struct ChoosePresetStep: View {
             StepFooter(back: { model.go(to: .choose) }) {
                 Button("Next") { model.startReview() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(model.chosenPreset == nil || model.isFitting)
+                    .disabled(!model.canStartReview)
             }
         }
+    }
+}
+
+/// 「自動」: 本ごとに、フォルダと名前の語からルールセットを選ぶ。**すべての本が決まるときだけ選べる**
+/// (決まらない本が 1 冊でもあれば灰色にし、人がルールセットを選ぶ。2026-09-21、利用者の指示)。
+private struct AutoFitRow: View {
+    var fit: AppModel.AutoFit
+    var total: Int
+    var selected: Bool
+    var choose: () -> Void
+
+    private var enabled: Bool { fit.choice.isComplete && total > 0 }
+
+    var body: some View {
+        Button(action: choose) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Automatic").font(.headline)
+                    Text("Chooses a rule set for each book, by the words its folders and name contain. Set the words for each rule set in the parsing settings.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !fit.breakdown.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(fit.breakdown, id: \.id) { item in
+                                Text(verbatim: "\(item.title) \(item.count)")
+                                    .font(.caption)
+                                    .padding(.horizontal, 7).padding(.vertical, 1)
+                                    .background(.quaternary, in: .capsule)
+                            }
+                        }
+                    }
+                    if enabled {
+                        HStack(spacing: 8) {
+                            ProgressView(value: Double(fit.read) / Double(total))
+                                .frame(width: 130)
+                            Text("%1$lld of %2$lld names read in full".ui(fit.read, total))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        if fit.leftover > 0 {
+                            Label("%lld names keep a bracket that became no field".ui(fit.leftover),
+                                  systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    } else if fit.hasNoWords {
+                        Label("No rule set has words to choose by yet", systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        if fit.choice.unmatched > 0 {
+                            Label("%lld books match no rule set".ui(fit.choice.unmatched), systemImage: "questionmark.circle")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if fit.choice.ambiguous > 0 {
+                            Label("%lld books match more than one rule set".ui(fit.choice.ambiguous), systemImage: "questionmark.circle")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? AnyShapeStyle(.tint.opacity(0.10)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary)))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.55)
     }
 }
 

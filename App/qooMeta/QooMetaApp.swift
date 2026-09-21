@@ -143,9 +143,29 @@ final class AppModel {
         var leftover: Int
     }
 
+    /// 段 2 の「自動」: 本ごとに、フォルダと名前の語からルールセットを選んだ結果。
+    struct AutoFit {
+        var choice: PresetAutoChoice.Result
+        /// ルールセットごとの冊数(並びの順。0 冊のものは含めない)。
+        var breakdown: [(id: String, title: String, count: Int)]
+        /// 選んだルールセットで読み切れた冊数と、括弧が読み残った冊数。
+        var read: Int
+        var leftover: Int
+        /// 語を書いたルールセットが 1 つも無い(自動で選びようがない)。
+        var hasNoWords: Bool
+    }
+
     var step: Step = .choose
     var picked: Picked?
     var presetFits: [PresetFit] = []
+    var autoFit: AutoFit?
+    /// 「自動」を選んでいるか(選んでいるあいだ、`chosenPreset` は使わない)。
+    var choosesAuto = false
+    /// 利用者が段 2 で自分で選んだか。選んでいなければ、数え直すたびに既定を選び直す(自動で決まれば自動、でなければ最も読めたもの)。
+    private var userChoseParsing = false
+    /// 段 2 から最後に一覧へ渡した割り当て。段 2 の選択が変わっていなければ、戻って「次へ」を押しても渡し直さない
+    /// ―― 渡し直すと、段 3 で本ごとに読み直した分が黙って消える。
+    private var appliedAssignment: Workfile.PresetAssignment?
     var isFitting = false
     /// 数え直しの回(`computeFits`)。
     private var fitRound = 0
@@ -282,6 +302,10 @@ final class AppModel {
             // 選び直したら、前の結果は捨てる(古い一覧が残っていると、どの蔵書の話か分からなくなる)。
             workspace = nil
             presetFits = []
+            autoFit = nil
+            choosesAuto = false
+            userChoseParsing = false
+            appliedAssignment = nil
         } catch is CancellationError {
             // 選び直された。何も出さない。
         } catch {
@@ -313,6 +337,25 @@ final class AppModel {
             return (entry.id, hasher.finalize())
         }, uniquingKeysWith: { a, _ in a })
         let missing = entries.map(\.id).filter { fitCache[$0]?.key != keys[$0] }
+        // 自動の選択は、選んだルールセットで読んだ数まで出すので、毎回数え直す(1 冊を 1 度読むだけ)。
+        // 手がかりは起点のフォルダを含めたパス(起点のフォルダの名前に種類が書いてあることもある)。
+        let autoRules = settings.rules.presetCatalog.autoRules
+        let autoBooks = picked.books.map {
+            PresetAutoChoice.Book(id: $0.id, path: (picked.root.path as NSString).appendingPathComponent($0.id), name: $0.name)
+        }
+        let autoTask = Task.detached { () -> (PresetAutoChoice.Result, Int, Int) in
+            let choice = PresetAutoChoice.choose(autoBooks, rules: autoRules)
+            var read = 0, leftover = 0
+            for book in autoBooks {
+                guard let preset = choice.assigned[book.id] else { continue }
+                switch formats[preset].check(book.name).outcome {
+                case .read: read += 1
+                case .leftover: leftover += 1
+                case .unread: break
+                }
+            }
+            return (choice, read, leftover)
+        }
         let counted = await Task.detached { () -> [String: (read: Int, leftover: Int)] in
             // ルールセットごとに数えるので、並べて走らせる(蔵書が大きいと 1 本では待たされる)。
             await withTaskGroup(of: (String, Int, Int).self) { group in
@@ -333,6 +376,7 @@ final class AppModel {
                 return await group.reduce(into: [:]) { $0[$1.0] = (read: $1.1, leftover: $1.2) }
             }
         }.value
+        let (choice, autoRead, autoLeftover) = await autoTask.value
         guard round == fitRound else { return }
         for (id, count) in counted { fitCache[id] = (keys[id] ?? 0, count.read, count.leftover) }
         fitCache = fitCache.filter { keys[$0.key] != nil }
@@ -341,6 +385,14 @@ final class AppModel {
             PresetFit(id: $0.id, title: $0.preset.displayName, note: RuleLabels.preset($0.id).help,
                       read: counts[$0.id]?.read ?? 0, leftover: counts[$0.id]?.leftover ?? 0)
         }
+        var perPreset: [String: Int] = [:]
+        for preset in choice.assigned.values { perPreset[preset, default: 0] += 1 }
+        autoFit = AutoFit(choice: choice,
+                          breakdown: entries.compactMap { entry in
+                              perPreset[entry.id].map { (entry.id, entry.preset.displayName, $0) }
+                          },
+                          read: autoRead, leftover: autoLeftover,
+                          hasNoWords: !autoRules.contains { $0.rule.isActive })
         // 選び直しでなければ、**この蔵書でいちばん読めたもの**を選んでおく(既定を黙って当てない)。
         // 同じ数なら、同梱の並びで先のものを採る。
         if chosenPreset == nil || counts[chosenPreset!] == nil {
@@ -348,6 +400,32 @@ final class AppModel {
                 if best == nil || fit.read > best!.read { best = fit }
             }?.id ?? settings.rules.formats.defaultName
         }
+        // すべての本のルールセットが決まるときだけ「自動」を選べる。決まらない本が 1 冊でもあれば、人が選ぶ
+        // (決まらない本を、黙ってどれかで読まない。2026-09-21、利用者の指示)。
+        if !choice.isComplete { choosesAuto = false } else if !userChoseParsing { choosesAuto = true }
+    }
+
+    /// 段 2 で、ルールセットを 1 つ選ぶ(nil なら「自動」)。
+    func chooseParsing(_ preset: String?) {
+        userChoseParsing = true
+        if let preset {
+            choosesAuto = false
+            chosenPreset = preset
+        } else if autoFit?.choice.isComplete == true {
+            choosesAuto = true
+        }
+    }
+
+    /// 段 2 の選択で先へ進めるか。
+    var canStartReview: Bool { !isFitting && (choosesAuto ? autoFit?.choice.isComplete == true : chosenPreset != nil) }
+
+    /// 段 2 の選択からできる割り当て。「自動」なら本ごと(`PresetAssignment` は本の ID も受ける)。
+    private var chosenAssignment: Workfile.PresetAssignment? {
+        if choosesAuto {
+            guard let choice = autoFit?.choice, choice.isComplete else { return nil }
+            return .init(defaultPreset: chosenPreset, folders: choice.assigned)
+        }
+        return chosenPreset.map { .init(defaultPreset: $0) }
     }
 
     /// 段 2 を抜けて、選んだプリセットで一覧を組み立てる。
@@ -355,9 +433,13 @@ final class AppModel {
     /// すでに一覧があるとき(段 3 から戻ってきたとき)は**作り直さない**。割り当てだけ替えて名前を読み直す
     /// ―― 作り直すと、利用者がそこまでに直した内容が黙って消えてしまう。
     func startReview() {
-        guard let picked, let preset = chosenPreset else { return }
+        guard let picked, canStartReview, let assignment = chosenAssignment else { return }
         if let workspace {
-            if workspace.presets.defaultPreset != preset { workspace.setPreset(preset, forFolder: nil) }
+            // 選び直したときだけ、割り当ての全体を替える(段 3 で本ごとに読み直した分も、選び直したものに揃う)。
+            if assignment != appliedAssignment {
+                workspace.setPresets(assignment)
+                appliedAssignment = assignment
+            }
             step = .review
             return
         }
@@ -366,8 +448,8 @@ final class AppModel {
         Task {
             isOpening = true
             defer { isOpening = false }
-            let file = Workfile(rootPath: picked.root.path, books: picked.books,
-                                presets: .init(defaultPreset: preset))
+            let file = Workfile(rootPath: picked.root.path, books: picked.books, presets: assignment)
+            appliedAssignment = assignment
             workspace = await Workspace.open(file, rules: settings.rules)
             step = .review
         }
@@ -439,7 +521,7 @@ struct WorkspaceCommands: Commands {
         CommandGroup(after: .appSettings) {
             Button("File Name Parsing…") {
                 // 段 2 で選んでいるルールセットを、窓にも選ばせる(選んでいなければ窓の今のまま)。
-                if let preset = model?.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
+                if model?.choosesAuto == false, let preset = model?.chosenPreset { PickedForRules.shared.open(ruleSet: preset) }
                 openWindow(id: FileNameRulesView.windowID)
             }
                 .keyboardShortcut("1", modifiers: [.command, .option])

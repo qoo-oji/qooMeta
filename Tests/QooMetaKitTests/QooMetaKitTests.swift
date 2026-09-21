@@ -88,8 +88,8 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(builtinEngine.volumes.isWholeVolume("第3巻"))
     }
 
-    /// 大字(壱・弐・参)は、前に語も後ろに単位も無くても巻。ふつうの漢数字は、題名の言葉と見分けが
-    /// 付かないので読まない(「二」は読まず、「参加者たち」も 3 にしない)。
+    /// 大字(壱・弐・参)とふつうの漢数字の一〜九は、前に語も後ろに単位も無くても巻。語の切れ目まで求めるので、
+    /// 漢数字で始まる言葉(「参加者たち」「四季」)は巻にしない。
     @Test func oldStyleKanjiNumeralsStandAlone() {
         #expect(builtinEngine.volumes.extract(fromRemainder: " 弐")?.number == 2)
         #expect(builtinEngine.volumes.extract(fromRemainder: " 参")?.number == 3)
@@ -100,10 +100,14 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
         #expect(builtinEngine.volumes.extract(fromRemainder: "-壹-夏の章")?.number == 1)
         #expect(builtinEngine.volumes.extract(fromRemainder: " 貳")?.number == 2)
         #expect(builtinEngine.volumes.extract(fromRemainder: " 第參巻")?.number == 3)
-        // 同梱の一覧は壱〜伍とその旧字体まで。それより先の大字(陸・柒・捌・玖・拾 …)は、使う利用者が足す。
+        // 同梱の一覧は、大字の壱〜玖(漆・柒の両方)と旧字体、ふつうの漢数字の一〜九(2026-09-21、利用者の指示)。
+        // 拾より先は、使う利用者が足す。
         #expect(builtinEngine.volumes.extract(fromRemainder: " 弐拾") == nil)
-        #expect(builtinEngine.volumes.extract(fromRemainder: " 二") == nil)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 玖")?.number == 9)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 二")?.number == 2)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 七 夏の章")?.number == 7)
         #expect(builtinEngine.volumes.extract(fromRemainder: " 参加者たち") == nil)
+        #expect(builtinEngine.volumes.extract(fromRemainder: " 四季") == nil)
     }
 
     /// 数を語で書いた巻(利用者の指示 2026-09-22)。語のまとまりとして書かれているときだけ読む。

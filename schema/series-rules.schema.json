@@ -264,6 +264,16 @@
               "$ref": "#/$defs/arrayOps"
             }
           ]
+        },
+        "particles": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/words"
+            },
+            {
+              "$ref": "#/$defs/arrayOps"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -606,6 +616,55 @@
             }
           },
           "additionalProperties": false
+        },
+        "attachAcrossScript": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "mergeVolumeSubgroups": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "mergeSubseries": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "description": "名前が「別の組の名前 + 副題」の組(自前の番号を持つ副シリーズ)も、その別の組へ入れる。既定は切"
         }
       },
       "additionalProperties": false
@@ -1259,6 +1318,26 @@
             }
           },
           "additionalProperties": false
+        },
+        "particles": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "words": {
+              "$ref": "#/$defs/wordsValue"
+            }
+          },
+          "additionalProperties": false,
+          "description": "シリーズ名に区切りなしで続く残りが、この語(助詞)で始まるなら、語の続きとみなして巻数(表示)にしない"
         }
       },
       "additionalProperties": false
