@@ -118,7 +118,6 @@ struct ValueFilterMenu: View {
 /// ファイル名の列と巻数(ソート用)は読むだけ ―― どちらも直に持つ値ではなく、名前と規則から導いたもの。
 struct BookTableView: View {
     @Bindable var workspace: Workspace
-    @State private var customization = TableColumnCustomization<BookRow>()
     /// シリーズ名を直したとき、選んでいない本まで動くなら、入れる前に確かめる(詳細の「1 つにする」と同じ)。
     @State private var pendingSeries: PendingSeries?
 
@@ -131,13 +130,13 @@ struct BookTableView: View {
     /// 列の既定の並び(利用者の指示 2026-09-21)。左から ファイル名・ジャンル・著者・タイトル・シリーズ・
     /// 巻数(表示)・巻数(並べ替え用)・原作・イベント・情報。**書いた順がそのまま画面の順**なので、
     /// 巻数(並べ替え用)を挟むために欄の列を 2 つに分ける。並べ替え・表示する列の選択は利用者が変えられる。
-    static let columns: [BookMetadata.Field] = [.genre, .authors, .title, .series, .volume]
-    static let columnsAfterVolume: [BookMetadata.Field] = [.source, .event, .info]
+    nonisolated static let columns: [BookMetadata.Field] = [.genre, .authors, .title, .series, .volume]
+    nonisolated static let columnsAfterVolume: [BookMetadata.Field] = [.source, .event, .info]
 
     /// 欄ごとの幅。**中身に合わせた自動調整は Table に無い**ので、欄ごとに決める(2026-09-21、利用者の指摘)。
     /// 短い欄には上限を付ける ―― 上限が無いと、余った幅をどの列も等分に受け取り、3 文字のジャンルの列が
     /// 名前の列と同じくらい広くなる。広がってほしいのは、ファイル名・タイトル・シリーズ・著者だけ。
-    static func width(_ field: BookMetadata.Field) -> (min: CGFloat, ideal: CGFloat, max: CGFloat?) {
+    nonisolated static func width(_ field: BookMetadata.Field) -> (min: CGFloat, ideal: CGFloat, max: CGFloat?) {
         switch field {
         case .genre: (56, 88, 160)
         case .authors: (80, 160, nil)
@@ -151,27 +150,10 @@ struct BookTableView: View {
     }
 
     var body: some View {
-        // 列は Group でまとめない(Group に入れた列は見出しを押しても並べ替わらない)。欄の列は TableColumnForEach で作る。
+        // 表は AppKit の NSTableView(`BookTable`。SwiftUI の Table をやめた理由はそちらに)。
         // 並べ替えた結果は Workspace が作り置きしている(ここで並べ替えると、描くたびに 1 万冊を並べ直すことになる)。
-        Table(workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
-              columnCustomization: $customization) {
-            TableColumn("File name", value: \BookRow.fileName)
-                .width(min: 160, ideal: 360)
-                .customizationID("fileName")
-                .disabledCustomizationBehavior(.visibility)
-            TableColumnForEach(Self.columns, id: \.self) { field in
-                fieldColumn(field)
-            }
-            TableColumn("Volume (for sorting)", value: \BookRow[sortKey: .volume]) { book in
-                Text(book.volumeSortText)
-                    .help("Derived from the volume as written, by the rules for reading a volume")
-            }
-            .width(min: 50, ideal: 72, max: 110)
-            .customizationID("volumeSort")
-            TableColumnForEach(Self.columnsAfterVolume, id: \.self) { field in
-                fieldColumn(field)
-            }
-        }
+        BookTable(rows: workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
+                  canEdit: canEdit, isEdited: isEdited, help: help, commit: commit)
         .modifier(HideTopScrollEdgeEffect())
         .alert(item: $pendingSeries) { pending in
             Alert(title: Text("Set the series to “%@”?".ui(pending.name)),
@@ -182,20 +164,6 @@ struct BookTableView: View {
                   },
                   secondaryButton: .cancel())
         }
-    }
-
-    /// 欄の列 1 つ(見出しを押して並べ替えられ、セルを 2 回押すと直せる)。
-    private func fieldColumn(_ field: BookMetadata.Field) -> some TableColumnContent<BookRow, KeyPathComparator<BookRow>> {
-        let size = Self.width(field)
-        return TableColumn(LocalizedStringKey(field.labelKey),
-                           sortUsing: KeyPathComparator(\BookRow[sortKey: field])) { book in
-            EditableCell(text: book[text: field], isEdited: isEdited(field, book),
-                         canEdit: canEdit(field, book), help: help(field, book)) { value in
-                commit(field, value, for: book)
-            }
-        }
-        .width(min: size.min, ideal: size.ideal, max: size.max)
-        .customizationID(field.rawValue)
     }
 
     /// 巻数は、シリーズ名の決まっている本にしか入らない(シリーズの中の番号なので)。
@@ -242,50 +210,9 @@ struct BookTableView: View {
     }
 }
 
-/// 一覧のセル 1 つ。ふだんは文字を出し、**2 回押すと書き換えに入る**(1 回押しは行を選ぶだけ ―― いつでも
-/// 書き換えられる欄にすると、行を選ぶのが難しくなる)。Return とほかへ移ったときに入り、Esc で元へ戻る。
-private struct EditableCell: View {
-    var text: String
-    /// 利用者が直した(確定した)欄。提案のままの値と見分ける。
-    var isEdited: Bool
-    var canEdit: Bool
-    var help: String
-    var commit: (String) -> Void
-
-    @State private var draft: String?
-    @FocusState private var editing: Bool
-
-    var body: some View {
-        Group {
-            if let draft {
-                TextField("", text: Binding(get: { draft }, set: { self.draft = $0 }))
-                    .textFieldStyle(.roundedBorder)
-                    .focused($editing)
-                    .onAppear { editing = true }
-                    .onSubmit { finish(keeping: true) }
-                    .onExitCommand { finish(keeping: false) }
-                    .onChange(of: editing) { _, now in if !now { finish(keeping: true) } }
-            } else {
-                Text(text)
-                    .foregroundStyle(isEdited ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { if canEdit { draft = text } }
-            }
-        }
-        .help(help)
-    }
-
-    private func finish(keeping: Bool) {
-        guard let value = draft else { return }
-        draft = nil
-        if keeping, value.trimmingCharacters(in: .whitespaces) != text { commit(value) }
-    }
-}
-
 /// 表の上の「ふち」の効果(macOS 26 から)を消す。段のバーの下に暗い帯が掛かり、表の見出しが読めなくなる
 /// ―― 窓の上に自前の帯(段のバー)を置いているため(2026-09-21、実機で確かめた)。
-private struct HideTopScrollEdgeEffect: ViewModifier {
+struct HideTopScrollEdgeEffect: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) { content.scrollEdgeEffectHidden(true, for: .top) } else { content }
     }
