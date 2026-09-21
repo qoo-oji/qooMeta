@@ -29,8 +29,9 @@ let usage = """
       シリーズが付いた本の一覧を CSV で書く(名前を含む)
   qoometa formats --in <提案.json> [--preset <名前>]
       同梱のファイル名フォーマット(新しい書き方)で名前を読み、型ごとの一致冊数と合わなかった冊数を出す(名前は出さない)
-  qoometa bench --in <提案.json>
-      一括の提案と、1 冊の追加・変更にかかる時間を測る(名前は出さない)
+  qoometa bench --in <提案.json> | --synthetic N [--no-authors]
+      一括の提案と、1 冊の追加・変更にかかる時間、索引が持つメモリを測る(名前は出さない)。
+      --synthetic は合成した名前 N 冊で測る(--no-authors は、全冊が 1 つの単位になる、いちばん重い形)
   qoometa evaluate --corpus <正解付き.jsonl> [--examples N]
       正解付きのデータ(author / title / series)で提案を採点する
   qoometa rules test [<例.json> …] [--only <例の ID>] [--verbose]
@@ -59,7 +60,7 @@ struct Arguments {
             let a = raw[i]
             if a.hasPrefix("--") {
                 let name = String(a.dropFirst(2))
-                if ["rules-only", "allow-in-repo", "verbose", "explain"].contains(name) {
+                if ["rules-only", "allow-in-repo", "verbose", "explain", "no-authors"].contains(name) {
                     flags.insert(name)
                 } else if i + 1 < raw.count {
                     options[name] = raw[i + 1]
@@ -241,8 +242,15 @@ func run() async throws {
         FormatReport.lines(names, presets: rules.formats).forEach { print($0) }
 
     case "bench":
-        let doc = try InputDocument.load(try args.require("in"))
-        try await bench(doc, proposer: try makeProposer(rules, presetsPath: args.options["presets"]))
+        let proposer = try makeProposer(rules, presetsPath: args.options["presets"])
+        // --synthetic N: 合成した名前 N 冊で測る(蔵書が要らない。冊数を変えて、時間とメモリの伸び方を見る)。
+        // --no-authors を付けると、書き手の読めない名前にする(全冊が 1 つの単位になる、いちばん重い形)。
+        if let count = args.options["synthetic"].flatMap(Int.init) {
+            try await bench(syntheticInputs(count, withAuthors: !args.flags.contains("no-authors")), proposer: proposer)
+        } else {
+            let doc = try InputDocument.load(try args.require("in"))
+            try await bench(doc.inputs(useAI: false, presets: proposer.presets), proposer: proposer)
+        }
 
     case "evaluate":
         // 正解付きのデータ(1 行 1 冊の JSON)で提案を採点する。出すのは集計だけ。
@@ -306,8 +314,30 @@ func makeProposer(_ rules: CompiledRules, presetsPath: String? = nil) throws -> 
 }
 
 /// 一括の提案と、1 冊の追加・変更にかかる時間(docs/api.md「性能」の目安を確かめる)。
-func bench(_ doc: InputDocument, proposer: Proposer) async throws {
-    let inputs = doc.inputs(useAI: false, presets: proposer.presets)
+/// 合成した名前(測るためだけのもの。実在の名前を含まない)。
+func syntheticInputs(_ count: Int, withAuthors: Bool) -> [BookInput] {
+    let kana = Array("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワ")
+    var state: UInt64 = 0x9E3779B97F4A7C15
+    func next(_ bound: Int) -> Int {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return Int((state >> 33) % UInt64(bound))
+    }
+    let tails = ["", " 2", " 3", " 第4巻", " 上", " 番外編", " 総集編"]
+    return (0..<count).map { i in
+        let title = String((0..<(3 + next(6))).map { _ in kana[next(kana.count)] })
+        let author = withAuthors ? "[合成\(i % max(1, count / 13))] " : ""
+        return BookInput(id: "\(i).cbz", name: "\(author)\(title)\(tails[next(tails.count)])", preset: "doujinshi")
+    }
+}
+
+/// いま生きている割り当ての量(MB)。
+func liveMegabytes() -> Double {
+    var stats = malloc_statistics_t()
+    malloc_zone_statistics(nil, &stats)
+    return Double(stats.size_in_use) / 1_048_576
+}
+
+func bench(_ inputs: [BookInput], proposer: Proposer) async throws {
     func seconds(_ body: () throws -> Void) rethrows -> Double {
         let start = Date()
         try body()
@@ -323,10 +353,12 @@ func bench(_ doc: InputDocument, proposer: Proposer) async throws {
     try await index.apply(inputs.map { .upsert($0) })
     let filled = Date().timeIntervalSince(fill)
     // アプリが一覧を開くときの道(並列)と、規則を替えたときの読み直し。
+    let beforeLoad = liveMegabytes()
     let loadedIndex = ProposalIndex(rules: proposer.rules, dictionaries: proposer.dictionaries)
     let loadStart = Date()
     try await loadedIndex.load(inputs)
     let loaded = Date().timeIntervalSince(loadStart)
+    let indexMegabytes = liveMegabytes() - beforeLoad
     let reloadStart = Date()
     try await loadedIndex.reload(rules: proposer.rules, dictionaries: proposer.dictionaries)
     let reloaded = Date().timeIntervalSince(reloadStart)
@@ -344,6 +376,8 @@ func bench(_ doc: InputDocument, proposer: Proposer) async throws {
     print(String(format: "1 冊の変更(%d 回): 中央値 %.1f ミリ秒、最大 %.1f ミリ秒", single.count,
                  (single.isEmpty ? 0 : single[single.count / 2]) * 1000, (single.last ?? 0) * 1000))
     print(String(format: "索引へまとめて入れる(並列)%.2f 秒、規則を替えない読み直し %.2f 秒", loaded, reloaded))
+    print(String(format: "索引が持つ量: %.1f MB(1 冊あたり %.2f KB)", indexMegabytes,
+                 inputs.isEmpty ? 0 : indexMegabytes * 1024 / Double(inputs.count)))
     print("索引と一括の結果が同じ: \(same && sameLoaded ? "はい" : "いいえ")")
 }
 

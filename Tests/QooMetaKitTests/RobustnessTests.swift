@@ -113,3 +113,54 @@ import Testing
         for probe in ["qwzx", "theee", "zzzzzz"] { #expect(english.contains(probe) == reference.contains(probe)) }
     }
 }
+
+/// 冊数が増えても、計算の時間が冊数の 2 乗で伸びない。
+///
+/// **秒数では確かめない**(機械で変わる)。冊数を 4 倍にしたときの時間の比を見る: 冊数に比例するなら 4 倍前後、
+/// 2 乗なら 16 倍。書き手の読めない名前(全冊が 1 つの単位)が、いちばん伸びやすい形(2026-09-21 の監査で 2 乗だった所)。
+@Suite(.serialized) struct ScalingTests {
+    static func names(_ count: Int) -> [BookInput] {
+        let kana = Array("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワ")
+        var state: UInt64 = 42
+        func next(_ bound: Int) -> Int {
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            return Int((state >> 33) % UInt64(bound))
+        }
+        let tails = ["", " 2", " 3", " 第4巻", " 上", " 番外編", " 総集編"]
+        return (0..<count).map { i in
+            BookInput(id: "\(i)", name: String((0..<(3 + next(6))).map { _ in kana[next(kana.count)] }) + tails[next(tails.count)],
+                      preset: "doujinshi")
+        }
+    }
+
+    static func seconds(_ body: () -> Void) -> Double {
+        // 3 回のうち、いちばん速い回(ほかのテストと並んで走るので、遅いほうへはぶれる)。
+        (0..<3).map { _ in let start = Date(); body(); return Date().timeIntervalSince(start) }.min()!
+    }
+
+    @Test func oneHugeUnitDoesNotGrowQuadratically() {
+        let small = Self.names(2_000), large = Self.names(8_000)
+        _ = proposeSync(small, rules: .builtin, dictionaries: [:])  // 最初の 1 回は、規則の組み立てなどが乗る
+        let a = Self.seconds { _ = proposeSync(small, rules: .builtin, dictionaries: [:]) }
+        let b = Self.seconds { _ = proposeSync(large, rules: .builtin, dictionaries: [:]) }
+        #expect(b / a < 9, "4 倍の冊数で \(b / a) 倍の時間(2 乗なら 16 倍)")
+    }
+
+    /// 1 冊の変更は、蔵書の大きさに比例しない(索引の状態を丸ごと写していた頃は、比例していた)。
+    @Test func oneChangeDoesNotScaleWithTheLibrary() async throws {
+        func median(_ count: Int) async throws -> Double {
+            let books = (0..<count).map { BookInput(id: "\($0)", name: "[架空の書き手\($0 / 3)] 合成の題\($0 / 3) 第\($0 % 3 + 1)巻", preset: "doujinshi") }
+            let index = ProposalIndex(rules: .builtin, dictionaries: [:])
+            try await index.load(books)
+            var times: [Double] = []
+            for book in books.prefix(60) {
+                let start = Date()
+                try await index.apply([.upsert(book)])
+                times.append(Date().timeIntervalSince(start))
+            }
+            return times.sorted()[times.count / 2]
+        }
+        let a = try await median(2_000), b = try await median(20_000)
+        #expect(b / a < 4, "10 倍の冊数で \(b / a) 倍の時間")
+    }
+}

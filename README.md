@@ -77,6 +77,7 @@ $Q export --in "$OUT/proposals.json" --format qooviewer --out "$OUT/qooviewer.js
 $Q judge --in "$OUT/proposals.json"                            # 任意: 端末内モデルでシリーズの組を判定
 $Q evaluate --corpus <正解付き.jsonl>                           # 公開データで規則を採点
 $Q bench --in "$OUT/proposals.json"                            # 一括の提案と 1 冊の変更にかかる時間
+$Q bench --synthetic 20000 [--no-authors]                     # 同じものを合成した名前で(蔵書が要らない。索引のメモリも出る)
 $Q rules test [<例.json> …]                                    # 例のファイル(架空の名前)で規則を確かめる
 $Q rules validate <変更.json>                                  # 規則の変更(差分)を確かめる
 $Q rules show --rules <変更.json>                              # 既定値に変更を重ねた結果
