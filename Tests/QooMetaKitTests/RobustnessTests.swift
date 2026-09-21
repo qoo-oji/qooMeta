@@ -87,3 +87,29 @@ import Testing
         await #expect(throws: CancellationError.self) { try await task.value }
     }
 }
+
+/// 語の集合(詰めて持つ形)は、文字列の集合と同じ答えを返す。
+@Suite struct WordSetTests {
+    @Test func packedWordsAnswerLikeASet() {
+        let words = ["Moon", "garden", "GARDEN", "a", "zebra", "naïve", "月", "moons", ""]
+        let packed = WordSet(words), reference = Set(words.map { $0.lowercased() })
+        #expect(packed.count == reference.count)
+        for probe in reference.union(["moo", "moonx", "gardens", "z", "zebr", "月の", "naive", "b"]) {
+            #expect(packed.contains(probe) == reference.contains(probe), "\(probe)")
+        }
+        // 1 行 1 語のテキストから作っても同じ(改行の形が混ざっていても)。
+        let lines = WordSet(lines: Data("Moon\ngarden\r\nGARDEN\n\na\nzebra\nnaïve\n月\nmoons".utf8))
+        #expect(lines == WordSet(words.filter { !$0.isEmpty }))
+        #expect(WordSet([]).count == 0 && !WordSet([]).contains("a"))
+    }
+
+    /// macOS の英単語の一覧(あれば)。読んだ語は、どれも引ける。
+    @Test func theSystemWordListIsFullySearchable() throws {
+        guard let english = SystemDictionaries.english,
+              let text = try? String(contentsOfFile: SystemDictionaries.englishPath, encoding: .utf8) else { return }
+        let reference = Set(text.split(separator: "\n").map { $0.lowercased() })
+        #expect(english.count == reference.count)
+        for word in reference where word.count % 7 == 0 { #expect(english.contains(word), "\(word)") }
+        for probe in ["qwzx", "theee", "zzzzzz"] { #expect(english.contains(probe) == reference.contains(probe)) }
+    }
+}

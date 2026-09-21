@@ -19,7 +19,10 @@ struct DetailView: View {
             Form {
                 Section {
                     if books.count == 1, let book = books.first {
-                        FileNameView(book: book, formats: workspace.formats(for: book.id))
+                        // 型で読んだ結果は行に持たせていないので、出す 1 冊だけここで読む。
+                        FileNameView(book: book, formats: workspace.formats(for: book.id),
+                                     reading: parseName(book.fileName, rules: workspace.rules,
+                                                        preset: workspace.presets.preset(for: book.id)))
                     } else {
                         Text("%lld books selected".ui(books.count)).font(.headline)
                     }
@@ -390,14 +393,15 @@ struct FlowLayout: Layout {
 struct FileNameView: View {
     let book: BookRow
     let formats: FilenameFormats
+    let reading: FormatReading
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(colored).font(.title3).textSelection(.enabled)
-            if let index = book.reading.formatIndex {
+            if let index = reading.formatIndex, formats.formats.indices.contains(index) {
                 Label("Format %1$lld: %2$@".ui(index + 1, formats.formats[index].text), systemImage: "checkmark.circle")
                     .font(.caption).foregroundStyle(.secondary)
-            } else if let near = book.reading.nearest {
+            } else if let near = reading.nearest, formats.formats.indices.contains(near.formatIndex) {
                 Label("Matched no format. The closest is format %1$lld (%2$@); it looked for the next fixed character at character %3$lld and did not find it. The whole name became a provisional title.".ui(near.formatIndex + 1, formats.formats[near.formatIndex].text, near.brokeAt + 1),
                       systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
@@ -405,15 +409,15 @@ struct FileNameView: View {
                 Label("Matched no format, and no format came close. The whole name became a provisional title.", systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
-            LegendView(words: Set(book.reading.spans.map(\.word)))
+            LegendView(words: Set(reading.spans.map(\.word)))
         }
     }
 
     var colored: AttributedString {
         let chars = Array(book.fileName)
         var word = [FormatWord?](repeating: nil, count: chars.count)
-        if book.reading.formatIndex != nil {
-            for span in book.reading.spans { for i in span.range { word[i] = span.word } }
+        if reading.formatIndex != nil {
+            for span in reading.spans { for i in span.range where i < chars.count { word[i] = span.word } }
         }
         var result = AttributedString()
         var i = 0

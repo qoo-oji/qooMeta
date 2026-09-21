@@ -37,7 +37,7 @@ struct WorkspaceView: View {
         }
         // 規則の窓で変えた内容を一覧へ届けるのは FlowView(この段が出ていないあいだの変更も届けるため)。
         .navigationTitle(workspace.hasUnsavedChanges ? "qooMeta (unsaved changes)" : "qooMeta")
-        .navigationSubtitle("%1$lld / %2$lld books".ui(workspace.visibleBooks.count, workspace.books.count))
+        .navigationSubtitle("%1$lld / %2$lld books".ui(workspace.visibleCount, workspace.books.count))
     }
 }
 
@@ -152,7 +152,7 @@ struct BookTableView: View {
     var body: some View {
         // 表は AppKit の NSTableView(`BookTable`。SwiftUI の Table をやめた理由はそちらに)。
         // 並べ替えた結果は Workspace が作り置きしている(ここで並べ替えると、描くたびに 1 万冊を並べ直すことになる)。
-        BookTable(rows: workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
+        BookTable(books: workspace.books, positions: workspace.visiblePositions, selection: $workspace.selection, sortOrder: $workspace.sortOrder,
                   canEdit: canEdit, isEdited: isEdited, help: help, commit: commit)
         .modifier(HideTopScrollEdgeEffect())
         .alert(item: $pendingSeries) { pending in

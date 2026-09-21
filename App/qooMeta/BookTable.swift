@@ -74,7 +74,10 @@ struct BookTable: NSViewRepresentable {
         }
     }
 
-    var rows: [BookRow]
+    /// 本の全体と、そのうち一覧に出す本の位置(並べ替え・絞り込み済み)。**行の写しは受け取らない**
+    /// (全冊ぶんの行をもう 1 組作らないため。`Workspace.visiblePositions`)。
+    var books: [BookRow]
+    var positions: [Int]
     @Binding var selection: Set<BookRow.ID>
     @Binding var sortOrder: [KeyPathComparator<BookRow>]
     var canEdit: (BookMetadata.Field, BookRow) -> Bool
@@ -191,13 +194,16 @@ struct BookTable: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSMenuDelegate {
         var parent: BookTable
         weak var table: NSTableView?
-        private(set) var rows: [BookRow] = []
+        private var books: [BookRow] = []
+        private var positions: [Int] = []
+        private func book(_ row: Int) -> BookRow { books[positions[row]] }
+        private var rowCount: Int { positions.count }
         /// 表のほうを書き換えている最中(その結果として届く知らせで、持ちものを書き戻さない)。
         private var isApplying = false
         /// 書き換えの最中のセル。
         private(set) var editing: (bookID: String, field: BookMetadata.Field, original: String, cell: CellView)?
         /// 書き換えの最中に届いた中身(入力を途中で消さないよう、終わってから入れる)。
-        private var pendingRows: [BookRow]?
+        private var pendingRows: (books: [BookRow], positions: [Int])?
         /// これまでに作ったセルの数(使い回せているかを確かめるため)。
         private(set) var cellsCreated = 0
 
@@ -219,21 +225,24 @@ struct BookTable: NSViewRepresentable {
                 table.sortDescriptors = [NSSortDescriptor(key: Column.fileName.identifier.rawValue, ascending: true)]
             }
             if editing != nil {
-                pendingRows = parent.rows
+                pendingRows = (parent.books, parent.positions)
             } else {
-                setRows(parent.rows, in: table)
+                setRows(parent.books, parent.positions, in: table)
             }
             select(parent.selection, in: table)
         }
 
         /// 行を入れ替える。**並びが同じなら、変わった行だけを描き直す**(1 冊直すたびに 1 万行を読み直さない)。
-        private func setRows(_ new: [BookRow], in table: NSTableView) {
-            guard new != rows else { return }
-            let old = rows
-            rows = new
+        private func setRows(_ newBooks: [BookRow], _ newPositions: [Int], in table: NSTableView) {
+            let sameOrder = newPositions == positions
+            // 配列の == は、同じ中身を指していればすぐ終わる(選択が変わっただけのとき)。
+            guard !(sameOrder && newBooks == books) else { return }
+            let oldBooks = books
+            books = newBooks
+            positions = newPositions
             indexByID = nil
-            if old.count == new.count, zip(old, new).allSatisfy({ $0.id == $1.id }) {
-                let changed = IndexSet(new.indices.filter { old[$0] != new[$0] })
+            if sameOrder, oldBooks.count == newBooks.count {
+                let changed = IndexSet(newPositions.indices.filter { oldBooks[newPositions[$0]] != newBooks[newPositions[$0]] })
                 table.reloadData(forRowIndexes: changed, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
             } else {
                 table.reloadData()
@@ -244,7 +253,7 @@ struct BookTable: NSViewRepresentable {
 
         private func index(of id: String) -> Int? {
             if indexByID == nil {
-                indexByID = Dictionary(rows.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
+                indexByID = Dictionary(positions.enumerated().map { (books[$0.element].id, $0.offset) }, uniquingKeysWith: { a, _ in a })
             }
             return indexByID?[id]
         }
@@ -256,10 +265,10 @@ struct BookTable: NSViewRepresentable {
 
         // MARK: 中身
 
-        func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
+        func numberOfRows(in tableView: NSTableView) -> Int { rowCount }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-            guard let tableColumn, let column = Column(tableColumn.identifier), rows.indices.contains(row) else { return nil }
+            guard let tableColumn, let column = Column(tableColumn.identifier), row >= 0, row < rowCount else { return nil }
             let cell: CellView
             if let reused = tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil) as? CellView {
                 cell = reused
@@ -268,7 +277,7 @@ struct BookTable: NSViewRepresentable {
                 cell.identifier = tableColumn.identifier
                 cellsCreated += 1
             }
-            let book = rows[row]
+            let book = book(row)
             cell.setEditing(false)
             cell.label.stringValue = column.text(of: book)
             switch column {
@@ -289,7 +298,7 @@ struct BookTable: NSViewRepresentable {
 
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard !isApplying, let table else { return }
-            let ids = Set(table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0].id : nil })
+            let ids = Set(table.selectedRowIndexes.compactMap { $0 < rowCount ? book($0).id : nil })
             if parent.selection != ids { parent.selection = ids }
         }
 
@@ -312,11 +321,11 @@ struct BookTable: NSViewRepresentable {
         /// そのセルの書き換えに入る。読むだけの列(ファイル名・巻数の並べ替え用)と、いまは直せない欄では何もしない。
         @discardableResult
         func beginEditing(row: Int, column: Int) -> Bool {
-            guard let table, editing == nil, rows.indices.contains(row), table.tableColumns.indices.contains(column),
+            guard let table, editing == nil, row >= 0, row < rowCount, table.tableColumns.indices.contains(column),
                   case .field(let field)? = Column(table.tableColumns[column].identifier),
-                  parent.canEdit(field, rows[row]),
+                  parent.canEdit(field, book(row)),
                   let cell = table.view(atColumn: column, row: row, makeIfNecessary: true) as? CellView else { return false }
-            editing = (rows[row].id, field, cell.label.stringValue, cell)
+            editing = (book(row).id, field, cell.label.stringValue, cell)
             cell.setEditing(true)
             cell.label.delegate = self
             guard table.window?.makeFirstResponder(cell.label) == true else {
@@ -352,12 +361,12 @@ struct BookTable: NSViewRepresentable {
             edit.cell.label.stringValue = edit.original
             if keeping, value.trimmingCharacters(in: .whitespaces) != edit.original,
                let row = index(of: edit.bookID) {
-                parent.commit(edit.field, value, rows[row])
+                parent.commit(edit.field, value, book(row))
             }
             if let pending = pendingRows, let table {
                 pendingRows = nil
                 isApplying = true
-                setRows(pending, in: table)
+                setRows(pending.books, pending.positions, in: table)
                 select(parent.selection, in: table)
                 isApplying = false
             }

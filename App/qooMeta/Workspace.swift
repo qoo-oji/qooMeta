@@ -10,8 +10,9 @@ struct BookRow: Identifiable, Hashable, Sendable {
     let id: String
     /// 拡張子を除いたファイル名(型で読んだもの。隠せない列)。
     let fileName: String
-    /// 型で読んだ結果(提案。「提案に戻す」の戻り先)。
-    let reading: FormatReading
+    /// 名前が、どれかの型に合ったか。**型で読んだ結果そのもの(欄の位置など)は持たない** ―― 要るのは詳細に出す
+    /// 1 冊ぶんだけで、その場で読み直せば済む。全冊ぶんを行に持つと、1 冊あたり 0.5 KB ほどになる。
+    let matchedFormat: Bool
     /// 今の値(提案 + 利用者が直した欄。シリーズと巻は中核が導いたもの)。
     var metadata: BookMetadata
     /// 利用者の修正(欄・シリーズ・巻)。
@@ -21,7 +22,11 @@ struct BookRow: Identifiable, Hashable, Sendable {
 
     /// 並べ替えの鍵(1 冊につき 1 度だけ作る)。**比べるたびに作らない** ―― 一覧の並べ替えは 1 万冊なら
     /// 十数万回の比較になり、そのたびに文字列を組み立てると画面が固まる(2026-09-21、利用者の報告)。
-    private let sortKeys: [BookMetadata.Field: String]
+    /// 欄の値そのままでは並べられない 3 つだけを持つ(著者は並びをつないだもの、巻は数の順、シリーズは シリーズ → 巻)。
+    /// ほかの欄は、値がそのまま鍵になる。欄ごとの辞書にしていた頃は、1 冊ごとに辞書 1 つぶんの場所を取っていた。
+    private let authorsKey: String
+    private let volumeKey: String
+    private let seriesKey: String
     /// 検索の当たり先(ファイル名とすべての欄をつないだもの)。これも 1 度だけ作る
     /// ―― 打つたびに 1 万冊ぶんの欄を組み立て直さないため。
     private let searchText: String
@@ -41,12 +46,20 @@ struct BookRow: Identifiable, Hashable, Sendable {
         self.fileRank = fileRank
         id = proposal.id
         fileName = proposal.name
-        reading = proposal.reading
+        matchedFormat = proposal.reading.formatIndex != nil
         metadata = proposal.metadata
         self.confirmation = confirmation
         seriesID = proposal.seriesID
         flags = proposal.flags
-        sortKeys = Self.sortKeys(of: proposal.metadata)
+        authorsKey = proposal.metadata.authors.count == 1 ? proposal.metadata.authors[0]
+            : proposal.metadata.authors.joined(separator: "、")
+        if let n = proposal.metadata.volumeSort {
+            volumeKey = String(format: "%012.3f", n)
+        } else {
+            volumeKey = proposal.metadata.volume.isEmpty ? "\u{10FFFF}" : "~" + proposal.metadata.volume
+        }
+        seriesKey = proposal.metadata.series.isEmpty
+            ? "\u{10FFFF}" + proposal.metadata.title : proposal.metadata.series + "\u{1}" + volumeKey
         searchText = ([proposal.name] + BookMetadata.Field.allCases.flatMap { proposal.metadata.values($0) })
             .joined(separator: "\u{1}")
         var hasher = Hasher()
@@ -60,23 +73,6 @@ struct BookRow: Identifiable, Hashable, Sendable {
 
     /// 検索の語を含むか。
     func matches(_ query: String) -> Bool { searchText.localizedCaseInsensitiveContains(query) }
-
-    /// 欄ごとの並べ替えの鍵。シリーズは シリーズ → 巻(シリーズの無い本は後ろ)、巻は数の順
-    /// (数に読めない表記は後ろ)。
-    private static func sortKeys(of metadata: BookMetadata) -> [BookMetadata.Field: String] {
-        var keys: [BookMetadata.Field: String] = [:]
-        for field in BookMetadata.Field.allCases {
-            keys[field] = metadata.values(field).joined(separator: "、")
-        }
-        if let n = metadata.volumeSort {
-            keys[.volume] = String(format: "%012.3f", n)
-        } else {
-            keys[.volume] = metadata.volume.isEmpty ? "\u{10FFFF}" : "~" + metadata.volume
-        }
-        keys[.series] = metadata.series.isEmpty
-            ? "\u{10FFFF}" + metadata.title : metadata.series + "\u{1}" + (keys[.volume] ?? "")
-        return keys
-    }
 
     /// 利用者が直した欄。
     var edited: Set<BookMetadata.Field> { Set(confirmation.fields.values.keys) }
@@ -99,8 +95,15 @@ struct BookRow: Identifiable, Hashable, Sendable {
         metadata.volumeSort.map(BookMetadata.volumeSortText) ?? ""
     }
 
-    /// 並べ替えの鍵(組み立て済みのものを引くだけ)。
-    subscript(sortKey field: BookMetadata.Field) -> String { sortKeys[field] ?? "" }
+    /// 並べ替えの鍵。シリーズは シリーズ → 巻(シリーズの無い本は後ろ)、巻は数の順(数に読めない表記は後ろ)。
+    subscript(sortKey field: BookMetadata.Field) -> String {
+        switch field {
+        case .authors: authorsKey
+        case .volume: volumeKey
+        case .series: seriesKey
+        default: metadata[field]
+        }
+    }
 }
 
 /// 絞り込みの値: 値か「(空)」。
@@ -179,7 +182,11 @@ final class Workspace {
     /// 一覧にいま出す本(絞り込み + 並べ替えの結果)。**画面を描くたびに作り直さない**
     /// ―― 1 万冊の絞り込みと並べ替えを毎フレーム行うと、計算の最中に列を動かしただけで画面が固まる
     /// (2026-09-21、利用者の報告)。中身が変わったとき(本・絞り込み・並べ替え)だけ作り直す。
-    private(set) var rows: [BookRow] = []
+    ///
+    /// **持つのは `books` の中の位置だけ**(行の写しをもう 1 組は持たない)。
+    private(set) var visiblePositions: [Int] = []
+    /// 一覧に出ている行(確かめ用。画面は位置の並びを使う)。
+    var rows: [BookRow] { visiblePositions.map { books[$0] } }
     /// 絞り込みの帯に出す、値ごとの冊数。これも作り置き。
     private(set) var genreValues: [(key: ValueKey, count: Int)] = []
     private(set) var authorValues: [(key: ValueKey, count: Int)] = []
@@ -203,7 +210,7 @@ final class Workspace {
             case .all: true
             case .notInSeries: book.seriesID == nil
             case .noVolume: book.metadata.volume.isEmpty
-            case .unmatched: book.reading.formatIndex == nil
+            case .unmatched: !book.matchedFormat
             case .edited: !book.edited.isEmpty
             case .confirmed: book.hasConfirmedSeries
             }
@@ -606,7 +613,7 @@ final class Workspace {
     }
 
     /// 一覧に出す本(作り置き)。
-    var visibleBooks: [BookRow] { rows }
+    var visibleCount: Int { visiblePositions.count }
 
     private func matchesGenre(_ book: BookRow) -> Bool {
         switch genreFilter {
@@ -677,20 +684,19 @@ final class Workspace {
         pendingSearch?.cancel()
         let query = searchText.trimmingCharacters(in: .whitespaces)
         let plain = genreFilter == nil && authorFilter == nil && stateFilter == .all && query.isEmpty
-        rows = sortedPositions.compactMap { position in
+        visiblePositions = plain ? sortedPositions : sortedPositions.filter { position in
             let book = books[position]
-            if plain { return book }
-            guard matchesGenre(book) else { return nil }
-            if let a = authorFilter, !Self.matches(book.metadata.authors, a) { return nil }
-            guard stateFilter.contains(book) else { return nil }
-            return query.isEmpty || book.matches(query) ? book : nil
+            guard matchesGenre(book) else { return false }
+            if let a = authorFilter, !Self.matches(book.metadata.authors, a) { return false }
+            guard stateFilter.contains(book) else { return false }
+            return query.isEmpty || book.matches(query)
         }
         selectionChanged()
     }
 
     /// 選んだ本のうち、一覧に出ているものだけ(値の列や検索で隠れた本を、見えないまま書き換えないため)。
     private func selectionChanged() {
-        let picked = selection.isEmpty ? [] : rows.filter { selection.contains($0.id) }
+        let picked = selection.isEmpty ? [] : visiblePositions.lazy.map { self.books[$0] }.filter { self.selection.contains($0.id) }
         if picked.map(\.id) != selectedBooks.map(\.id) { selectionToken += 1 }
         if picked != selectedBooks { selectedBooks = picked }
     }

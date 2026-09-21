@@ -5,18 +5,77 @@ import Foundation
 // MARK: - 語彙と辞書
 
 /// 語の集合(比べる形にそろえて持つ)。同じ中身なら等しい。
+///
+/// **語を 1 本のバイトの並びに詰めて持ち、二分探索で引く。** 文字列の集合(`Set<String>`)で持つと、macOS の英単語の
+/// 一覧(約 24 万語)が 12 MB を超え、アプリも CLI も起動のたびにそれを抱えていた(2026-09-21 の計測。詰めると 3 MB 台)。
+/// 引くのは英字だけのタイトルを見るときだけなので、二分探索で足りる。
 public struct WordSet: Sendable, Hashable {
-    let words: Set<String>
+    /// 語(小文字、UTF-8)を、バイトの順に並べて区切りなしでつないだもの。
+    private let bytes: [UInt8]
+    /// 語ごとの始まりの位置(最後に、全体の長さ)。
+    private let starts: [UInt32]
 
     public init(_ words: some Sequence<String>) {
-        self.words = Set(words.map { $0.lowercased() })
+        self.init(slices: words.map { Array($0.lowercased().utf8) })
     }
 
-    public static func == (a: WordSet, b: WordSet) -> Bool { a.words.count == b.words.count && a.words == b.words }
-    public func hash(into hasher: inout Hasher) { hasher.combine(words.count) }
+    /// 1 行 1 語のテキストから作る(大きな一覧向け。語ごとに文字列を作らない)。
+    public init(lines data: Data) {
+        var slices: [[UInt8]] = []
+        var line: [UInt8] = []
+        var isASCII = true
+        func flush() {
+            guard !line.isEmpty else { return }
+            // ASCII はその場で小文字に。ほかの字を含む行だけ、文字列として小文字にする。
+            slices.append(isASCII ? line : Array(String(decoding: line, as: UTF8.self).lowercased().utf8))
+            line.removeAll(keepingCapacity: true)
+            isASCII = true
+        }
+        for byte in data {
+            if byte == 0x0A || byte == 0x0D { flush(); continue }
+            if byte >= 0x80 { isASCII = false }
+            line.append((0x41...0x5A).contains(byte) ? byte + 0x20 : byte)
+        }
+        flush()
+        self.init(slices: slices)
+    }
 
-    public var count: Int { words.count }
-    func contains(_ word: String) -> Bool { words.contains(word) }
+    private init(slices: [[UInt8]]) {
+        let sorted = slices.sorted { $0.lexicographicallyPrecedes($1) }
+        var bytes: [UInt8] = [], starts: [UInt32] = []
+        bytes.reserveCapacity(sorted.reduce(0) { $0 + $1.count })
+        var previous: [UInt8]?
+        for word in sorted where word != previous {
+            starts.append(UInt32(bytes.count))
+            bytes += word
+            previous = word
+        }
+        starts.append(UInt32(bytes.count))
+        self.bytes = bytes
+        self.starts = starts
+    }
+
+    public var count: Int { starts.count - 1 }
+
+    /// 語の全体(要る所でだけ文字列に戻す)。
+    var allWords: [String] {
+        (0..<count).map { String(decoding: bytes[Int(starts[$0])..<Int(starts[$0 + 1])], as: UTF8.self) }
+    }
+
+    /// その語があるか(渡す側が小文字にそろえる。前からの決まり)。
+    func contains(_ word: String) -> Bool {
+        var word = word
+        return word.withUTF8 { target in
+            var low = 0, high = count
+            while low < high {
+                let middle = (low + high) / 2
+                let candidate = bytes[Int(starts[middle])..<Int(starts[middle + 1])]
+                if candidate.elementsEqual(target) { return true }
+                if candidate.lexicographicallyPrecedes(target) { low = middle + 1 } else { high = middle }
+            }
+            return false
+        }
+    }
 }
 
 // MARK: - 入力

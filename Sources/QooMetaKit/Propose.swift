@@ -109,8 +109,9 @@ struct PreparedBook: Sendable {
     let core: CoreBook
     /// 名前を型で読んだ結果(確定した欄は重ねていない)。
     let reading: FormatReading
-    /// 読んだ欄に、確定した欄を重ねたもの(シリーズと巻数は、単位の計算のあとで入れる)。
-    let metadata: BookMetadata
+    /// 読んだ欄に、確定した欄を重ねたもの(シリーズと巻数は、単位の計算のあとで入れる)。**持たずに、その場で作る**
+    /// ―― ほとんどの本は確定した欄が無く、読んだ欄と同じ。全冊ぶんの写しを索引に持ち続けない。
+    var metadata: BookMetadata { input.confirmation.fields.applied(to: reading.metadata) }
     let unitKey: String
 }
 
@@ -223,7 +224,7 @@ extension RuleEngine {
                             confirmation: confirmation,
                             volumeHead: volumeHead(compareTitle: compareText),
                             compareClaims: words.claims(in: compareText))
-        return PreparedBook(input: input, core: core, reading: reading, metadata: metadata, unitKey: unitKey(core))
+        return PreparedBook(input: input, core: core, reading: reading, unitKey: unitKey(core))
     }
 
     /// 型が読んだシリーズ・巻数を、確定した内容に重ねる(利用者の確定が優先)。どちらも無ければそのまま。

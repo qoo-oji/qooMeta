@@ -136,7 +136,7 @@ struct Anonymizer {
         let builtIn = "年月号巻話章弾部幕集版編篇第上中下前後其"
         keepCharacters = Set(VolumeExtractor.kanjiDigits + builtIn + "αβγδεζηθικλμνξοπρστυφχψω")
         dictionary = dictionaries["english"]
-        englishByLength = Dictionary(grouping: (dictionary?.words ?? []).filter { $0.allSatisfy { $0.isASCII && $0.isLetter } }.sorted(),
+        englishByLength = Dictionary(grouping: (dictionary?.allWords ?? []).filter { $0.allSatisfy { $0.isASCII && $0.isLetter } }.sorted(),
                                      by: \.count)
         // 置き換え先の文字。残す語・残す文字に使われている文字は避ける(置き換えで規則の語ができないように)。
         let avoid = Set(words.joined()).union(keepCharacters)

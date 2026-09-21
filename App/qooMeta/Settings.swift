@@ -56,8 +56,15 @@ final class AppSettings {
 
     /// 画面で変えた規則(差分を、操作しやすい形で)。
     var changes: RuleChanges {
-        rulesDiff.isEmpty ? .none : ((try? RuleChanges(data: Data(rulesDiff.utf8))) ?? .none)
+        guard !rulesDiff.isEmpty else { return .none }
+        // 規則の窓は、描くたびに何度もこれを読む。差分の文字が同じあいだは、JSON を読み直さない。
+        if let parsed = parsedChanges, parsed.text == rulesDiff { return parsed.changes }
+        let changes = (try? RuleChanges(data: Data(rulesDiff.utf8))) ?? .none
+        parsedChanges = (rulesDiff, changes)
+        return changes
     }
+
+    @ObservationIgnored private var parsedChanges: (text: String, changes: RuleChanges)?
 
     /// 規則の半分(ファイル名の解析 / シリーズと巻数)だけを、書いた JSON で差し替える。
     @discardableResult

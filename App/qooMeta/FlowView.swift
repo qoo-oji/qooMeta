@@ -158,7 +158,7 @@ private struct ChooseBooksStep: View {
                     if let picked = model.picked {
                         GroupBox {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("%lld books found".ui(picked.files.count)).font(.headline)
+                                Text("%lld books found".ui(picked.books.count)).font(.headline)
                                 Text(verbatim: picked.root.path).font(.caption).foregroundStyle(.secondary)
                                     .lineLimit(2).truncationMode(.middle).textSelection(.enabled)
                                 Divider()
@@ -211,7 +211,7 @@ private struct ChoosePresetStep: View {
                     }
                     if model.isFitting { ProgressView().controlSize(.small) }
                     ForEach(model.presetFits) { fit in
-                        PresetFitRow(fit: fit, total: model.picked?.files.count ?? 0,
+                        PresetFitRow(fit: fit, total: model.picked?.books.count ?? 0,
                                      selected: model.chosenPreset == fit.id) { model.chosenPreset = fit.id }
                     }
                     Text("Books that fit no shape keep their whole name as a provisional title. You can fix them in the next step, or change how the names are read.")

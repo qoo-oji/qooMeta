@@ -124,7 +124,9 @@ final class AppModel {
     /// 段 1 で選んだもの。
     struct Picked {
         var root: URL
-        var files: [ScannedFile]
+        /// 見つけた本(ID・名前・フォルダの本か)。**走査の結果そのもの(パス・日付・ファイルノード)は持ち続けない**
+        /// ―― 段 2 から先で使うのはこれだけで、走査の結果は 1 冊あたりその数倍の場所を取る。
+        var books: [Workfile.Book]
         /// 種類ごとの冊数(選んだものが思ったとおりかを、冊数で確かめてもらう)。
         var kinds: [(name: String, count: Int)]
     }
@@ -190,7 +192,8 @@ final class AppModel {
         let files = DemoData.files.map {
             ScannedFile(path: root + "/" + $0.id, relativePath: $0.id, baseName: $0.name, fileExtension: "cbz")
         }
-        picked = Picked(root: URL(fileURLWithPath: root), files: files,
+        picked = Picked(root: URL(fileURLWithPath: root),
+                        books: files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName, isFolder: $0.isFolder) },
                         kinds: [(name: "CBZ", count: files.count)])
         PickedForRules.shared.set(files.map(\.baseName))
         go(to: .parse)
@@ -270,7 +273,8 @@ final class AppModel {
             }
             var counts: [String: Int] = [:]
             for file in found.files { counts[file.isFolder ? "Folders".ui : file.fileExtension.uppercased(), default: 0] += 1 }
-            picked = Picked(root: found.root, files: found.files,
+            picked = Picked(root: found.root,
+                            books: found.files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName, isFolder: $0.isFolder) },
                             kinds: counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
                                 .map { (name: $0.key, count: $0.value) })
             // 選んだ名前は、ファイル名解析の窓でも使う(直した効果を、その蔵書の名前で見せるため)。
@@ -297,7 +301,7 @@ final class AppModel {
         isFitting = true
         defer { if round == fitRound { isFitting = false } }
         let entries = settings.rules.presetCatalog.entries
-        let names = picked.files.map(\.baseName)
+        let names = picked.books.map(\.name)
         let formats = settings.rules.formats
         // **中身の変わっていないルールセットは数え直さない。** 段を行き来するたび・規則を 1 つ直すたびに、全部の
         // ルールセットで全冊を読み直していた。鍵は、読み方を決めるもの(型の並びと、`@volume` が使う巻の読み手)と、名前の顔ぶれ。
@@ -362,8 +366,7 @@ final class AppModel {
         Task {
             isOpening = true
             defer { isOpening = false }
-            let books = picked.files.map { Workfile.Book(id: $0.relativePath, name: $0.baseName, isFolder: $0.isFolder) }
-            let file = Workfile(rootPath: picked.root.path, books: books,
+            let file = Workfile(rootPath: picked.root.path, books: picked.books,
                                 presets: .init(defaultPreset: preset))
             workspace = await Workspace.open(file, rules: settings.rules)
             step = .review

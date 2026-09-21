@@ -37,8 +37,8 @@ public enum SystemDictionaries {
 
     /// macOS の単語の一覧(`/usr/share/dict/words`、Webster 第 2 版。無ければ nil)。大きい(約 24 万語)ので 1 度だけ読む。
     public static let english: WordSet? = {
-        guard let text = try? String(contentsOfFile: englishPath, encoding: .utf8) else { return nil }
-        return WordSet(text.split(separator: "\n").map(String.init))
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: englishPath)) else { return nil }
+        return WordSet(lines: data)
     }()
 
     /// 読めた辞書を、規則が指す名前で(Vocabulary.dictionaries に渡す形)。
