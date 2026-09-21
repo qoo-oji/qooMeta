@@ -486,3 +486,17 @@ struct SplitMix {
         #expect(set.proposals.allSatisfy { $0.metadata.series.isEmpty })
     }
 }
+
+/// シリーズ名の後ろに残す文字(naming.includeFollowing の一覧)は、巻の前では読み飛ばす。
+@Suite struct KeepFollowingTests {
+    @Test func aHeartJoinsTheNameAndTheVolumeIsStillRead() throws {
+        var changes = RuleChanges.none
+        changes.add(["☆"], to: "keepFollowing")
+        let c = CompiledRules.compile(RuleSources(builtIn: try BuiltInRules.bundled(), userChanges: changes.data()))
+        let rules = try #require(c.rules, "\(c.errors)")
+        let set = proposeSync(inputs(["[架空工房] ご褒美☆", "[架空工房] ご褒美☆2", "[架空工房] ご褒美☆3 夏"]),
+                              rules: rules, dictionaries: SystemDictionaries.all)
+        #expect(set.proposals.allSatisfy { $0.metadata.series == "ご褒美☆" })
+        #expect(set.proposals.map(\.metadata.volumeSort) == [1, 2, 3])
+    }
+}

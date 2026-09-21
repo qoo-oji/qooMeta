@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/series-rules.schema.json",
   "kind": "qoometa.series-rules",
   "schemaVersion": 2,
-  "revision": "2026.09.21.26",
+  "revision": "2026.09.21.27",
   "lists": {
     "ignoredInComparison": [
       " ", "　", "\t", "~", "〜", "～", "-", "‐", "―", "・", "･", "!", "?", ".", "。", "、", ",", "「", "」", "『", "』", "【",
@@ -45,7 +45,7 @@
       "~", "〜", "～", "-", "‐", "―", "・", "･", ":", "：", "、", ",", "。", ".", "「", "『", "【", "<", "〈", "《", "(", "（",
       "_"
     ],
-    "keepFollowing": ["!", "?", "！", "？"],
+    "keepFollowing": ["!", "?", "！", "？", "♡", "♥"],
     "brackets": { "】": "【", "」": "「", "』": "『", "》": "《", "〉": "〈", ")": "(", "）": "（", "]": "[", "］": "［", ">": "<" },
     "labelIntroducers": [
       "side", "part", "episode", "ep", "chapter", "act", "phase", "stage", "season", "route", "file", "case", "vol",

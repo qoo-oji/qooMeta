@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/qoo-oji/qooMeta/main/schema/filename-formats.schema.json",
   "kind": "qoometa.filename-formats",
   "schemaVersion": 6,
-  "revision": "2026.09.21.6",
+  "revision": "2026.09.21.8",
   "defaultPreset": "commercial",
   "presets": {
     "commercial": {
@@ -12,9 +12,12 @@
         "、"
       ],
       "plain": {
-        "words": [],
         "patterns": [
           "[(（](?:19|20)\\d{2}年?[)）]"
+        ],
+        "words": [
+          "(完)",
+          "(仮)"
         ]
       },
       "ignoreBracketsInsideTitle": true,

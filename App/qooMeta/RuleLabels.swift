@@ -147,7 +147,7 @@ enum RuleLabels {
         "ignoredInComparison": Item(title: "Characters ignored when books are compared", help: "Spaces, and the marks often used to decorate a title"),
         "boundaryCharacters": Item(title: "Characters counted as a word boundary", help: "Spaces and digits are always a boundary"),
         "trimTrailing": Item(title: "Characters dropped from the end of a series name"),
-        "keepFollowing": Item(title: "Characters kept when they follow a series name"),
+        "keepFollowing": Item(title: "Characters kept when they follow a series name", help: "! ? ♡ … “X♡2” becomes the series “X♡”, volume 2"),
         "variantKanji": Item(title: "Kanji treated as the same character", help: "The character on the left is compared as the one on the right"),
         "brackets": Item(title: "Bracket pairs", help: "Closing bracket → opening bracket"),
     ]

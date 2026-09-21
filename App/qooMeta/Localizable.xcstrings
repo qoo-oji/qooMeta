@@ -1,6 +1,23 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "! ? ♡ … “X♡2” becomes the series “X♡”, volume 2": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "! ? ♡ … “X♡2” becomes the series “X♡”, volume 2"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "! ? ♡ …「X♡2」はシリーズ「X♡」の 2 巻になります"
+          }
+        }
+      }
+    },
     "%1$@ (%2$lld)": {
       "extractionState": "manual",
       "localizations": {

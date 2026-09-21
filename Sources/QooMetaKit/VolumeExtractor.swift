@@ -99,7 +99,10 @@ final class VolumeExtractor: Sendable {
             + #")\s*(?:"# + nonEmpty(rules.alternation(rules.counters + rules.wholeOnlyCounters)) + #")?$"#
         let positionOnly = #"^(?:"# + nonEmpty(rules.reads(.position) ? rules.positionPattern : "") + #")(?:\s*\d{1,2})?$"#
         wholeVolume = try! NSRegularExpression(pattern: counted + "|" + positionOnly, options: [.caseInsensitive])
+        // シリーズ名の後ろに残す文字(naming.includeFollowing の一覧。「♡」を足せば「X♡2」の「♡」は名前に入る)は、
+        // 巻の前では読み飛ばす ―― 名前に入れた文字が巻の頭に残ると、「♡2」を巻として読めない(2026-09-21、利用者の指摘)。
         leadingSeparators = text.trailingTrim.union(.whitespaces).union(CharacterSet(charactersIn: "!?！？】」』》〉)）]］>"))
+            .union(CharacterSet(charactersIn: String(text.keepFollowing)))
     }
 
     /// 読み手を優先の順に試し、最初に読めたものを採る(規則で止めた読み手は飛ばす)。
