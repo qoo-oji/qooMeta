@@ -193,7 +193,9 @@ public enum Confirmation: Sendable, Hashable, Codable {
 /// 確定した欄(書いていない欄は未確定)。並びの欄(著者)は値の並び、1 つの値の欄は先頭だけを使う。
 public struct ConfirmedFields: Sendable, Hashable, Codable {
     public var values: [BookMetadata.Field: [String]]
-    public init(_ values: [BookMetadata.Field: [String]] = [:])
+    public var volumeSort: Double?          // 確定した巻数(ソート用)。nil なら表記から読む
+    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil)
+    public var isEmpty: Bool { get }        // 欄も巻数(ソート用)も確定していない
     public subscript(field: BookMetadata.Field) -> [String]? { get set }
     public func applied(to metadata: BookMetadata) -> BookMetadata
 }
@@ -237,8 +239,13 @@ public struct BookMetadata: Sendable, Hashable, Codable {
 - `.series(name:)` の本は**錨**になる。規則が同じ組にした未確定の本は、確定した名前のシリーズに入る。
   1 つの組に確定した名前が 2 種類以上あれば、組を名前ごとに割り、未確定の本はタイトルの先頭がいちばん長く一致する名前へ入れる。
 - 同じ単位で同じ名前に確定した本は、規則が別の組にしていても同じシリーズにする。
+- 名前は比べる形(空白・記号・全角半角などを除いた形)で比べるので、表記だけが違う確定した名前も 1 つのシリーズになる。
+  シリーズの名前(`SeriesProposal.name`)は組の中で先に来た本の表記だが、**名前を確定した本の `metadata.series` は、
+  確定した表記のまま**(表記だけを直した本が、ほかの本の表記に戻って見えないように)。
 - `.notInSeries` の本はどのシリーズにも入れない。残りが 2 冊に満たなければ、その組はシリーズにしない。
 - 確定した巻はそのまま使う。`volume: ""` は「巻は無い」と確定したこと(1 巻の推定もしない)。
+- 確定した巻数(ソート用。`ConfirmedFields.volumeSort`)は、表記から読んだ数・推定した数より優先し、シリーズの中の並び
+  (`SeriesProposal.memberIDs`)にも効く。巻の表記を変える `BulkEdit` の操作(連番・巻を消す)は、この数を外す。
 - **qooViewer の注意**: qooViewer の DB では「シリーズが空」は未入力の意味で、「シリーズではない」と区別できない。
   シリーズが空の登録は `.fields` として渡す。
 

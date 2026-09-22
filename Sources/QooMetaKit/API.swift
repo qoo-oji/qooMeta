@@ -120,20 +120,29 @@ public enum Confirmation: Sendable, Hashable, Codable {
 /// 確定した欄の値(書いていない欄は未確定)。並びの欄は値の並び、1 つの値の欄は先頭だけを使う。
 public struct ConfirmedFields: Sendable, Hashable, Codable {
     public var values: [BookMetadata.Field: [String]]
+    /// 確定した巻数(ソート用)。nil なら未確定(巻数の表記から読む)。**欄(`Field`)には入れない** ―― 表記を読んだ数で、
+    /// 名前から直に読む欄ではないので。利用者が並びの位置だけを直したいとき(番外編を 2.5 に置く、など)に使う
+    /// (qooViewer の利用者の要望 2026-09-22)。巻数(表示用)を直すときは、呼び出し側が外す(食い違った数を残さない)。
+    public var volumeSort: Double?
 
-    public init(_ values: [BookMetadata.Field: [String]] = [:]) {
+    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil) {
         self.values = values
+        self.volumeSort = volumeSort
     }
+
+    /// 何も確定していないか。
+    public var isEmpty: Bool { values.isEmpty && volumeSort == nil }
 
     public subscript(field: BookMetadata.Field) -> [String]? {
         get { values[field] }
         set { values[field] = newValue }
     }
 
-    /// 確定した欄を metadata へ重ねる。
+    /// 確定した欄を metadata へ重ねる(巻数(ソート用)は欄のあと ―― 表記を重ねるとソート用が捨てられるので)。
     public func applied(to metadata: BookMetadata) -> BookMetadata {
         var result = metadata
         for (field, value) in values { result.set(field, to: value) }
+        if let volumeSort { result.volumeSort = volumeSort }
         return result
     }
 }

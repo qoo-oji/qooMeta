@@ -461,6 +461,14 @@ extension RuleEngine {
         // シリーズと巻数は、単位の計算で決まったものを欄へ入れる。
         var metadata = book.metadata
         metadata.series = key.flatMap { result?.seriesNames[$0] } ?? ""
+        // 利用者が名前を確定した本は、その表記のまま出す。比べる形が同じ名前(空白・記号・全角半角の違いだけ)は 1 つの
+        // シリーズに入り、組の名前は組の中で先に来た本の表記になるので、以前は表記だけを直すと、同じ単位の離れた本
+        // (型が `@series` で読んだ本・ほかに確定した本)の表記に戻って見えた(qooViewer の利用者の報告 2026-09-22)。
+        // 組の名前(`SeriesProposal.name`)と、名前を確定していない本の表記は変えない。
+        if key != nil, case .series(let name, _, _) = book.input.confirmation {
+            let display = TextRules.normalizeDisplay(name)
+            if !display.isEmpty { metadata.series = display }
+        }
         if let volume = r?.volume?.volume {
             metadata.volume = volume.text
             metadata.volumeSort = volume.sortKey
@@ -468,6 +476,8 @@ extension RuleEngine {
             // シリーズに入らなくても、型で読んだ巻数はそのまま残す。
             metadata.volumeSort = volumes.extract(fromRemainder: " " + metadata.volume)?.number
         }
+        // 確定した巻数(ソート用)は、あとの推定(番号の無い本を 1 巻にする など)に上書きされない。
+        if let volumeSort = book.input.confirmation.fields.volumeSort { metadata.volumeSort = volumeSort }
         return BookProposal(id: book.input.id, name: book.input.name, reading: book.reading, metadata: metadata,
                             seriesID: key.map { seriesID(book.unitKey, $0) }, flags: flags)
     }

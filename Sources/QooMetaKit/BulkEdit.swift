@@ -99,7 +99,7 @@ public enum BulkEdit {
             }
             let digits = String(abs(number))
             let text = (number < 0 ? "-" : "") + String(repeating: "0", count: max(0, width - digits.count)) + digits
-            result[id] = .series(name: name, volume: text, fields: fields(id, current))
+            result[id] = .series(name: name, volume: text, fields: fieldsForNewVolume(id, current))
         }
         return result
     }
@@ -138,7 +138,7 @@ public enum BulkEdit {
                                     current: [String: Confirmation] = [:]) -> [String: Confirmation] {
         ids.reduce(into: [:]) { result, id in
             guard let name = currentSeriesName(id, set, current) else { return }
-            result[id] = .series(name: name, volume: "", fields: fields(id, current))
+            result[id] = .series(name: name, volume: "", fields: fieldsForNewVolume(id, current))
         }
     }
 
@@ -176,6 +176,13 @@ public enum BulkEdit {
 
     static func fields(_ id: String, _ current: [String: Confirmation]) -> ConfirmedFields {
         (current[id] ?? .none).fields
+    }
+
+    /// 巻の表記を変えるときの確定した欄: 確定した巻数(ソート用)は外す(新しい表記と食い違った数を残さない)。
+    static func fieldsForNewVolume(_ id: String, _ current: [String: Confirmation]) -> ConfirmedFields {
+        var result = fields(id, current)
+        result.volumeSort = nil
+        return result
     }
 
     /// 今のシリーズ名(確定した名前、無ければ提案)。

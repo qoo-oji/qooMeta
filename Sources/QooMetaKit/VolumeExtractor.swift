@@ -366,10 +366,11 @@ enum ProposalFinalizer {
             document.books[i].volumeInferred = nil
             guard !series.isEmpty else { continue }
             // 確定した巻(利用者が直した値、または型が名前から直に読んだ `@volume`)はそのまま使う。
-            // 並べ替え用の数は、表記を巻の読み手に通して決める(「上」は文脈で後から)。
+            // 並べ替え用の数は、確定していればその数、無ければ表記を巻の読み手に通して決める(「上」は文脈で後から)。
             if let volume = confirmedVolume(document.books[i].confirmation) {
                 document.books[i].volumeText = volume
-                document.books[i].volumeNumber = engine.volumes.extract(fromRemainder: " " + volume)?.number
+                document.books[i].volumeNumber = document.books[i].confirmation.fields.volumeSort
+                    ?? engine.volumes.extract(fromRemainder: " " + volume)?.number
                 document.books[i].volumeConfirmed = true
                 continue
             }

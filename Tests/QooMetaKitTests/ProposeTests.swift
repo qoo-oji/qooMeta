@@ -186,6 +186,54 @@ final class ProgressLog: @unchecked Sendable {
         #expect(set["001"]?.metadata.volumeSort == 2)
     }
 
+    /// 名前を確定した本は、その表記のまま出る。比べる形が同じ名前の本(表記だけが違う)とは同じシリーズになるが、
+    /// 前後の本の表記に引き戻されない。確定していない本は組の名前のまま。
+    @Test func confirmedNameKeepsItsOwnSpelling() {
+        let before = Self.propose([("[架空工房] 月の庭 0", .series(name: "月の庭", volume: "0")),
+                                   ("[架空工房] 月の庭 1", .series(name: "月の 庭!", volume: nil))])
+        #expect(before["000"]?.metadata.series == "月の庭")
+        #expect(before["001"]?.metadata.series == "月の 庭!")
+        #expect(before.series.count == 1)
+
+        let after = Self.propose([("[架空工房] つきのにわ", .series(name: "月の 庭!", volume: nil)),
+                                  ("[架空工房] 月の庭 4", .series(name: "月の庭", volume: "4")),
+                                  ("[架空工房] 月の庭 5", .none)])
+        #expect(["000", "001", "002"].map { after[$0]?.metadata.series } == ["月の 庭!", "月の庭", "月の庭"])
+        #expect(Set(["000", "001", "002"].map { after[$0]?.seriesID }).count == 1)
+    }
+
+    /// 確定した巻数(ソート用)は、表記から読んだ数より優先し、シリーズの中の並びにも効く。確定していない本は今までどおり。
+    @Test func confirmedVolumeSort() {
+        let set = Self.propose([("[架空工房] 月の庭 1", .none),
+                                ("[架空工房] 月の庭 番外編", .series(name: "月の庭", volume: "番外編",
+                                                                   fields: ConfirmedFields(volumeSort: 1.5))),
+                                ("[架空工房] 月の庭 2", .none)])
+        #expect(set["001"]?.metadata.volume == "番外編")
+        #expect(set["001"]?.metadata.volumeSort == 1.5)
+        #expect(set["000"]?.metadata.volumeSort == 1)
+        #expect(set["002"]?.metadata.volumeSort == 2)
+        #expect(set.series.first?.memberIDs == ["000", "001", "002"])
+
+        // 番号の読める表記でも、確定した数が勝つ。
+        let numbered = Self.propose([("[架空工房] 星の庭 3", .series(name: "星の庭", volume: "3", fields: ConfirmedFields(volumeSort: 0.5)))])
+        #expect(numbered["000"]?.metadata.volumeSort == 0.5)
+    }
+
+    /// 巻数(ソート用)を持たない以前の確定した内容も読める。巻の表記を変える操作は、確定した数を外す。
+    @Test func volumeSortIsOptionalAndDroppedWithANewVolume() throws {
+        let old = try JSONDecoder().decode(ConfirmedFields.self, from: try JSONEncoder().encode(ConfirmedFields([.title: ["月の庭"]])))
+        #expect(old.volumeSort == nil)
+        #expect(!old.isEmpty)
+        #expect(!ConfirmedFields(volumeSort: 2).isEmpty)
+        #expect(ConfirmedFields().isEmpty)
+
+        let current: [String: QooMetaKit.Confirmation] = ["000": .series(name: "月の庭", volume: "番外編", fields: ConfirmedFields(volumeSort: 1.5))]
+        let set = Self.propose([("[架空工房] 月の庭 番外編", current["000"]!)])
+        #expect(BulkEdit.clearVolumes(["000"], in: set, current: current)["000"]?.fields.volumeSort == nil)
+        #expect(BulkEdit.numberSequentially(["000"], in: set, current: current)["000"]?.fields.volumeSort == nil)
+        #expect(BulkEdit.setSeries("月の庭", for: ["000"], in: set, current: current)["000"]?.fields.volumeSort == 1.5)
+    }
+
     /// 確定した巻はそのまま使い、推定は確定した巻を読めた巻として扱う。
     @Test func confirmedVolumes() {
         let set = Self.propose([("[架空工房] 月の庭", .none), ("[架空工房] 月の庭 おまけ", .series(name: "月の庭", volume: "上")),
