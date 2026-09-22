@@ -105,6 +105,21 @@ final class VolumeExtractor: Sendable {
             .union(CharacterSet(charactersIn: String(text.keepFollowing)))
     }
 
+    /// 巻の表記の前後から区切りを落とす。**後ろの「〜」「-」などは、同じ記号が表記の中にもあれば残す**(対になっている ――
+    /// 「XX〜YYY〜」は「XX〜YYY」にしない。2026-09-22、qooViewer の利用者の指摘)。対が無ければ今までどおり落とす(「第2巻〜」)。
+    func trimSeparators(_ text: String) -> String {
+        var scalars = Substring(text).unicodeScalars
+        while let first = scalars.first, leadingSeparators.contains(first) { scalars.removeFirst() }
+        while let last = scalars.last, leadingSeparators.contains(last) {
+            if Self.pairedMarks.contains(last), scalars.dropLast().contains(last) { break }
+            scalars.removeLast()
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    /// 対にして囲む(「〜サブタイトル〜」)のに使われる、波線とダッシュの類。
+    static let pairedMarks = CharacterSet(charactersIn: "〜～~-‐‑‒–—―−")
+
     /// 読み手を優先の順に試し、最初に読めたものを採る(規則で止めた読み手は飛ばす)。
     ///
     /// 読めた表記が「そのまま読む語」に重なるなら、巻にしない(題名が「No.5」の本。語の規則は巻の読み手より前の段階なので、
@@ -112,7 +127,7 @@ final class VolumeExtractor: Sendable {
     func extract(fromRemainder remainder: String) -> Volume? {
         guard let volume = read(fromRemainder: remainder) else { return nil }
         if let words, words.keepsAny {
-            let s = remainder.precomposedNFKC.trimmingCharacters(in: leadingSeparators)
+            let s = trimSeparators(remainder.precomposedNFKC)
             // 読み手は残りの頭から読む。巻の表記(「No.5」の「5」)の終わりまでを、読んだ範囲とみなす。
             let found = (s as NSString).range(of: volume.text)
             let read = NSRange(location: 0, length: found.location == NSNotFound ? (volume.text as NSString).length
@@ -130,15 +145,14 @@ final class VolumeExtractor: Sendable {
     /// シリーズが決まったあとの巻の読み取りだけにする(2026-09-22、利用者の事例)。
     func sequelRest(in text: String) -> String? {
         guard rules.reads(.sequel) else { return nil }
-        let s = text.precomposedNFKC.trimmingCharacters(in: leadingSeparators)
+        let s = trimSeparators(text.precomposedNFKC)
         let ns = s as NSString
         guard let m = sequel.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
         return ns.substring(from: m.range.length)
     }
 
     private func read(fromRemainder remainder: String) -> Volume? {
-        let s = remainder.precomposedNFKC
-            .trimmingCharacters(in: leadingSeparators)
+        let s = trimSeparators(remainder.precomposedNFKC)
         guard !s.isEmpty else { return nil }
         let ns = s as NSString
         let range = NSRange(location: 0, length: ns.length)
@@ -409,8 +423,7 @@ enum ProposalFinalizer {
             let title = engine.text.comparable(document.books[i].compareTitle)
             let name = engine.text.comparable(document.books[i].series).key
             guard title.key.starts(with: name) else { continue }
-            let remainder = title.originalRemainder(afterKeyLength: name.count)
-                .trimmingCharacters(in: engine.volumes.leadingSeparators)
+            let remainder = engine.volumes.trimSeparators(title.originalRemainder(afterKeyLength: name.count))
             guard let r = engine.compilation.keywordRange(in: remainder), r.lowerBound == remainder.startIndex else { continue }
             // 範囲の最後の数(「1~4」の 4、「9~11+α」の 11)。
             let range = String(remainder[r.upperBound...]).precomposedNFKC.prefix { $0 != "+" }
@@ -490,8 +503,7 @@ enum ProposalFinalizer {
             // **語の切れ目から始まる残りだけ**を採る。シリーズ名が語の途中で切れているとき(「月の庭|の安息」)の
             // 残りは、番号の代わりに書かれた言葉ではなく語のかけらなので、巻数にしない。
             guard title.key.starts(with: name) else { continue }
-            let rest = title.originalRemainder(afterKeyLength: name.count)
-                .trimmingCharacters(in: engine.volumes.leadingSeparators)
+            let rest = engine.volumes.trimSeparators(title.originalRemainder(afterKeyLength: name.count))
                 .trimmingCharacters(in: .whitespaces)
             guard !rest.isEmpty else { continue }
             // 区切りが無くても採る(「架空録|アルバム」「架空録|なつまつり」)。シリーズに入っている本の名前に何か
@@ -565,8 +577,7 @@ enum ProposalFinalizer {
                 let title = engine.text.comparable(document.books[i].compareTitle)
                 let name = engine.text.comparable(document.books[i].series).key
                 guard title.key.starts(with: name) else { continue }
-                let remainder = title.originalRemainder(afterKeyLength: name.count)
-                    .trimmingCharacters(in: engine.volumes.leadingSeparators)
+                let remainder = engine.volumes.trimSeparators(title.originalRemainder(afterKeyLength: name.count))
                 // 「〇」は入れない。伏せ字(「〇〇さん」)と見分けが付かず、道具の側で 0 と決めてかからない
                 // (2026-09-20、利用者の判断)。「第二〇巻」のように単位の付く形は、漢数字の読み手が読む。
                 let digits = String(remainder.prefix { "一二三四五六七八九十".contains($0) })

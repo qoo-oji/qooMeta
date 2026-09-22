@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-23
+
+### Fixed
+
+- 巻数(表示用)の後ろの「〜」「-」などを、表記の中に対になる記号があれば残すようにした(「番外編〜夏の日〜」が「番外編〜夏の日」に
+  なっていた)。対が無ければ今までどおり落とす。
+
 ## [0.2.0] - 2026-09-22
 
 ### Added
@@ -25,6 +32,7 @@
 
 - 初回リリース。
 
-[Unreleased]: https://github.com/qoo-oji/qooMeta/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/qoo-oji/qooMeta/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/qoo-oji/qooMeta/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/qoo-oji/qooMeta/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/qoo-oji/qooMeta/releases/tag/v0.1.0

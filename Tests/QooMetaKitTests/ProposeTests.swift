@@ -234,6 +234,16 @@ final class ProgressLog: @unchecked Sendable {
         #expect(BulkEdit.setSeries("月の庭", for: ["000"], in: set, current: current)["000"]?.fields.volumeSort == 1.5)
     }
 
+    /// 巻の表記の後ろの「〜」「-」は、表記の中に対になる記号があれば残し、無ければ落とす。
+    @Test func pairedTrailingMarksStayInTheVolume() {
+        let set = Self.propose([("[架空工房] 月の庭 1", .none), ("[架空工房] 月の庭 2", .none),
+                                ("[架空工房] 月の庭 番外編〜夏の日〜", .none), ("[架空工房] 月の庭 第3巻〜", .none),
+                                ("[架空工房] 月の庭 おまけ-後日談-", .none)])
+        #expect(set["002"]?.metadata.volume == "番外編〜夏の日〜")
+        #expect(set["003"]?.metadata.volume == "3")
+        #expect(set["004"]?.metadata.volume == "おまけ-後日談-")
+    }
+
     /// 確定した巻はそのまま使い、推定は確定した巻を読めた巻として扱う。
     @Test func confirmedVolumes() {
         let set = Self.propose([("[架空工房] 月の庭", .none), ("[架空工房] 月の庭 おまけ", .series(name: "月の庭", volume: "上")),
