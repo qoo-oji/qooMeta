@@ -584,17 +584,31 @@ struct BookTable: NSViewRepresentable {
 
         /// Tab / ⇧Tab の行き先へ書き換えを移す。行き先の候補は、同じ欄の残りの段、その先の列の段(前へ戻るときは下の段から)。
         /// 直せない段は飛ばし、直せる段が端まで無ければ表へ戻る。
-        private func moveEditing(from column: Column, line: Int, of bookID: String, forward: Bool) {
+        private func moveEditing(from column: Column, line: Int, of bookID: String, forward: Bool, attempts: Int = 20) {
             guard let table, editing == nil, let row = index(of: bookID) else { return }
             let visible = table.tableColumns.indices.filter { !table.tableColumns[$0].isHidden }
             guard let start = visible.firstIndex(where: { Column(table.tableColumns[$0].identifier) == column }) else { return }
             let book = book(row)
+            // 足したばかりのシリーズの段から隣の列へ移るとき、その段がまだ行に届いていない(計算し直しの最中)なら、
+            // 届くのを少し待つ ―― 待たずに進むと、主のシリーズの段に入り、そこを書き換えてしまう(実機で確かめた)。
+            if column.lineColumn == .series, line >= 1, attempts > 0, line >= Column.volumeSort.lineCount(of: book) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.moveEditing(from: column, line: line, of: bookID, forward: forward, attempts: attempts - 1)
+                }
+                return
+            }
             var candidates: [(column: Int, line: Int)] = []
             for position in forward ? Array(start..<visible.count) : Array((0...start).reversed()) {
                 let columnIndex = visible[position]
-                let count = Column(table.tableColumns[columnIndex].identifier)?.lines(of: book).count ?? 1
+                let target = Column(table.tableColumns[columnIndex].identifier)
+                let count = target?.lines(of: book).count ?? 1
                 var lines = forward ? Array(0..<count) : Array((0..<count).reversed())
-                if position == start { lines = lines.filter { forward ? $0 > line : $0 < line } }
+                if position == start {
+                    lines = lines.filter { forward ? $0 > line : $0 < line }
+                } else if column.lineColumn == .series, target?.lineColumn == .series, line < count {
+                    // シリーズと巻数の組の中で隣の列へ移るときは、同じ段(同じ足したシリーズ)へ。
+                    lines = [line]
+                }
                 candidates += lines.map { (columnIndex, $0) }
             }
             for candidate in candidates where beginEditing(row: row, column: candidate.column, line: candidate.line) { return }

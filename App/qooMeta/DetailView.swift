@@ -188,7 +188,7 @@ struct SeriesSection: View {
                 Button("Clear volume") { workspace.clearVolumes(ids) }
                 Button("Revert to the proposal") { workspace.revertSeries(ids) }
                     // 巻数(並べ替え用)だけを確定した本も、ここで提案へ戻せる(一覧で直せるようにしたため)。
-                    .disabled(!books.contains { $0.hasConfirmedSeries || $0.hasConfirmedVolumeSort })
+                    .disabled(!books.contains { $0.hasConfirmedSeries || $0.hasConfirmedVolumeSort || !$0.alternateSeries.isEmpty })
             }
             HStack {
                 Stepper("Start at %lld".ui(start), value: $start, in: 0...9999)
@@ -288,6 +288,8 @@ struct SingleEditor: View {
             .onSubmit(save)
             .onChange(of: focused) { if !focused { save() } }
             .onAppear { text = value ?? "" }
+            // 一覧(セル・右クリック・上へ下へ)で値が変わったら合わせる。書いている最中は、入力を消さないよう合わせない。
+            .onChange(of: value) { if !focused { text = value ?? "" } }
     }
 
     /// 値が変わったときだけ書き換える(揃わない欄を空のまま離れても、何も消さない)。
@@ -348,6 +350,8 @@ struct ListEditor: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: focusedIndex) { old, new in if old != nil, new == nil { save() } }
         .onAppear { items = values ?? [] }
+        // 一覧(セル・右クリック・上へ下へ)で値が変わったら合わせる。書いている最中と、揃わない欄を書き換え始めた後は合わせない。
+        .onChange(of: values) { if focusedIndex == nil, !replacing { items = values ?? [] } }
     }
 
     /// 並びが変わったときだけ書き換える(空の値は捨てる)。
