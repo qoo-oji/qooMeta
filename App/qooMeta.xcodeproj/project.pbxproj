@@ -241,7 +241,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qooProject.qooMeta;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
@@ -327,7 +327,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qooProject.qooMeta;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;

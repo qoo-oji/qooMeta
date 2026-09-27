@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-27
+
 qooViewer へ移した「確認・編集」の画面で足した拡張のうち、qooMeta に要るものを取り込んだ。
 あわせて、1 つの欄に値をいくつも持てるようにした。
 
@@ -48,6 +50,7 @@ qooViewer へ移した「確認・編集」の画面で足した拡張のうち�
 
 ### Fixed
 
+- 一覧で値を直したとき、右の詳細の欄が、本を選び直すまで前の値のままだったのを直した。
 - 一覧のセルでシリーズ名を書き換えたとき、選んでいない本も動く場合の確かめが出ず、名前が変わらないことがあったのを直した。
 - 巻数(並べ替え用)だけを確定した本で、ほかの欄の直しを戻すと、巻数(並べ替え用)の確定まで消えていたのを直した。
 - 保存してある規則の差分が読めない(JSON が壊れているなど)とき、規則を 1 か所変えると、その差分が黙って消えていたのを直した。
@@ -79,7 +82,8 @@ qooViewer へ移した「確認・編集」の画面で足した拡張のうち�
 
 - 初回リリース。
 
-[Unreleased]: https://github.com/qoo-oji/qooMeta/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/qoo-oji/qooMeta/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/qoo-oji/qooMeta/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/qoo-oji/qooMeta/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/qoo-oji/qooMeta/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/qoo-oji/qooMeta/releases/tag/v0.1.0
