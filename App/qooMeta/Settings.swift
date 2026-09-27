@@ -66,9 +66,36 @@ final class AppSettings {
 
     @ObservationIgnored private var parsedChanges: (text: String, changes: RuleChanges)?
 
+    /// 保存してある差分が、差分としても読めない(JSON が壊れている・形が違う)ときの理由。読めれば nil。
+    ///
+    /// **このあいだは 1 か所ずつの変更を断る。** `changes` は読めない差分を「変更なし」として返すので、そのまま 1 か所
+    /// 変えると「変更なし + その 1 か所」で組み立てた差分が保存され、設定ファイルから文字のまま持ち続けていた差分が
+    /// 消える(qooViewer へ移した規則の窓の監査で見つけたのを取り込んだ)。直すのは差分の画面(差分を丸ごと書き直す)か、
+    /// すべてを既定に戻すことだけにする。
+    private var unparsableDiffIssue: String? {
+        guard !rulesDiff.isEmpty else { return nil }
+        do {
+            _ = try RuleChanges(data: Data(rulesDiff.utf8))
+            return nil
+        } catch {
+            return error.description
+        }
+    }
+
+    /// 差分としても読めない保存済みの差分(文字のまま)。読めれば nil。差分の画面はこれを丸ごと見せ、丸ごと書き直させる。
+    var unreadableRulesDiff: String? { unparsableDiffIssue == nil ? nil : rulesDiff }
+
+    /// 1 か所ずつの変更を断る理由(`unparsableDiffIssue`)。
+    private var refusalForUnparsableDiff: [String]? {
+        unparsableDiffIssue.map {
+            ["The saved rules could not be read, so they cannot be changed one by one. Correct them in the diff pane, or reset all the rules: %@".ui($0)]
+        }
+    }
+
     /// 規則の半分(ファイル名の解析 / シリーズと巻数)だけを、書いた JSON で差し替える。
     @discardableResult
     func setRulesDiff(_ text: String, for half: RuleChanges.Half) -> [String] {
+        if let refusal = refusalForUnparsableDiff { return refusal }
         var next = changes
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
@@ -92,6 +119,9 @@ final class AppSettings {
     /// 規則の半分だけを既定に戻す。
     @discardableResult
     func resetRules(_ half: RuleChanges.Half) -> [String] {
+        // 読めない差分は半分だけ戻せない(どこが半分か分からない)ので、丸ごと既定に戻す。元の設定ファイルの写しは
+        // 読んだときに残してある(`load`)。
+        if unparsableDiffIssue != nil { return setRulesDiff("") }
         var next = changes
         next.reset(half)
         return setRulesDiff(next.isEmpty ? "" : String(decoding: next.data(), as: UTF8.self))
@@ -100,6 +130,7 @@ final class AppSettings {
     /// 規則を 1 か所変える。組み立ててみて誤りがあれば、変えずに理由を返す(画面がその場で示す)。
     @discardableResult
     func update(_ body: (inout RuleChanges) -> Void) -> [String] {
+        if let refusal = refusalForUnparsableDiff { return refusal }
         var next = changes
         body(&next)
         return setRulesDiff(next.isEmpty ? "" : String(decoding: next.data(), as: UTF8.self))

@@ -85,6 +85,9 @@ struct BookRow: Identifiable, Hashable, Sendable {
         }
     }
 
+    /// 巻数(並べ替え用)を利用者が確定しているか。
+    var hasConfirmedVolumeSort: Bool { confirmation.fields.volumeSort != nil }
+
     /// 一覧のセルに出す文字(並びの欄は「、」でつなぐ)。
     subscript(text field: BookMetadata.Field) -> String {
         metadata.values(field).joined(separator: "、")
@@ -190,17 +193,20 @@ final class Workspace {
     /// 絞り込みの帯に出す、値ごとの冊数。これも作り置き。
     private(set) var genreValues: [(key: ValueKey, count: Int)] = []
     private(set) var authorValues: [(key: ValueKey, count: Int)] = []
+    /// どの型にも合わなかった本の数(絞り込みの帯に出す。これも作り置き ―― 帯は描くたびに読むので、そのたびに全冊をなめない)。
+    private(set) var unmatchedCount = 0
 
     /// 本の状態での絞り込み(シリーズと巻を確かめて直す作業の入口)。
+    /// 型に合わなかった本を先頭に置く(qooViewer の窓で、読めなかった本から片付ける入口として前に出したのを取り込んだ)。
     enum StateFilter: String, CaseIterable, Identifiable {
-        case all, notInSeries, noVolume, unmatched, edited, confirmed
+        case all, unmatched, notInSeries, noVolume, edited, confirmed
         var id: Self { self }
         var label: String {
             switch self {
             case .all: "All".ui
+            case .unmatched: "Matched no format".ui
             case .notInSeries: "Not in a series".ui
             case .noVolume: "No volume".ui
-            case .unmatched: "Matched no format".ui
             case .edited: "Corrected".ui
             case .confirmed: "Series confirmed".ui
             }
@@ -208,10 +214,11 @@ final class Workspace {
         func contains(_ book: BookRow) -> Bool {
             switch self {
             case .all: true
-            case .notInSeries: book.seriesID == nil
-            case .noVolume: book.metadata.volume.isEmpty
             case .unmatched: !book.matchedFormat
-            case .edited: !book.edited.isEmpty
+            // シリーズ名を確定しただけの本(組の相手がいない)は、組の ID が無くてもシリーズに入っている。
+            case .notInSeries: book.seriesID == nil && book.metadata.series.isEmpty
+            case .noVolume: book.metadata.volume.isEmpty
+            case .edited: !book.edited.isEmpty || book.hasConfirmedVolumeSort
             case .confirmed: book.hasConfirmedSeries
             }
         }
@@ -410,9 +417,42 @@ final class Workspace {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         edit("Set the series to “%@”".ui(trimmed), ids) { input in
-            let volume = self.row(input.id).flatMap(Self.confirmedVolume)
-            input.confirmation = .series(name: trimmed, volume: volume, fields: input.confirmation.fields)
+            guard let row = self.row(input.id) else { return }
+            input.confirmation = Self.seriesConfirmation(trimmed, for: row, edits: input.confirmation)
         }
+    }
+
+    /// シリーズ名を `name` にしたときの確定した内容。**シリーズが変わる本は、巻を新しいシリーズ名で読み直す**
+    /// (巻数(表示)も並べ替え用の巻数も確定を外し、提案に任せる ―― タイトルの新しいシリーズ名の後ろから読んだ巻、
+    /// 読めなければ推定)。巻はシリーズの中の番号なので、前のシリーズの巻をそのまま持ち越さない(qooViewer へ移した画面で
+    /// 利用者が決めたのを取り込んだ)。名前が今のシリーズ名と同じ本(1 つにまとめるとき、もとからそのシリーズの本)と、
+    /// 表記だけを直した本(`sameSeriesName`)は、巻をそのまま残す。
+    static func seriesConfirmation(_ name: String, for row: BookRow, edits: Confirmation) -> Confirmation {
+        guard !sameSeriesName(name, currentSeriesName(row)) else {
+            return .series(name: name, volume: confirmedVolume(row), fields: edits.fields)
+        }
+        var fields = fieldsForNewVolume(edits)
+        fields[.volume] = nil
+        return .series(name: name, volume: nil, fields: fields)
+    }
+
+    /// 同じシリーズ名か(表記の違い ―― 空白・記号・全角半角・大文字小文字 ―― を除いて比べる)。空の名前はどれとも同じでない。
+    nonisolated static func sameSeriesName(_ a: String, _ b: String) -> Bool {
+        func key(_ s: String) -> String {
+            String(String.UnicodeScalarView(s.precomposedStringWithCompatibilityMapping.lowercased().unicodeScalars.filter {
+                CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
+            }))
+        }
+        let (x, y) = (key(a), key(b))
+        return !x.isEmpty && x == y
+    }
+
+    /// 巻の表記を変えるときの直した欄: 確定した巻数(並べ替え用)は外す(新しい表記と食い違った数を残さない。
+    /// 中核の `BulkEdit` と同じ)。
+    private static func fieldsForNewVolume(_ confirmation: Confirmation) -> ConfirmedFields {
+        var fields = confirmation.fields
+        fields.volumeSort = nil
+        return fields
     }
 
     /// シリーズから外す(規則が組にしても入れない)。
@@ -448,7 +488,7 @@ final class Workspace {
         }
         edit("Number the volumes again".ui, numbers.keys) { input in
             guard let (name, volume) = numbers[input.id] else { return }
-            input.confirmation = .series(name: name, volume: volume, fields: input.confirmation.fields)
+            input.confirmation = .series(name: name, volume: volume, fields: Self.fieldsForNewVolume(input.confirmation))
         }
     }
 
@@ -457,7 +497,7 @@ final class Workspace {
     func setVolumes(_ volume: String, for ids: Set<BookRow.ID>) {
         edit("Set the volume".ui, ids) { input in
             guard let name = self.row(input.id).map(Self.currentSeriesName), !name.isEmpty else { return }
-            input.confirmation = .series(name: name, volume: volume, fields: input.confirmation.fields)
+            input.confirmation = .series(name: name, volume: volume, fields: Self.fieldsForNewVolume(input.confirmation))
         }
     }
 
@@ -465,16 +505,64 @@ final class Workspace {
     func clearVolumes(_ ids: Set<BookRow.ID>) {
         edit("Clear the volume".ui, ids) { input in
             guard let name = self.row(input.id).map(Self.currentSeriesName), !name.isEmpty else { return }
-            input.confirmation = .series(name: name, volume: "", fields: input.confirmation.fields)
+            input.confirmation = .series(name: name, volume: "", fields: Self.fieldsForNewVolume(input.confirmation))
         }
     }
 
-    /// シリーズと巻の確定を取り消して、規則の提案に戻す(欄の直しはそのまま)。
+    /// 巻数(並べ替え用)を確定する(nil なら確定を外し、巻の表記から読んだ数に戻す)。シリーズ名のある本だけ。
+    /// 巻の表記とシリーズは確定しない ―― 並びの位置だけを直す(番外編を 1.5 に置く、など。中核 0.2.0 の
+    /// `ConfirmedFields.volumeSort` を、一覧から直せるようにした)。巻の表記が空の本にも入る。
+    func setVolumeSort(_ value: Double?, for ids: Set<BookRow.ID>) {
+        edit("Set the volume for sorting".ui, ids) { input in
+            guard value == nil || self.row(input.id).map({ !Self.currentSeriesName($0).isEmpty }) == true else { return }
+            var fields = input.confirmation.fields
+            fields.volumeSort = value
+            input.confirmation = input.confirmation.withFields(fields)
+        }
+    }
+
+    /// 入れた文字を巻数(並べ替え用)の数として読む(全角の数字・小数点も)。数でなければ nil。
+    nonisolated static func volumeSortNumber(_ text: String) -> Double? {
+        let folded = text.precomposedStringWithCompatibilityMapping.trimmingCharacters(in: .whitespaces)
+        guard let number = Double(folded), number.isFinite else { return nil }
+        return number
+    }
+
+    /// シリーズと巻の確定を取り消して、規則の提案に戻す(欄の直しはそのまま)。巻数(並べ替え用)もシリーズの中の
+    /// 位置なので、一緒に提案へ戻す。
     func revertSeries(_ ids: Set<BookRow.ID>) {
         edit("Revert the series to the proposal".ui, ids) { input in
-            let fields = input.confirmation.fields
-            input.confirmation = fields.values.isEmpty ? .none : .fields(fields)
+            let fields = Self.fieldsForNewVolume(input.confirmation)
+            input.confirmation = fields.isEmpty ? .none : .fields(fields)
         }
+    }
+
+    /// 直した内容をすべて捨てて、ファイル名から読んだ提案に戻す(欄・シリーズ・巻。読むルールセットの選び直しは残す)。
+    /// 取り消せる 1 歩。
+    func revertToProposal(_ ids: Set<BookRow.ID>) {
+        edit("Revert everything to the proposal".ui, ids) { input in
+            input.confirmation = .none
+        }
+    }
+
+    /// 直した内容のある本(「すべてを提案に戻す」の相手)。
+    func correctedIDs(in ids: Set<BookRow.ID>) -> Set<BookRow.ID> {
+        ids.filter { id in
+            guard let input = inputs[id] else { return false }
+            if case .none = input.confirmation { return false }
+            return true
+        }
+    }
+
+    /// 一覧に出ている本がすべて選ばれているか(ツールバーの「すべて選択 / 選択を解除」)。
+    var isEveryVisibleBookSelected: Bool {
+        !visiblePositions.isEmpty && selection.count >= visiblePositions.count
+            && visiblePositions.allSatisfy { selection.contains(books[$0].id) }
+    }
+
+    /// 一覧に出ている本をすべて選ぶ。すでに全部選ばれていれば、選択を外す。
+    func toggleSelectAll() {
+        selection = isEveryVisibleBookSelected ? [] : Set(visiblePositions.map { books[$0].id })
     }
 
     /// 適用前のプレビュー: 選んだ本を 1 つのシリーズにしたとき、**選んでいない本**がいくつ巻き込まれるか。
@@ -484,8 +572,8 @@ final class Workspace {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return SeriesChangePreview() }
         let changes = ids.sorted().compactMap { id -> BookChange? in
-            guard var input = inputs[id] else { return nil }
-            input.confirmation = .series(name: trimmed, volume: row(id).flatMap(Self.confirmedVolume), fields: input.confirmation.fields)
+            guard var input = inputs[id], let row = row(id) else { return nil }
+            input.confirmation = Self.seriesConfirmation(trimmed, for: row, edits: input.confirmation)
             return .upsert(input)
         }
         let delta = await Task.detached { [index] in try? await index.preview(changes) }.value
@@ -510,7 +598,7 @@ final class Workspace {
     }
 
     /// その本の、いまの行。
-    private func row(_ id: String) -> BookRow? { positionByID[id].map { books[$0] } }
+    func row(_ id: String) -> BookRow? { positionByID[id].map { books[$0] } }
 
     /// 今のシリーズ名(確定した名前、無ければ提案)。
     static func currentSeriesName(_ book: BookRow) -> String {
@@ -641,6 +729,7 @@ final class Workspace {
 
     /// 絞り込みの帯に出す、値ごとの冊数。本の中身か、ジャンルの絞り込みが変わったときだけ数え直す。
     private func rebuildCounts() {
+        unmatchedCount = books.lazy.filter { !$0.matchedFormat }.count
         genreValues = Self.counts(books) { $0.metadata.values(.genre) }
         authorValues = Self.counts(genreFilter == nil ? books : books.filter(matchesGenre)) { $0.metadata.authors }
     }
@@ -662,8 +751,18 @@ final class Workspace {
         }
     }
 
-    /// 並べ替えの順で比べる(同じなら入れた順)。
     private func precedes(_ a: Int, _ b: Int) -> Bool {
+        Self.precedes(a, b, in: books, by: sortOrder)
+    }
+
+    /// 並べ替えの順で比べる(同じなら入れた順)。**どの型にも合わなかった本は、並べ替えに関わらず上にまとめる**
+    /// (読めなかった本から片付けられるように。qooViewer へ移した画面で利用者が決めたのを取り込んだ)。
+    ///
+    /// 行と並べ方は引数の写しで比べる ―― `books` と `sortOrder` は見張られたプロパティなので、比べるたびに読むと、
+    /// 数千冊の並べ替えで見張りの記録が数万回走る(qooViewer で計った)。
+    nonisolated private static func precedes(_ a: Int, _ b: Int, in books: [BookRow],
+                                             by sortOrder: [KeyPathComparator<BookRow>]) -> Bool {
+        if books[a].matchedFormat != books[b].matchedFormat { return !books[a].matchedFormat }
         for comparator in sortOrder {
             switch comparator.compare(books[a], books[b]) {
             case .orderedAscending: return true
@@ -676,7 +775,8 @@ final class Workspace {
 
     /// 全冊を並べ替える(本を入れ替えたとき・並べ替えの指定が変わったときだけ)。
     private func sortAll() {
-        sortedPositions = books.indices.sorted(by: precedes)
+        let books = books, sortOrder = sortOrder
+        sortedPositions = books.indices.sorted { Self.precedes($0, $1, in: books, by: sortOrder) }
     }
 
     /// 変わった本だけを、並びの正しい所へ入れ直す。変わった数が多いときは、全体を並べ替える。
@@ -684,12 +784,13 @@ final class Workspace {
         guard !changed.isEmpty else { return }
         guard sortedPositions.count == books.count, changed.count * 8 < books.count else { return sortAll() }
         let moving = Set(changed)
+        let books = books, sortOrder = sortOrder
         sortedPositions.removeAll(where: moving.contains)
         for position in changed.sorted() {
             var low = 0, high = sortedPositions.count
             while low < high {
                 let middle = (low + high) / 2
-                if precedes(sortedPositions[middle], position) { low = middle + 1 } else { high = middle }
+                if Self.precedes(sortedPositions[middle], position, in: books, by: sortOrder) { low = middle + 1 } else { high = middle }
             }
             sortedPositions.insert(position, at: low)
         }
@@ -789,10 +890,11 @@ final class Workspace {
 }
 
 extension Confirmation {
-    /// 欄の値だけを入れ替える(シリーズと巻の確定はそのまま)。
+    /// 欄の値だけを入れ替える(シリーズと巻の確定はそのまま)。空かどうかは巻数(並べ替え用)も含めて見る
+    /// ―― 欄の値だけで見ると、巻数(並べ替え用)だけを確定した本の確定が消える。
     func withFields(_ fields: ConfirmedFields) -> Confirmation {
         switch self {
-        case .none, .fields: fields.values.isEmpty ? .none : .fields(fields)
+        case .none, .fields: fields.isEmpty ? .none : .fields(fields)
         case .series(let name, let volume, _): .series(name: name, volume: volume, fields: fields)
         case .notInSeries: .notInSeries(fields: fields)
         }

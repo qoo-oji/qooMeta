@@ -239,8 +239,10 @@ final class AppModel {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose".ui
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        offer(.pick([url]))
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            self.offer(.pick([url]))
+        }
     }
 
     /// 本のファイルを直に選ぶ(フォルダの中の一部だけを処理したいとき)。フォルダも混ぜて選べる。
@@ -250,8 +252,10 @@ final class AppModel {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
         panel.prompt = "Choose".ui
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        offer(.pick(panel.urls))
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            self.offer(.pick(panel.urls))
+        }
     }
 
     /// いまの一覧を捨てる操作を受け取る。保存していない修正があれば、捨ててよいか先に聞く。
@@ -459,9 +463,11 @@ final class AppModel {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.prompt = "Open".ui
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        // 開くと、いまの一覧は入れ替わる。保存していない修正があれば先に確かめる(前は、何も聞かずに入れ替えていた)。
-        offer(.openWorkfile(url))
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            // 開くと、いまの一覧は入れ替わる。保存していない修正があれば先に確かめる(前は、何も聞かずに入れ替えていた)。
+            self.offer(.openWorkfile(url))
+        }
     }
 
     private func open(workfileAt url: URL) {
@@ -496,8 +502,12 @@ final class AppModel {
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "qooMeta workfile.json".ui
         panel.message = "A workfile holds the names of your books. Save it somewhere of your own.".ui
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        write(workspace.workfile, to: url)
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            // 選んでいるあいだも窓は動くので、書くのは選び終えた時点の中身(その一覧がまだ開いていれば)。
+            guard self.workspace === workspace else { return }
+            self.write(workspace.workfile, to: url)
+        }
     }
 
     private func write(_ file: Workfile, to url: URL) {

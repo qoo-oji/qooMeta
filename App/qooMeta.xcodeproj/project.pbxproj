@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0E9D5B82C1D889870FF49E92 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33523722EB945A78FD030518 /* GeneralSettingsView.swift */; };
 		10F407650B50A45F6D6689D5 /* PresetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEBDFF62293D637ACC28F66 /* PresetEditorView.swift */; };
+		121630F4745B5D8DE424F7B1 /* WindowSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED664575629A5A1817D0EDFE /* WindowSheet.swift */; };
 		13576D9FF44062450D846932 /* RulesEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3EE03AF2531EEA4BBC27956 /* RulesEditorView.swift */; };
 		3E617D0E9CE1F5F58CAD2982 /* QooMetaRules in Frameworks */ = {isa = PBXBuildFile; productRef = F548B9A73E497C1459503F3C /* QooMetaRules */; };
 		4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71455F79C155AD9BA794D099 /* RuleLabels.swift */; };
@@ -51,6 +52,7 @@
 		C73DDAD7508057D88D7964AA /* FileNameRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNameRulesView.swift; sourceTree = "<group>"; };
 		D01A98E4B854ACE80BC21728 /* QooMetaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QooMetaApp.swift; sourceTree = "<group>"; };
 		EC3C6A8B9AEDCBD2D5AFAC72 /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
+		ED664575629A5A1817D0EDFE /* WindowSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSheet.swift; sourceTree = "<group>"; };
 		F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -105,6 +107,7 @@
 				71455F79C155AD9BA794D099 /* RuleLabels.swift */,
 				B3EE03AF2531EEA4BBC27956 /* RulesEditorView.swift */,
 				76D76B49E8894D1A02F1F09D /* Settings.swift */,
+				ED664575629A5A1817D0EDFE /* WindowSheet.swift */,
 				934559B81EEEF1E3B3E9DA44 /* Workspace.swift */,
 				F0D9A82770491D22BC8BB23E /* WorkspaceView.swift */,
 			);
@@ -213,6 +216,7 @@
 				4ADDBB642168DC26F1601000 /* RuleLabels.swift in Sources */,
 				13576D9FF44062450D846932 /* RulesEditorView.swift in Sources */,
 				D9DBDC550F15D5AEB5EE9979 /* Settings.swift in Sources */,
+				121630F4745B5D8DE424F7B1 /* WindowSheet.swift in Sources */,
 				A41D59A167A8F4DF0C5015BF /* Workspace.swift in Sources */,
 				5978BED6A5A82104FBD6ABEA /* WorkspaceView.swift in Sources */,
 			);

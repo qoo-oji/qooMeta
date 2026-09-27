@@ -94,7 +94,13 @@ struct ExportView: View {
         panel.allowedContentTypes = target.format == .qooViewerJSON ? [.json] : [.xml]
         panel.nameFieldStringValue = target.format == .qooViewerJSON ? "qooViewer metadata.json".ui : "Stackroom.xml"
         panel.message = "The exported file holds the names of your books. Save it somewhere of your own.".ui
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            write(to: url)
+        }
+    }
+
+    private func write(to url: URL) {
         Task {
             do {
                 let set = await workspace.currentProposals()

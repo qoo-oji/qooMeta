@@ -14,6 +14,11 @@ import SwiftUI
 ///
 /// 振る舞いは前の表と同じにしてある: 見出しを押して並べ替え、列の並べ替え・幅・表示は利用者が変えられ(覚えておく)、
 /// **1 回押しは行を選ぶだけ、2 回押しでそのセルを書き換える**(Return とほかへ移ったときに入り、Esc で元へ戻る)。
+///
+/// ■ qooViewer へ移した画面で足したものを取り込んだ(2026-09-27)
+/// - 巻数(並べ替え用)の列も 2 回押しで直せる。書き換えの最中の Tab / ⇧Tab は、同じ本の次 / 前の直せる欄へ移る。
+/// - 右クリックのメニューは画面の側が組む(`contextMenu`)。まとめて直す操作はそこから。
+/// - どの型にも合わなかった本は、ファイル名をオレンジで出す(一覧の上にまとめるのは `Workspace` の並べ替え)。
 struct BookTable: NSViewRepresentable {
     /// 列。欄の列のほかに、ファイル名と巻数(並べ替え用)がある。
     enum Column: Hashable {
@@ -37,6 +42,9 @@ struct BookTable: NSViewRepresentable {
             guard let column = Self.all.first(where: { $0.identifier == identifier }) else { return nil }
             self = column
         }
+
+        /// 2 回押しで直せる列(直せるかどうかは本ごとに `canEdit` で決める)。ファイル名は名前そのものなので直さない。
+        var isEditable: Bool { self != .fileName }
 
         /// 見出しの言葉の鍵(英語)。
         var titleKey: String {
@@ -76,21 +84,31 @@ struct BookTable: NSViewRepresentable {
 
     /// 本の全体と、そのうち一覧に出す本の位置(並べ替え・絞り込み済み)。**行の写しは受け取らない**
     /// (全冊ぶんの行をもう 1 組作らないため。`Workspace.visiblePositions`)。
+    /// 右クリックのメニューの項目(画面の側が組む)。`children` があればサブメニュー。
+    struct MenuItem {
+        var title: String
+        var isEnabled = true
+        var state: NSControl.StateValue = .off
+        var children: [MenuItem]?
+        var action: (() -> Void)?
+        var isSeparator = false
+
+        static var separator: MenuItem { MenuItem(title: "", isSeparator: true) }
+    }
+
     var books: [BookRow]
     var positions: [Int]
     @Binding var selection: Set<BookRow.ID>
     @Binding var sortOrder: [KeyPathComparator<BookRow>]
-    var canEdit: (BookMetadata.Field, BookRow) -> Bool
+    var canEdit: (Column, BookRow) -> Bool
     /// 利用者が直した(確定した)欄か。提案のままの値と色で見分ける。
-    var isEdited: (BookMetadata.Field, BookRow) -> Bool
-    var help: (BookMetadata.Field, BookRow) -> String
-    var commit: (BookMetadata.Field, String, BookRow) -> Void
-    /// 右クリックで選べるルールセット(ID と見出し。並びの順)。開いたときに聞く(描くたびに作らない)。
-    var ruleSets: () -> [(id: String, title: String)]
-    /// その本を読んでいるルールセットの ID。
-    var ruleSetOf: (String) -> String
-    /// 選んだ本の名前を、そのルールセットで読み直す。
-    var reparse: (Set<BookRow.ID>, String) -> Void
+    var isEdited: (Column, BookRow) -> Bool
+    var help: (Column, BookRow) -> String
+    var commit: (Column, String, BookRow) -> Void
+    /// 右クリックのメニュー(右クリックした本、または選んだ本すべてについて)。開いたときに組む(描くたびに作らない)。
+    var contextMenu: (Set<BookRow.ID>) -> [MenuItem]
+    /// 起点のフォルダ(ファイル名の列の吹き出しに、本の場所を出すため)。
+    var rootPath: String
 
     /// 列の並び・幅・表示を覚えておく名前。
     static let autosaveName = "qooMeta.bookTable"
@@ -131,9 +149,10 @@ struct BookTable: NSViewRepresentable {
         let menu = NSMenu()
         menu.delegate = coordinator
         table.headerView?.menu = menu
-        // 行の右クリック(選んだ本を、ほかのルールセットで読み直す)。中身は開くときに作る。
+        // 行の右クリック。中身は開くときに作る。淡色にするかは画面の側が決める(自動で有効にさせない)。
         let rowMenu = NSMenu()
         rowMenu.delegate = coordinator
+        rowMenu.autoenablesItems = false
         table.menu = rowMenu
         coordinator.table = table
 
@@ -151,6 +170,11 @@ struct BookTable: NSViewRepresentable {
         context.coordinator.apply(self, initial: false)
     }
 
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        // AppKit の部品が画面より長く生きても、画面の閉包(メニューの項目・直した値の入れ先)を握り続けない。
+        coordinator.release()
+    }
+
     // MARK: - セル
 
     /// セル 1 つ(文字だけ)。使い回す。
@@ -158,8 +182,9 @@ struct BookTable: NSViewRepresentable {
         let label = NSTextField(labelWithString: "")
         /// 利用者が直した欄(色を変える)。
         var isEditedValue = false { didSet { updateColor() } }
-        /// どの型にも合わなかった本の行(灰色にする。名前全体を仮のタイトルにしただけで、欄を読めていない)。
-        var isUnmatched = false { didSet { updateColor() } }
+        /// どの型にも合わなかった本のファイル名(オレンジにする。名前全体を仮のタイトルにしただけで、欄を読めていない)。
+        /// 以前は行ごと灰色にしていたが、読めなかった本が目立たず、直した欄の色とも見分けにくかった(qooViewer で変えた)。
+        var isUnmatchedName = false { didSet { updateColor() } }
 
         override init(frame: NSRect) {
             super.init(frame: frame)
@@ -187,7 +212,7 @@ struct BookTable: NSViewRepresentable {
         func updateColor() {
             guard !label.isEditable else { return }
             label.textColor = backgroundStyle == .emphasized ? .alternateSelectedControlTextColor
-                : isEditedValue ? .controlAccentColor : isUnmatched ? .tertiaryLabelColor : .labelColor
+                : isUnmatchedName ? .systemOrange : isEditedValue ? .controlAccentColor : .labelColor
         }
 
         /// 書き換えに入る・出るときの見た目(入っているあいだは、ふつうの入力欄の色)。
@@ -204,7 +229,7 @@ struct BookTable: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSMenuDelegate {
-        var parent: BookTable
+        var parent: BookTable?
         weak var table: NSTableView?
         private var books: [BookRow] = []
         private var positions: [Int] = []
@@ -213,13 +238,20 @@ struct BookTable: NSViewRepresentable {
         /// 表のほうを書き換えている最中(その結果として届く知らせで、持ちものを書き戻さない)。
         private var isApplying = false
         /// 書き換えの最中のセル。
-        private(set) var editing: (bookID: String, field: BookMetadata.Field, original: String, cell: CellView)?
+        private(set) var editing: (bookID: String, column: Column, original: String, cell: CellView)?
         /// 書き換えの最中に届いた中身(入力を途中で消さないよう、終わってから入れる)。
         private var pendingRows: (books: [BookRow], positions: [Int])?
         /// これまでに作ったセルの数(使い回せているかを確かめるため)。
         private(set) var cellsCreated = 0
 
         init(_ parent: BookTable) { self.parent = parent }
+
+        /// 画面の閉包を手放す(`dismantleNSView`)。
+        func release() {
+            parent = nil
+            table?.menu = nil
+            table?.headerView?.menu = nil
+        }
 
         /// 画面の側の値を表へ入れる。
         func apply(_ parent: BookTable, initial: Bool) {
@@ -280,7 +312,7 @@ struct BookTable: NSViewRepresentable {
         func numberOfRows(in tableView: NSTableView) -> Int { rowCount }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-            guard let tableColumn, let column = Column(tableColumn.identifier), row >= 0, row < rowCount else { return nil }
+            guard let parent, let tableColumn, let column = Column(tableColumn.identifier), row >= 0, row < rowCount else { return nil }
             let cell: CellView
             if let reused = tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil) as? CellView {
                 cell = reused
@@ -290,19 +322,19 @@ struct BookTable: NSViewRepresentable {
                 cellsCreated += 1
             }
             let book = book(row)
-            cell.isUnmatched = !book.matchedFormat
+            cell.isUnmatchedName = column == .fileName && !book.matchedFormat
             cell.setEditing(false)
             cell.label.stringValue = column.text(of: book)
             switch column {
             case .fileName:
                 cell.isEditedValue = false
-                cell.toolTip = nil
-            case .volumeSort:
-                cell.isEditedValue = false
-                cell.toolTip = "Derived from the volume as written, by the rules for reading a volume".ui
-            case .field(let field):
-                cell.isEditedValue = parent.isEdited(field, book)
-                cell.toolTip = parent.help(field, book)
+                // どの本かは場所で分かる(同じ名前の本が別のフォルダにあることがある)。
+                var tip = (parent.rootPath as NSString).appendingPathComponent(book.id)
+                if !book.matchedFormat { tip += "\n" + "This file name matched no format of its rule set".ui }
+                cell.toolTip = tip
+            case .volumeSort, .field:
+                cell.isEditedValue = parent.isEdited(column, book)
+                cell.toolTip = parent.help(column, book)
             }
             return cell
         }
@@ -310,13 +342,13 @@ struct BookTable: NSViewRepresentable {
         // MARK: 選ぶ・並べ替える
 
         func tableViewSelectionDidChange(_ notification: Notification) {
-            guard !isApplying, let table else { return }
+            guard !isApplying, let table, let parent else { return }
             let ids = Set(table.selectedRowIndexes.compactMap { $0 < rowCount ? book($0).id : nil })
             if parent.selection != ids { parent.selection = ids }
         }
 
         func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
-            guard !isApplying else { return }
+            guard !isApplying, let parent else { return }
             let order = tableView.sortDescriptors.compactMap { descriptor -> KeyPathComparator<BookRow>? in
                 guard let key = descriptor.key, let column = Column(.init(key)) else { return nil }
                 return column.comparator(descriptor.ascending ? .forward : .reverse)
@@ -331,14 +363,14 @@ struct BookTable: NSViewRepresentable {
             beginEditing(row: table.clickedRow, column: table.clickedColumn)
         }
 
-        /// そのセルの書き換えに入る。読むだけの列(ファイル名・巻数の並べ替え用)と、いまは直せない欄では何もしない。
+        /// そのセルの書き換えに入る。読むだけの列(ファイル名)と、いまは直せない欄では何もしない。
         @discardableResult
         func beginEditing(row: Int, column: Int) -> Bool {
-            guard let table, editing == nil, row >= 0, row < rowCount, table.tableColumns.indices.contains(column),
-                  case .field(let field)? = Column(table.tableColumns[column].identifier),
-                  parent.canEdit(field, book(row)),
+            guard let parent, let table, editing == nil, row >= 0, row < rowCount, table.tableColumns.indices.contains(column),
+                  let target = Column(table.tableColumns[column].identifier), target.isEditable,
+                  parent.canEdit(target, book(row)),
                   let cell = table.view(atColumn: column, row: row, makeIfNecessary: true) as? CellView else { return false }
-            editing = (book(row).id, field, cell.label.stringValue, cell)
+            editing = (book(row).id, target, cell.label.stringValue, cell)
             cell.setEditing(true)
             cell.label.delegate = self
             guard table.window?.makeFirstResponder(cell.label) == true else {
@@ -350,9 +382,35 @@ struct BookTable: NSViewRepresentable {
 
         func controlTextDidEndEditing(_ notification: Notification) {
             let movement = notification.userInfo?["NSTextMovement"] as? Int
+            let edited = editing.map { (bookID: $0.bookID, column: $0.column) }
             finishEditing(keeping: true)
             // Return で入れたときは、表へ戻る(矢印で次の行へ行ける)。ほかを押して抜けたときは、押した先を邪魔しない。
             if movement == NSTextMovement.return.rawValue, let table { table.window?.makeFirstResponder(table) }
+            // Tab / ⇧Tab は、同じ本の次 / 前の直せる欄へ(表計算・Finder の一覧と同じ。以前は Tab でも書き換えを終えるだけ
+            // だった)。並びは見えている列の並び(利用者が並べ替えた順)。入れた値の計算し直しで行が並び直すことがあるので、
+            // 本の ID で行を引き直し、書き換えを終えた後の次の回で入る。
+            if let edited, movement == NSTextMovement.tab.rawValue || movement == NSTextMovement.backtab.rawValue {
+                let forward = movement == NSTextMovement.tab.rawValue
+                DispatchQueue.main.async { [weak self] in
+                    self?.moveEditing(from: edited.column, of: edited.bookID, forward: forward)
+                }
+            }
+        }
+
+        /// Tab / ⇧Tab の行き先へ書き換えを移す。直せる欄が端まで無ければ表へ戻る。
+        private func moveEditing(from column: Column, of bookID: String, forward: Bool) {
+            guard let table, editing == nil, let row = index(of: bookID) else { return }
+            let visible = table.tableColumns.indices.filter { !table.tableColumns[$0].isHidden }
+            guard let current = visible.firstIndex(where: { Column(table.tableColumns[$0].identifier) == column }) else { return }
+            var position = current
+            while true {
+                position += forward ? 1 : -1
+                guard visible.indices.contains(position) else { break }
+                // 行き先の欄が横にはみ出していれば見える所まで送る(送らないと、見えない欄で書き換えが始まる)。
+                table.scrollColumnToVisible(visible[position])
+                if beginEditing(row: row, column: visible[position]) { return }
+            }
+            table.window?.makeFirstResponder(table)
         }
 
         /// Esc は、元の値へ戻して抜ける。
@@ -374,13 +432,13 @@ struct BookTable: NSViewRepresentable {
             edit.cell.label.stringValue = edit.original
             if keeping, value.trimmingCharacters(in: .whitespaces) != edit.original,
                let row = index(of: edit.bookID) {
-                parent.commit(edit.field, value, book(row))
+                parent?.commit(edit.column, value, book(row))
             }
             if let pending = pendingRows, let table {
                 pendingRows = nil
                 isApplying = true
                 setRows(pending.books, pending.positions, in: table)
-                select(parent.selection, in: table)
+                if let parent { select(parent.selection, in: table) }
                 isApplying = false
             }
         }
@@ -402,7 +460,7 @@ struct BookTable: NSViewRepresentable {
             }
         }
 
-        // MARK: 読み直す(行の上で右クリック)
+        // MARK: 行の右クリック
 
         /// 右クリックした行が選んだ本のうちにあれば、選んだ本すべて。なければ、その行の本だけ(Finder と同じ)。
         private func clickedIDs(in table: NSTableView) -> Set<String> {
@@ -416,35 +474,37 @@ struct BookTable: NSViewRepresentable {
 
         private func fillRowMenu(_ menu: NSMenu, in table: NSTableView) {
             let ids = clickedIDs(in: table)
-            guard !ids.isEmpty else { return }
-            let current = Set(ids.map(parent.ruleSetOf))
-            let item = NSMenuItem(title: "Parse the File Name Again With".ui, action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            for ruleSet in parent.ruleSets() {
-                let choice = NSMenuItem(title: ruleSet.title, action: #selector(reparse(_:)), keyEquivalent: "")
-                choice.target = self
-                choice.representedObject = ReparseTarget(ids: ids, ruleSet: ruleSet.id)
-                // いまのルールセットに印を付ける(選んだ本で分かれていれば、半分の印)。
-                choice.state = current.contains(ruleSet.id) ? (current.count == 1 ? .on : .mixed) : .off
-                submenu.addItem(choice)
-            }
-            item.submenu = submenu
-            menu.addItem(item)
+            guard !ids.isEmpty, let parent else { return }
+            for item in parent.contextMenu(ids) { menu.addItem(makeItem(item)) }
         }
 
-        /// メニューの項目に持たせる、読み直す本とルールセット(開いた時点の選択で決める)。
-        private final class ReparseTarget: NSObject {
-            let ids: Set<String>
-            let ruleSet: String
-            init(ids: Set<String>, ruleSet: String) {
-                self.ids = ids
-                self.ruleSet = ruleSet
+        private func makeItem(_ item: MenuItem) -> NSMenuItem {
+            if item.isSeparator { return .separator() }
+            let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
+            menuItem.isEnabled = item.isEnabled
+            menuItem.state = item.state
+            if let children = item.children {
+                let submenu = NSMenu()
+                submenu.autoenablesItems = false
+                for child in children { submenu.addItem(makeItem(child)) }
+                menuItem.submenu = submenu
+            } else if let action = item.action {
+                menuItem.target = self
+                menuItem.action = #selector(runMenuItem(_:))
+                menuItem.representedObject = ActionBox(action)
             }
+            return menuItem
         }
 
-        @objc func reparse(_ sender: NSMenuItem) {
-            guard let target = sender.representedObject as? ReparseTarget else { return }
-            parent.reparse(target.ids, target.ruleSet)
+        /// メニューの項目に持たせる閉包(対象の本は、メニューを開いた時点の選択で決めてある)。
+        /// **名前を `perform(_:)` にしない** ―― NSObject の `performSelector:` に化ける。
+        private final class ActionBox: NSObject {
+            let run: () -> Void
+            init(_ run: @escaping () -> Void) { self.run = run }
+        }
+
+        @objc func runMenuItem(_ sender: NSMenuItem) {
+            (sender.representedObject as? ActionBox)?.run()
         }
 
         @objc func toggleColumn(_ sender: NSMenuItem) {

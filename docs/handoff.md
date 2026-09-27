@@ -1,6 +1,6 @@
 # 引き継ぎ
 
-2026-09-21 時点(最初の版 0.1.0。CHANGELOG.md)。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
+2026-09-27 時点(版 0.2.1 の後。CHANGELOG.md)。次にこのリポジトリで作業する人(AI エージェントを含む)向け。
 下の節は、上ほど新しい状況、その下は日付つきの経緯(古い節の数字や名前は、その時点のもの)。
 
 ## いまの状況
@@ -11,7 +11,8 @@
   設定の窓は「解析の設定」(ファイル名解析。`FileNameRulesView`・`PresetEditorView`)と「抽出の設定」(シリーズと巻数の抽出。
   `RulesEditorView` の `SeriesRulesView`)の 2 つ。
 - **段 2 の「自動」**: 本ごとに、フォルダのパスと名前の語・ファイル名の先頭の語句からルールセットを選ぶ(`PresetAuto.swift`。
-  下の「本ごとにルールセットを選ぶ」)。**段 3** は一覧の右クリックで選んだ本だけ別のルールセットで読み直せ、型に合わなかった本は灰色。
+  下の「本ごとにルールセットを選ぶ」)。**段 3** は右クリックから選んだ本をまとめて直せ(別のルールセットでの読み直しも)、
+  型に合わなかった本は一覧の上にまとまりファイル名がオレンジ(下の「qooViewer の画面の拡張を取り込んだ」)。
 - **同梱の既定値は、利用者の手元の設定を取り込んだもの**(2026-09-21)。`filename-formats.json`・`series-rules.json` は
   禁止語の検査の対象外(CLAUDE.md)。例とテストは、前提にする規則の値を自分の側に書く(`policies`・`settings`)。
 - 画面の確かめは利用者が行っている(エージェントはアプリを起動しない。組み立てとテストだけ)。
@@ -39,12 +40,43 @@
 | `Sources/QooMetaExport/` | 書き出し(Stackroom XML・qooViewer JSON・ComicInfo)と、書き出し先ごとの欄の対応表(`FieldMapping`)・プレビュー(`Exporter.preview`) |
 | `Sources/QooMetaScan/` | フォルダの走査(本体はファイルに触らないので、ここと CLI・アプリだけがファイルを見る) |
 | `Sources/qoometa/` | CLI。`InputDocument` が提案ファイルと作業ファイルのどちらも読む |
-| `App/qooMeta/` | 画面(言葉は `Localizable.xcstrings`。`Localization.swift`・`RuleLabels.swift` が鍵を持つ)。`FlowView`(4 段の流れ)、`QooMetaApp`(`AppModel`。段 2 の数え直しと自動の選択)、`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`BookTable`(NSTableView の一覧・右クリック)、`DetailView`、`ExportView`、`Settings`、`FileNameRulesView`・`PresetEditorView`(解析の設定)、`RulesEditorView`(抽出の設定) |
+| `App/qooMeta/` | 画面(言葉は `Localizable.xcstrings`。`Localization.swift`・`RuleLabels.swift` が鍵を持つ)。`FlowView`(4 段の流れ)、`QooMetaApp`(`AppModel`。段 2 の数え直しと自動の選択)、`Workspace`(持ちもの = 本ごとの入力。提案は索引から)、`WorkspaceView`(段 3 の窓・右クリックのメニューとシート)、`BookTable`(NSTableView の一覧)、`DetailView`、`WindowSheet`(パネルと確かめを窓のシートに)、`ExportView`、`Settings`、`FileNameRulesView`・`PresetEditorView`(解析の設定)、`RulesEditorView`(抽出の設定) |
 
 - アプリの起動: `cd App && xcodegen` で `qooMeta.xcodeproj` を作り、スキーム引数 `-demo` で架空のデータだけを開く。
   実際の蔵書は段 1 で選ぶ(画面に名前が出るので、**エージェントは実データで画面を動かさない**)。
 - 確かめ: `swift build`・`swift test`(168 件)・`.build/release/qoometa rules test`(例 121 件)・`bash scripts/ci/check-all.sh`。
   速さとメモリは `.build/release/qoometa bench --synthetic 20000`(`--no-authors` も)。
+
+## qooViewer の画面の拡張を取り込んだ(2026-09-27、利用者の指示)
+
+qooViewer は段 3 の画面(一覧・`BookTable`・`Workspace`)を移して「メタデータの編集」ウインドウにし、独自に拡張した。そのうち
+qooMeta に要るものを取り込んだ(**中核には触れていない**。アプリの画面だけ)。qooViewer の DB・ロック・表紙・コレクション・除外フォルダ・
+実体の無い本など、ライブラリを持つアプリの事情のものは取り込まない(concept.md)。右の詳細は qooMeta では残す(qooViewer は外した。ファイル名の色分けとスタンプは右クリックでは代われないため。利用者の判断 2026-09-27)。
+
+- **右クリックのメニューを画面の側で組む**(`BookTable.MenuItem`。`WorkspaceView.BookTableView.contextMenu`)。1 つのシリーズにする…・
+  巻を連番で振る…・シリーズと巻数を確定・シリーズから外す・巻数を削除・シリーズを提案に戻す・欄をまとめて変更 ▸(シリーズと巻も)・
+  提案に戻す・ファイル名を再解析 ▸・Finder で表示・ファイル名をコピー。値を入れるものは小さなシート(`EditSheetView`)。
+- **巻数(並べ替え用)を一覧で直せる**(`Workspace.setVolumeSort`。中核 0.2.0 の `ConfirmedFields.volumeSort`)。巻の表記を変える
+  操作(巻を決める・消す・連番)は確定した数を外す。`Confirmation.withFields` と `revertSeries` は、巻数(並べ替え用)も含めて空かを見る
+  (前は欄の値だけで見ていて、巻数(並べ替え用)だけの確定が消えた)。
+- **シリーズ名を変えると、巻を読み直す**(`Workspace.seriesConfirmation`)。シリーズが変わる本は巻の確定を外して提案に任せる。
+  表記だけの直し(`sameSeriesName`: 空白・記号・全角半角・大文字小文字を除いて同じ)と、もとからそのシリーズの本は巻を残す。
+- **シリーズ名の確かめを AppKit のアラート(窓のシート)で出す**(`SeriesNaming`)。qooViewer で、SwiftUI の `.alert` がセルの
+  書き換えの後に出ず、名前が元のままだった。
+- **書き換えの最中の Tab / ⇧Tab** で、同じ本の次 / 前の直せる欄へ(`BookTable.Coordinator.moveEditing`)。
+- **型に合わなかった本は一覧の上にまとめ、ファイル名をオレンジ**(前は行ごと灰色)。絞り込みの帯にその冊数(`unmatchedCount`)。
+  ファイル名の吹き出しに本の場所。状態の絞り込みは「不適合」を 2 番目に、「シリーズに入っていない」はシリーズ名も空の本だけ、
+  「編集した本」は巻数(並べ替え用)の確定も数える。
+- **ツールバー**: すべて選択 / 選択を解除、提案に戻す(`revertToProposal`。確かめてから。取り消せる)、解析の設定(選んでいる本の
+  ルールセットを開く)。題の下に選んでいる冊数。
+- **並べ替えの比べ方を静的な関数に**(`Workspace.precedes(_:_:in:by:)`)。見張られたプロパティを比べるたびに読まない。
+- **開く・保存のパネルと確かめを窓のシートに**(`WindowSheet`。qooViewer の同名のものより小さい、qooMeta で書いたもの)。終了の確かめだけ
+  `runModal()` のまま。
+- **規則の差分が読めないあいだは、1 か所ずつの変更を断る**(`AppSettings.unparsableDiffIssue`)。`changes` は読めない差分を
+  「変更なし」として返すので、そのまま 1 か所変えると保存してあった差分が消えていた。差分の画面は読めない差分を文字のまま出し、
+  丸ごと書き直させる。「すべてデフォルトに戻す」は丸ごと戻す。
+- アプリのテストは無いので、確かめは組み立て(`xcodebuild`)と `swift test` まで。画面は利用者が確かめる: 右クリックの各項目、
+  シリーズ名の確かめのシート、Tab の移動、巻数(並べ替え用)の直し、パネルがシートで出ること。
 
 ## 2026-09-21 の後半に足したこと(利用者の指示)
 

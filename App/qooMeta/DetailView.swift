@@ -176,7 +176,8 @@ struct SeriesSection: View {
                     .help("Puts the books in no series at all")
                 Button("Clear volume") { workspace.clearVolumes(ids) }
                 Button("Revert to the proposal") { workspace.revertSeries(ids) }
-                    .disabled(confirmedCount == 0)
+                    // 巻数(並べ替え用)だけを確定した本も、ここで提案へ戻せる(一覧で直せるようにしたため)。
+                    .disabled(!books.contains { $0.hasConfirmedSeries || $0.hasConfirmedVolumeSort })
             }
             HStack {
                 Stepper("Start at %lld".ui(start), value: $start, in: 0...9999)

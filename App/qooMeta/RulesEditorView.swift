@@ -482,7 +482,8 @@ struct StatusBar: View {
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset Everything…") { confirmsReset = true }
-                    .disabled(changed == 0 && editing.settings.changes.isEmpty(half))
+                    .disabled(changed == 0 && editing.settings.changes.isEmpty(half)
+                              && editing.settings.unreadableRulesDiff == nil)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -1339,8 +1340,12 @@ struct DiffPane: View {
             TextEditor(text: $text).font(.body.monospaced()).border(.separator)
             HStack {
                 Button("Apply") {
-                    editing.errors = editing.settings.setRulesDiff(text, for: half)
-                    message = editing.errors.isEmpty ? "Applied" : ""
+                    // 保存してある差分が読めないあいだは、差分を丸ごと書き直す(半分だけは差し替えられない。
+                    // AppSettings.unparsableDiffIssue)。
+                    editing.errors = editing.settings.unreadableRulesDiff != nil
+                        ? editing.settings.setRulesDiff(text)
+                        : editing.settings.setRulesDiff(text, for: half)
+                    message = editing.errors.isEmpty ? "Applied".ui : ""
                 }
                 Button("Back to the current settings") { reload() }
                 Text(message).font(.caption).foregroundStyle(.secondary)
@@ -1355,30 +1360,39 @@ struct DiffPane: View {
     }
 
     private func reload() {
-        text = editing.settings.changes.isEmpty(half) ? ""
-            : String(decoding: editing.settings.changes.data(half), as: UTF8.self)
+        // 読めない差分は、見えないまま上書きされないように文字のまま出す(AppSettings.unparsableDiffIssue)。
+        if let unreadable = editing.settings.unreadableRulesDiff {
+            text = unreadable
+        } else {
+            text = editing.settings.changes.isEmpty(half) ? ""
+                : String(decoding: editing.settings.changes.data(half), as: UTF8.self)
+        }
         message = ""
     }
 
     private func importFile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
-        text = String(decoding: data, as: UTF8.self)
-        message = "Loaded. Press “Apply” to put it to work"
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
+            text = String(decoding: data, as: UTF8.self)
+            message = "Loaded. Press “Apply” to put it to work".ui
+        }
     }
 
     private func exportFile() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "qooMeta rule changes.json".ui
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try editing.settings.changes.data(half).write(to: url, options: .atomic)
-            message = "Written".ui
-        } catch {
-            // 書けなかったことを黙っていない(持っていくつもりのファイルが、実は無いことになる)。
-            editing.errors = [error.localizedDescription]
+        WindowSheet.begin(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try editing.settings.changes.data(half).write(to: url, options: .atomic)
+                message = "Written".ui
+            } catch {
+                // 書けなかったことを黙っていない(持っていくつもりのファイルが、実は無いことになる)。
+                editing.errors = [error.localizedDescription]
+            }
         }
     }
 }
