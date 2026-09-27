@@ -257,6 +257,27 @@ let builtinEngine = RuleEngine(rules: .builtin, dictionaries: SystemDictionaries
             .first { $0.key == .authors }?.truncatedBooks == 0)
     }
 
+    /// 値が 2 つ以上ある欄は、1 つしか受けない行き先へは先頭だけが渡り、プレビューに数が出る。
+    /// 足したシリーズは ComicInfo の AlternateSeries へ渡る。
+    @Test func severalValuesAreTruncatedOrCarried() throws {
+        let fields = ConfirmedFields([.genre: ["架空ジャンル", "別の架空ジャンル"]],
+                                     alternateSeries: [.init(name: "架空の外伝", volume: "2")])
+        let set = proposeSync([BookInput(id: "a.cbz", name: "[架空工房] 月の庭 2", confirmation: .fields(fields))],
+                              rules: .builtin, dictionaries: [:])
+        let preview = Exporter.preview(set, mapping: .standard(for: .stackNest))
+        #expect(preview.rows.first { $0.key == .genre }?.truncatedBooks == 1)
+        #expect(preview.rows.first { $0.key == .series }?.truncatedBooks == 1)
+        let data = try Exporter.stackroomXML(set, files: ["a.cbz": .init(path: "/nowhere/a.cbz", fileExtension: "cbz")])
+        let root = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let book = try #require((root["Books"] as? [String: [String: Any]])?["1"])
+        #expect(book["Genre"] as? String == "架空ジャンル")
+        let proposal = try #require(set["a.cbz"])
+        let xml = String(decoding: Exporter.comicInfoXML(proposal, series: nil), as: UTF8.self)
+        #expect(xml.contains("<Genre>架空ジャンル, 別の架空ジャンル</Genre>"))
+        #expect(xml.contains("<AlternateSeries>架空の外伝</AlternateSeries>"))
+        #expect(xml.contains("<AlternateNumber>2</AlternateNumber>"))
+    }
+
     @Test func comicInfoIsEscaped() throws {
         let set = Self.proposals()
         let book = try #require(set["b.cbr"])

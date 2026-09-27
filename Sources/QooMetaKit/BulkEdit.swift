@@ -123,8 +123,9 @@ public enum BulkEdit {
         ids.reduce(into: [:]) { result, id in
             guard let book = set[id] else { return }
             let m = book.metadata
-            let fields = ConfirmedFields([.authors: m.authors, .title: [m.title], .genre: [m.genre],
-                                          .event: [m.event], .source: [m.source], .info: [m.info]])
+            // 2 つ目からの値と、足したシリーズもそのまま確定する(確定で消えないように)。
+            var fields = ConfirmedFields(alternateSeries: m.alternateSeries)
+            for field in BookMetadata.Field.allCases where field.holdsSeveral { fields[field] = m.values(field) }
             if let series = book.seriesID.flatMap({ set.series($0) }) {
                 result[id] = .series(name: series.name, volume: m.volume.isEmpty ? nil : m.volume, fields: fields)
             } else {

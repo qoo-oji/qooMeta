@@ -38,6 +38,9 @@ struct BookRow: Identifiable, Hashable, Sendable {
     /// 中身の見分け(1 冊につき 1 度だけ作る)。**画面の差分は 1 万冊ぶんの `==` を呼ぶ**ので、
     /// 欄や並べ替えの鍵を 1 つずつ比べると、列を動かしただけで main が詰まる(2026-09-21、利用者の報告)。
     private let contentID: Int
+    /// 2 段以上になる欄の段の数(1 段の欄は入れない。ほとんどの本は空)。シリーズは足したシリーズを含めた組の数で、
+    /// 巻数(表示・並べ替え用)の列も同じ段の数になる。一覧の行の高さを、欄の値を組み立てずに決めるため。
+    let tallFields: [BookMetadata.Field: Int]
 
     static func == (a: BookRow, b: BookRow) -> Bool { a.id == b.id && a.contentID == b.contentID }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -60,8 +63,16 @@ struct BookRow: Identifiable, Hashable, Sendable {
         }
         seriesKey = proposal.metadata.series.isEmpty
             ? "\u{10FFFF}" + proposal.metadata.title : proposal.metadata.series + "\u{1}" + volumeKey
-        searchText = ([proposal.name] + BookMetadata.Field.allCases.flatMap { proposal.metadata.values($0) })
+        searchText = ([proposal.name] + BookMetadata.Field.allCases.flatMap { proposal.metadata.values($0) }
+            + proposal.metadata.alternateSeries.flatMap { [$0.name, $0.volume] })
             .joined(separator: "\u{1}")
+        var tall: [BookMetadata.Field: Int] = [:]
+        for field in BookMetadata.Field.allCases where field.holdsSeveral {
+            let count = proposal.metadata.values(field).count
+            if count > 1 { tall[field] = count }
+        }
+        if !proposal.metadata.alternateSeries.isEmpty { tall[.series] = 1 + proposal.metadata.alternateSeries.count }
+        tallFields = tall
         var hasher = Hasher()
         hasher.combine(proposal.metadata)
         hasher.combine(confirmation)
@@ -88,10 +99,8 @@ struct BookRow: Identifiable, Hashable, Sendable {
     /// 巻数(並べ替え用)を利用者が確定しているか。
     var hasConfirmedVolumeSort: Bool { confirmation.fields.volumeSort != nil }
 
-    /// 一覧のセルに出す文字(並びの欄は「、」でつなぐ)。
-    subscript(text field: BookMetadata.Field) -> String {
-        metadata.values(field).joined(separator: "、")
-    }
+    /// 利用者が足したシリーズ(巻数(ソート用)は、確定していなければ読んだ数)。
+    var alternateSeries: [BookMetadata.AlternateSeries] { metadata.alternateSeries }
 
     /// 巻数(ソート用)の表示(空なら「-」)。
     var volumeSortText: String {
@@ -181,6 +190,24 @@ final class Workspace {
     private(set) var selectedBooks: [BookRow] = []
     /// 選んだ本の**顔ぶれ**が変わるたびに増える番号(詳細が、入力中の値を捨てるきっかけに使う。中身が変わっただけでは増えない)。
     private(set) var selectionToken = 0
+    /// 何段もあるセルで選んだ段(絞り込みの帯の「上へ」「下へ」が動かす)。その本が選ばれていなくなったら外す。
+    var lineSelection: LineSelection?
+
+    /// 1 冊の中の、ある欄の 1 段。
+    struct LineSelection: Hashable {
+        let id: BookRow.ID
+        let column: LineColumn
+        /// 上からの段の番号(0 が一番上)。
+        var index: Int
+    }
+
+    /// 段を持つ欄。シリーズ・巻数(表示)・巻数(並べ替え用)は、同じ高さの段が組なので 1 つにまとめる。
+    enum LineColumn: Hashable {
+        /// 値をいくつも持てる欄(タイトル・著者・ジャンル・イベント・原作・情報)。
+        case field(BookMetadata.Field)
+        /// シリーズと巻数の組(一番上が主のシリーズ、その下が足したシリーズ)。
+        case series
+    }
 
     /// 一覧にいま出す本(絞り込み + 並べ替えの結果)。**画面を描くたびに作り直さない**
     /// ―― 1 万冊の絞り込みと並べ替えを毎フレーム行うと、計算の最中に列を動かしただけで画面が固まる
@@ -218,7 +245,7 @@ final class Workspace {
             // シリーズ名を確定しただけの本(組の相手がいない)は、組の ID が無くてもシリーズに入っている。
             case .notInSeries: book.seriesID == nil && book.metadata.series.isEmpty
             case .noVolume: book.metadata.volume.isEmpty
-            case .edited: !book.edited.isEmpty || book.hasConfirmedVolumeSort
+            case .edited: !book.edited.isEmpty || book.hasConfirmedVolumeSort || !book.alternateSeries.isEmpty
             case .confirmed: book.hasConfirmedSeries
             }
         }
@@ -529,10 +556,11 @@ final class Workspace {
     }
 
     /// シリーズと巻の確定を取り消して、規則の提案に戻す(欄の直しはそのまま)。巻数(並べ替え用)もシリーズの中の
-    /// 位置なので、一緒に提案へ戻す。
+    /// 位置なので、一緒に提案へ戻す。足したシリーズも捨てる(提案 = 中核が作ったとおり。2026-09-27、利用者の判断)。
     func revertSeries(_ ids: Set<BookRow.ID>) {
         edit("Revert the series to the proposal".ui, ids) { input in
-            let fields = Self.fieldsForNewVolume(input.confirmation)
+            var fields = Self.fieldsForNewVolume(input.confirmation)
+            fields.alternateSeries = []
             input.confirmation = fields.isEmpty ? .none : .fields(fields)
         }
     }
@@ -543,6 +571,117 @@ final class Workspace {
         edit("Revert everything to the proposal".ui, ids) { input in
             input.confirmation = .none
         }
+    }
+
+    // MARK: - 段(値をいくつも持てる欄と、足したシリーズ)
+
+    /// その本の欄の今の値。確定した値は入力から取る ―― 一覧の行は計算し直しが済むまで古いので、続けて直した
+    /// (Option+Return で次の段を足した)ときに、前の直しを上書きしないため。
+    func currentValues(_ field: BookMetadata.Field, of id: BookRow.ID) -> [String] {
+        inputs[id]?.confirmation.fields[field] ?? row(id)?.metadata.values(field) ?? []
+    }
+
+    /// その本の足したシリーズ(足したものは、いつも確定した内容にある)。
+    func currentAlternates(of id: BookRow.ID) -> [BookMetadata.AlternateSeries] {
+        inputs[id]?.confirmation.fields.alternateSeries ?? []
+    }
+
+    /// 欄の 1 段を書き換える(`inserting` なら、その位置に段を足す)。空にした段は消える(下の段が繰り上がる)。
+    /// 著者は「、」で区切って書くと、その場で何人かに分かれる(前からの入力の癖)。ほかの欄は区切らない
+    /// ―― タイトルや情報には「、」がふつうに入る。
+    func setLine(_ field: BookMetadata.Field, of id: BookRow.ID, at index: Int, to text: String, inserting: Bool = false) {
+        let pieces = Self.linePieces(field, text)
+        var list = currentValues(field, of: id)
+        let at = min(max(index, 0), list.count)
+        if inserting || at == list.count {
+            list.insert(contentsOf: pieces, at: at)
+        } else {
+            list.replaceSubrange(at...at, with: pieces)
+        }
+        set(field, to: list, for: [id])
+    }
+
+    /// 1 段に書いた文字を値に分ける(空なら値なし)。
+    nonisolated static func linePieces(_ field: BookMetadata.Field, _ text: String) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let pieces = field.isList ? trimmed.split(whereSeparator: { "、,，".contains($0) }).map(String.init) : [trimmed]
+        return pieces.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// 足したシリーズを書き換える 1 歩。名前が空になった組は消える(名前の無いシリーズは持たない)。
+    private func editAlternates(of id: BookRow.ID, _ change: (inout [BookMetadata.AlternateSeries]) -> Void) {
+        edit("Change the added series".ui, [id]) { input in
+            var fields = input.confirmation.fields
+            change(&fields.alternateSeries)
+            fields.alternateSeries.removeAll { $0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+            input.confirmation = input.confirmation.withFields(fields)
+        }
+    }
+
+    /// 足したシリーズの名前(`index` は足したシリーズの中の番号。`inserting` なら、そこに組を足す)。空にすると組ごと消える。
+    func setAlternateName(of id: BookRow.ID, at index: Int, to text: String, inserting: Bool = false) {
+        let name = text.trimmingCharacters(in: .whitespaces)
+        editAlternates(of: id) { list in
+            let at = min(max(index, 0), list.count)
+            if inserting || at == list.count {
+                if !name.isEmpty { list.insert(.init(name: name), at: at) }
+            } else {
+                list[at].name = name
+            }
+        }
+    }
+
+    /// 足したシリーズの巻数(表示用)。変えると、確定した巻数(ソート用)は外す(表記から読み直す)。
+    func setAlternateVolume(of id: BookRow.ID, at index: Int, to text: String) {
+        let volume = text.trimmingCharacters(in: .whitespaces)
+        editAlternates(of: id) { list in
+            guard list.indices.contains(index), list[index].volume != volume else { return }
+            list[index].volume = volume
+            list[index].volumeSort = nil
+        }
+    }
+
+    /// 足したシリーズの巻数(ソート用)を確定する(nil なら確定を外し、表記から読む)。
+    func setAlternateVolumeSort(of id: BookRow.ID, at index: Int, to value: Double?) {
+        editAlternates(of: id) { list in
+            guard list.indices.contains(index) else { return }
+            list[index].volumeSort = value
+        }
+    }
+
+    /// その段の数(今の値で。段が 1 つも無い欄も、見た目は空の 1 段)。
+    private func lineCount(_ column: LineColumn, of id: BookRow.ID) -> Int {
+        switch column {
+        case .field(let field): max(1, currentValues(field, of: id).count)
+        case .series: 1 + currentAlternates(of: id).count
+        }
+    }
+
+    /// その段を、その本の中で上 / 下へ動かせるか。シリーズの組の一番上(主のシリーズ)は動かさず、ほかの組と入れ替えない
+    /// (中核が組み分けと錨に使う段なので。2026-09-27、利用者の判断)。
+    func canMoveLine(_ line: LineSelection, up: Bool) -> Bool {
+        guard row(line.id) != nil else { return false }
+        let count = lineCount(line.column, of: line.id)
+        let target = line.index + (up ? -1 : 1)
+        switch line.column {
+        case .field: return line.index < count && (0..<count).contains(target)
+        case .series: return line.index >= 1 && target >= 1 && target < count
+        }
+    }
+
+    /// 選んだ段を、その本の中で 1 つ上 / 下へ動かす(取り消せる 1 歩)。動いた先を選び直す。
+    func moveLine(up: Bool) {
+        guard let line = lineSelection, canMoveLine(line, up: up) else { return }
+        let target = line.index + (up ? -1 : 1)
+        switch line.column {
+        case .field(let field):
+            var list = currentValues(field, of: line.id)
+            list.swapAt(line.index, target)
+            set(field, to: list, for: [line.id])
+        case .series:
+            editAlternates(of: line.id) { list in list.swapAt(line.index - 1, target - 1) }
+        }
+        lineSelection?.index = target
     }
 
     /// 直した内容のある本(「すべてを提案に戻す」の相手)。
@@ -723,7 +862,8 @@ final class Workspace {
         switch genreFilter {
         case nil: true
         case .empty?: book.metadata.genre.isEmpty
-        case .value(let genre)?: book.metadata.genre == genre
+        // ジャンルを 2 つ以上持つ本は、どれかが当たれば出す(値ごとの冊数も、そう数えている)。
+        case .value(let genre)?: book.metadata.genre == genre || book.metadata.values(.genre).contains(genre)
         }
     }
 
@@ -813,6 +953,7 @@ final class Workspace {
 
     /// 選んだ本のうち、一覧に出ているものだけ(値の列や検索で隠れた本を、見えないまま書き換えないため)。
     private func selectionChanged() {
+        if let line = lineSelection, !selection.contains(line.id) { lineSelection = nil }
         let picked = selection.isEmpty ? [] : visiblePositions.lazy.map { self.books[$0] }.filter { self.selection.contains($0.id) }
         if picked.map(\.id) != selectedBooks.map(\.id) { selectionToken += 1 }
         if picked != selectedBooks { selectedBooks = picked }

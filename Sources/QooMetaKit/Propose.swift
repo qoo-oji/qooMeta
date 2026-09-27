@@ -478,6 +478,12 @@ extension RuleEngine {
         }
         // 確定した巻数(ソート用)は、あとの推定(番号の無い本を 1 巻にする など)に上書きされない。
         if let volumeSort = book.input.confirmation.fields.volumeSort { metadata.volumeSort = volumeSort }
+        // 足したシリーズの巻数(ソート用)は、確定していなければ表記を巻の読み手に通して決める(主のシリーズの、シリーズに
+        // 入らなかった本と同じ読み方。足したシリーズは組み分けに使わないので、見比べた推定はしない)。
+        for i in metadata.alternateSeries.indices where metadata.alternateSeries[i].volumeSort == nil {
+            let text = metadata.alternateSeries[i].volume
+            if !text.isEmpty { metadata.alternateSeries[i].volumeSort = volumes.extract(fromRemainder: " " + text)?.number }
+        }
         return BookProposal(id: book.input.id, name: book.input.name, reading: book.reading, metadata: metadata,
                             seriesID: key.map { seriesID(book.unitKey, $0) }, flags: flags)
     }

@@ -153,6 +153,17 @@ struct SeriesSection: View {
                 }
             }
             LabeledContent("Volume (for sorting)", value: uniformSort() ?? "<several values>")
+            // 足したシリーズ(一覧のシリーズの列の 2 段目から。直すのは一覧で)。1 冊のときだけ出す。
+            if books.count == 1, let alternates = books.first?.alternateSeries, !alternates.isEmpty {
+                LabeledContent("Added series") {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        ForEach(alternates.indices, id: \.self) { i in
+                            Text(verbatim: alternates[i].volume.isEmpty ? alternates[i].name
+                                 : "\(alternates[i].name) \(alternates[i].volume)")
+                        }
+                    }
+                }
+            }
             // 手で直す所。読むだけの行と続けて置くと、直せることが分からなかった(2026-09-20、利用者の指摘)。
             Text("Write a value and press the button beside it to settle it for the books you picked.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -226,7 +237,7 @@ struct SeriesSection: View {
 }
 
 /// 1 つの欄。書き換えて Return を押すか、ほかへ移ると、選んだ本すべてのその欄がその値になる。
-/// 並びの欄(著者だけ)は、値ごとの入力欄を並べ、足す・消す・並べ替えができる。
+/// 値をいくつも持てる欄は、値ごとの入力欄を並べ、足す・消す・並べ替えができる(2026-09-27 から、シリーズと巻数のほか全部)。
 /// 選んだ本で値が揃わない欄は「複数の値」と出し、書き換えたときだけ、選んだ本すべてをその値にする。
 struct FieldEditor: View {
     @Bindable var workspace: Workspace
@@ -243,7 +254,7 @@ struct FieldEditor: View {
     var body: some View {
         let edited = books.contains { $0.edited.contains(field) }
         LabeledContent {
-            if field.isList {
+            if field.holdsSeveral {
                 ListEditor(values: current, placeholder: field.labelKey.ui) { workspace.set(field, to: $0, for: ids) }
             } else {
                 SingleEditor(value: current.map { $0.first ?? "" }) { workspace.set(field, to: [$0], for: ids) }

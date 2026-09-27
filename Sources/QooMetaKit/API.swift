@@ -117,21 +117,43 @@ public enum Confirmation: Sendable, Hashable, Codable {
     }
 }
 
-/// 確定した欄の値(書いていない欄は未確定)。並びの欄は値の並び、1 つの値の欄は先頭だけを使う。
+/// 確定した欄の値(書いていない欄は未確定)。値は並びで、シリーズと巻数のほかの欄は全部を使う(先頭の値が欄になる)。
 public struct ConfirmedFields: Sendable, Hashable, Codable {
     public var values: [BookMetadata.Field: [String]]
     /// 確定した巻数(ソート用)。nil なら未確定(巻数の表記から読む)。**欄(`Field`)には入れない** ―― 表記を読んだ数で、
     /// 名前から直に読む欄ではないので。利用者が並びの位置だけを直したいとき(番外編を 2.5 に置く、など)に使う
     /// (qooViewer の利用者の要望 2026-09-22)。巻数(表示用)を直すときは、呼び出し側が外す(食い違った数を残さない)。
     public var volumeSort: Double?
+    /// 利用者が足したシリーズ(`BookMetadata.alternateSeries`)。足したものなので、確定した内容にだけある。
+    /// 巻数(ソート用)が nil のものは、巻数(表示用)から読む。
+    public var alternateSeries: [BookMetadata.AlternateSeries]
 
-    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil) {
+    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil,
+                alternateSeries: [BookMetadata.AlternateSeries] = []) {
         self.values = values
         self.volumeSort = volumeSort
+        self.alternateSeries = alternateSeries
     }
 
     /// 何も確定していないか。
-    public var isEmpty: Bool { values.isEmpty && volumeSort == nil }
+    public var isEmpty: Bool { values.isEmpty && volumeSort == nil && alternateSeries.isEmpty }
+
+    // 足したシリーズは、あるときだけ書く(前の版の作業ファイルと同じ形のまま。前の版のファイルも読める)。
+    enum CodingKeys: String, CodingKey { case values, volumeSort, alternateSeries }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        values = try c.decodeIfPresent([BookMetadata.Field: [String]].self, forKey: .values) ?? [:]
+        volumeSort = try c.decodeIfPresent(Double.self, forKey: .volumeSort)
+        alternateSeries = try c.decodeIfPresent([BookMetadata.AlternateSeries].self, forKey: .alternateSeries) ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(values, forKey: .values)
+        try c.encodeIfPresent(volumeSort, forKey: .volumeSort)
+        if !alternateSeries.isEmpty { try c.encode(alternateSeries, forKey: .alternateSeries) }
+    }
 
     public subscript(field: BookMetadata.Field) -> [String]? {
         get { values[field] }
@@ -143,6 +165,7 @@ public struct ConfirmedFields: Sendable, Hashable, Codable {
         var result = metadata
         for (field, value) in values { result.set(field, to: value) }
         if let volumeSort { result.volumeSort = volumeSort }
+        result.alternateSeries = alternateSeries
         return result
     }
 }

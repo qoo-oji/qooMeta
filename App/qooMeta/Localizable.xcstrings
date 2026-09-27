@@ -1098,6 +1098,23 @@
         }
       }
     },
+    "Add a Line to “%@”": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a Line to “%@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」に段を足す"
+          }
+        }
+      }
+    },
     "Add a format": {
       "extractionState": "manual",
       "localizations": {
@@ -1162,6 +1179,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "追加した規則"
+          }
+        }
+      }
+    },
+    "Added series": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added series"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "足したシリーズ"
           }
         }
       }
@@ -1808,6 +1842,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "ルールセットを編集して「名前をつけて保存」すると、ここに表示されます"
+          }
+        }
+      }
+    },
+    "Change the added series": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the added series"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "足したシリーズの書き換え"
           }
         }
       }
@@ -3033,6 +3084,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "渡さない"
+          }
+        }
+      }
+    },
+    "Double-click a line to edit it. Option-Return adds a line below": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click a line to edit it. Option-Return adds a line below"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "段をダブルクリックして編集します。編集中に Option+Return で下に段を足せます"
           }
         }
       }
@@ -5215,6 +5283,40 @@
         }
       }
     },
+    "Move Down": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Down"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下へ"
+          }
+        }
+      }
+    },
+    "Move Up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Up"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上へ"
+          }
+        }
+      }
+    },
     "Move down": {
       "extractionState": "manual",
       "localizations": {
@@ -5245,6 +5347,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "上へ移動"
+          }
+        }
+      }
+    },
+    "Moves the selected line down within its book (Option-Command-Down Arrow)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moves the selected line down within its book (Option-Command-Down Arrow)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選んだ段を、その本の中で 1 つ下へ動かします(Option+Command+↓)"
+          }
+        }
+      }
+    },
+    "Moves the selected line up within its book (Option-Command-Up Arrow)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moves the selected line up within its book (Option-Command-Up Arrow)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選んだ段を、その本の中で 1 つ上へ動かします(Option+Command+↑)"
           }
         }
       }
@@ -10091,6 +10227,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "欄に書いて右のボタンを押すと、選択した本にその値が確定します。"
+          }
+        }
+      }
+    },
+    "Write one value per line.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write one value per line."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 行に 1 つの値を書きます。"
           }
         }
       }

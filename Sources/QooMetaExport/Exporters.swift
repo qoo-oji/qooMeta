@@ -94,9 +94,8 @@ public enum Exporter {
                 if slot == .volume {
                     // Volume は数の欄。数に読めない表記は渡さない(落ちる欄としてプレビューに出る)。
                     if let number = Double(first) { entry[xmlKey] = number }
-                } else if key == .authors {
-                    entry[xmlKey] = mapping.target.takesAllAuthors
-                        ? authorValues(book.metadata).joined(separator: ", ") : first
+                } else if mapping.target.takesSeveral(slot) {
+                    entry[xmlKey] = listValues(values).joined(separator: ", ")
                 } else {
                     entry[xmlKey] = first
                 }
@@ -117,14 +116,14 @@ public enum Exporter {
         }
     }
 
-    /// Author に入れる値。著者の並びをそのまま並べる(StackNest は Author を
-    /// カンマ区切りの複数値として扱い、値ごとに絞り込める)。
-    static func authorValues(_ metadata: BookMetadata) -> [String] {
-        var values: [String] = []
-        for name in metadata.authors where !name.isEmpty && !values.contains(name) {
-            values.append(name.replacingOccurrences(of: ",", with: " "))
+    /// カンマ区切りの複数値の欄(StackNest の Author)に入れる値。値の中のカンマは空白にし、重なりは除く。
+    static func listValues(_ values: [String]) -> [String] {
+        var result: [String] = []
+        for value in values where !value.isEmpty {
+            let cleaned = value.replacingOccurrences(of: ",", with: " ")
+            if !result.contains(cleaned) { result.append(cleaned) }
         }
-        return values
+        return result
     }
 
     // MARK: - qooViewer
@@ -167,16 +166,22 @@ public enum Exporter {
     // MARK: - ComicInfo
 
     /// ComicInfo.xml(書庫の中に置く、コミックのメタデータの広く使われる形)。1 冊ぶん。
-    /// 著者は Writer、原作は Tags、ジャンルは Genre、情報は Notes に入れる。
+    /// 著者は Writer、原作は Tags、ジャンルは Genre、情報は Notes に入れる。Writer・Genre・Tags はカンマ区切りの
+    /// 複数値の欄なので全部を、Notes は行を分けて全部を、Title は先頭だけを入れる。足したシリーズの 1 つ目は
+    /// AlternateSeries・AlternateNumber へ(ComicInfo が持つ、もう 1 つのシリーズの欄)。
     public static func comicInfoXML(_ proposal: BookProposal, series: SeriesProposal?) -> Data {
         let m = proposal.metadata
         var fields: [(String, String)] = [("Title", m.title)]
         if let series { fields.append(("Series", series.name)) }
         if !m.volume.isEmpty { fields.append(("Number", m.volume)) }
-        if !m.authors.isEmpty { fields.append(("Writer", m.authors.joined(separator: ", "))) }
-        if !m.genre.isEmpty { fields.append(("Genre", m.genre)) }
-        if !m.source.isEmpty { fields.append(("Tags", m.source)) }
-        if !m.info.isEmpty { fields.append(("Notes", m.info)) }
+        if let alternate = m.alternateSeries.first(where: { !$0.name.isEmpty }) {
+            fields.append(("AlternateSeries", alternate.name))
+            if !alternate.volume.isEmpty { fields.append(("AlternateNumber", alternate.volume)) }
+        }
+        if !m.authors.isEmpty { fields.append(("Writer", listValues(m.authors).joined(separator: ", "))) }
+        if !m.genre.isEmpty { fields.append(("Genre", listValues(m.values(.genre)).joined(separator: ", "))) }
+        if !m.source.isEmpty { fields.append(("Tags", listValues(m.values(.source)).joined(separator: ", "))) }
+        if !m.info.isEmpty { fields.append(("Notes", m.values(.info).joined(separator: "\n"))) }
         let body = fields.map { "  <\($0.0)>\(xmlEscape($0.1))</\($0.0)>" }.joined(separator: "\n")
         return Data("""
         <?xml version="1.0" encoding="utf-8"?>

@@ -190,12 +190,14 @@ public enum Confirmation: Sendable, Hashable, Codable {
     public var fields: ConfirmedFields { get }
 }
 
-/// 確定した欄(書いていない欄は未確定)。並びの欄(著者)は値の並び、1 つの値の欄は先頭だけを使う。
+/// 確定した欄(書いていない欄は未確定)。値は並び。シリーズと巻数のほかの欄は全部を使う(先頭が欄の値)。
 public struct ConfirmedFields: Sendable, Hashable, Codable {
     public var values: [BookMetadata.Field: [String]]
     public var volumeSort: Double?          // 確定した巻数(ソート用)。nil なら表記から読む
-    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil)
-    public var isEmpty: Bool { get }        // 欄も巻数(ソート用)も確定していない
+    public var alternateSeries: [BookMetadata.AlternateSeries]   // 利用者が足したシリーズ(あるときだけ JSON に書く)
+    public init(_ values: [BookMetadata.Field: [String]] = [:], volumeSort: Double? = nil,
+                alternateSeries: [BookMetadata.AlternateSeries] = [])
+    public var isEmpty: Bool { get }        // 欄も巻数(ソート用)も足したシリーズも無い
     public subscript(field: BookMetadata.Field) -> [String]? { get set }
     public func applied(to metadata: BookMetadata) -> BookMetadata
 }
@@ -212,24 +214,36 @@ public struct ConfirmedFields: Sendable, Hashable, Codable {
 
 ```swift
 public struct BookMetadata: Sendable, Hashable, Codable {
-    public var title: String
-    public var authors: [String]      // 並びなのは著者だけ。比べる単位の書き手はこの先頭
+    public var title: String          // 先頭の値(2 つ目からは moreValues)。中核が読むのは先頭だけ
+    public var authors: [String]      // 名前から並びとして読む欄。比べる単位の書き手はこの先頭
     public var genre: String
     public var event: String          // 頒布会の名前(型で `(@event)` と書いたときだけ入る)
     public var source: String         // 原作(予約語 `@source`)
     public var info: String           // 情報(名前の中の付記。予約語 `@info`)
     public var series: String         // 中核が導く(`@series` で名前から読むこともできる)
     public var volume: String         // 巻数(表示用。名前のとおりの表記)
-    public var volumeSort: Double?    // 巻数(ソート用。総集編のオフセットを足した数)
-    public enum Field: String, CaseIterable, Codable { case title, authors, genre, event, source, info, series, volume }
-    public func values(_ field: Field) -> [String]
-    public subscript(field: Field) -> String { get }
-    public mutating func set(_ field: Field, to newValues: [String])   // 巻数(表示用)を変えるとソート用は捨てる
+    public var volumeSort: Double?    // 巻数(ソート用。シリーズの中の位置)
+    public var moreValues: [Field: [String]]          // タイトル・ジャンル・イベント・原作・情報の 2 つ目からの値
+    public var alternateSeries: [AlternateSeries]     // 利用者が足したシリーズ(中核は読まない)
+    public struct AlternateSeries: Sendable, Hashable, Codable {
+        public var name: String
+        public var volume: String
+        public var volumeSort: Double?                // 確定した内容で nil なら、表記から読む
+    }
+    public enum Field: String, CaseIterable, Codable {
+        case title, authors, genre, event, source, info, series, volume
+        public var isList: Bool { get }               // 名前から並びとして読む欄(著者)
+        public var holdsSeveral: Bool { get }         // 値をいくつも持てる欄(シリーズと巻数のほか全部)
+    }
+    public func values(_ field: Field) -> [String]    // 並び(シリーズと巻数は主のシリーズの 1 つ)
+    public subscript(field: Field) -> String { get }  // 先頭の値(著者は「、」でつないだもの)
+    public mutating func set(_ field: Field, to newValues: [String])   // 先頭を欄に、2 つ目からを moreValues に。巻数(表示用)を変えるとソート用は捨てる
     public static func volumeSortText(_ value: Double) -> String
 }
 ```
 
-空の欄は空の文字列・空の並びで表す(「無い」と「空」を分けない)。どの欄を書き出し先のどの欄へ渡すかは、欄の側ではなく
+空の欄は空の文字列・空の並びで表す(「無い」と「空」を分けない)。`moreValues` と `alternateSeries` は、あるときだけ JSON に書く
+(前の版が書いた JSON も読める)。どの欄を書き出し先のどの欄へ渡すかは、欄の側ではなく
 書き出しの対応表(`FieldMapping`)で決める。
 
 ### 確定した値の効き方

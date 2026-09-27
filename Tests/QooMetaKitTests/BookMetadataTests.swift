@@ -71,6 +71,57 @@ import QooMetaRules
         let data = try JSONEncoder().encode(Self.sample)
         #expect(try JSONDecoder().decode(BookMetadata.self, from: data) == Self.sample)
     }
+
+    /// シリーズと巻数のほかの欄は、値をいくつでも持てる。先頭が欄、2 つ目からは足した値。
+    @Test func fieldsHoldSeveralValues() {
+        #expect(BookMetadata.Field.allCases.filter { !$0.holdsSeveral } == [.series, .volume])
+        var m = Self.sample
+        m.set(.info, to: ["付記", "", "もう 1 つの付記"])
+        #expect(m.info == "付記")
+        #expect(m.values(.info) == ["付記", "もう 1 つの付記"])
+        #expect(m[.info] == "付記")
+        // 1 つに戻すと、足した値は消える。
+        m.set(.info, to: ["別の付記"])
+        #expect(m.values(.info) == ["別の付記"])
+        #expect(m.moreValues.isEmpty)
+        // シリーズと巻数は先頭だけ(足したシリーズは別に持つ)。
+        m.set(.series, to: ["架空の本編", "架空の外伝"])
+        #expect(m.values(.series) == ["架空の本編"])
+    }
+
+    /// 足した値・足したシリーズは、あるときだけ書く。前の版が書いた JSON(鍵が無い)も読める。
+    @Test func extraValuesAreWrittenOnlyWhenPresent() throws {
+        let plain = String(decoding: try JSONEncoder().encode(Self.sample), as: UTF8.self)
+        #expect(!plain.contains("moreValues") && !plain.contains("alternateSeries"))
+
+        var m = Self.sample
+        m.set(.genre, to: ["架空ジャンル", "別の架空ジャンル"])
+        m.alternateSeries = [.init(name: "架空の外伝", volume: "2", volumeSort: 2)]
+        let data = try JSONEncoder().encode(m)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""moreValues":{"genre":["別の架空ジャンル"]}"#))
+        #expect(try JSONDecoder().decode(BookMetadata.self, from: data) == m)
+
+        let confirmed = ConfirmedFields([.info: ["一", "二"]], alternateSeries: m.alternateSeries)
+        #expect(try JSONDecoder().decode(ConfirmedFields.self, from: JSONEncoder().encode(confirmed)) == confirmed)
+        let old = Data(#"{"values":[]}"#.utf8)
+        #expect(try JSONDecoder().decode(ConfirmedFields.self, from: old) == ConfirmedFields())
+    }
+
+    /// 確定した欄を重ねると、足した値と足したシリーズも入る。足したシリーズの巻数(ソート用)は、確定していなければ表記から読む。
+    @Test func confirmedExtrasReachTheProposal() throws {
+        let fields = ConfirmedFields([.info: ["付記", "もう 1 つの付記"]],
+                                     alternateSeries: [.init(name: "架空の外伝", volume: "第3巻"),
+                                                       .init(name: "架空の別編", volume: "上", volumeSort: 1.5)])
+        let set = proposeSync([BookInput(id: "a.cbz", name: "[架空工房] 月の庭 2", confirmation: .fields(fields))],
+                              rules: .builtin, dictionaries: [:])
+        let m = try #require(set["a.cbz"]).metadata
+        #expect(m.values(.info) == ["付記", "もう 1 つの付記"])
+        #expect(m.alternateSeries.map(\.name) == ["架空の外伝", "架空の別編"])
+        #expect(m.alternateSeries[0].volumeSort == 3)
+        #expect(m.alternateSeries[1].volumeSort == 1.5)
+        // 主のシリーズは中核が導いたまま(足したシリーズは組み分けに使わない)。
+        #expect(m.series != "架空の外伝")
+    }
 }
 
 @Suite struct SeriesDerivationTests {

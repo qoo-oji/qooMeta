@@ -60,11 +60,14 @@ public enum ExportTarget: String, Sendable, Hashable, Codable, CaseIterable {
         }
     }
 
-    /// 並びの欄(著者)を、いくつ渡せるか。
-    public var takesAllAuthors: Bool {
-        // StackNest は Author をカンマ区切りの複数値として扱い、値ごとに絞り込める。ほかは 1 つだけ。
-        self == .stackNest
+    /// その行き先が、値をいくつも受け取れるか(受け取れなければ先頭の値だけを渡す)。
+    public func takesSeveral(_ slot: ExportSlot) -> Bool {
+        // StackNest は Author をカンマ区切りの複数値として扱い、値ごとに絞り込める。ほかの欄・ほかのアプリは 1 つだけ。
+        self == .stackNest && slot == .author
     }
+
+    /// 並びの欄(著者)を、いくつ渡せるか。
+    public var takesAllAuthors: Bool { takesSeveral(.author) }
 }
 
 public enum ExportFormat: String, Sendable, Hashable, Codable {
@@ -251,7 +254,8 @@ public struct ExportPreview: Sendable, Hashable {
         public let booksWithValue: Int
         /// 値があるのに落ちる冊数(= 落ちる欄なら booksWithValue、そうでなければ 0)。
         public var droppedBooks: Int { slot == nil ? booksWithValue : 0 }
-        /// 並びの欄で、先頭だけが渡る冊数(著者が 2 人以上の本)。
+        /// 先頭だけが渡る冊数(値が 2 つ以上あるのに、行き先が 1 つしか受けない本)。シリーズと巻数は、足したシリーズの
+        /// ある本(主のシリーズだけが渡る)。
         public let truncatedBooks: Int
     }
 
@@ -271,7 +275,9 @@ public extension Exporter {
             for book in set.proposals {
                 let values = key.values(book.metadata)
                 if !values.isEmpty { withValue += 1 }
-                if key == .authors, values.count > 1, !mapping.target.takesAllAuthors { truncated += 1 }
+                let takesSeveral = mapping.slot(for: key).map(mapping.target.takesSeveral) ?? false
+                if values.count > 1, !takesSeveral { truncated += 1 }
+                if [.series, .volume, .volumeSort].contains(key), !book.metadata.alternateSeries.isEmpty { truncated += 1 }
             }
             return ExportPreview.Row(key: key, slot: mapping.slot(for: key), booksWithValue: withValue,
                                      truncatedBooks: truncated)
